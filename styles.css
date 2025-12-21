@@ -74,6 +74,13 @@ body {
   display: inline-block;
 }
 
+.app-header h1 .logo-image {
+  height: 80px;
+  width: auto;
+  display: block;
+  margin: 0 auto 1rem auto;
+}
+
 .app-header h1::after {
   content: '';
   position: absolute;
@@ -634,6 +641,65 @@ body {
   font-weight: 500;
 }
 
+/* URL controls container */
+.track-url-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 250px;
+  margin-top: 0.5rem;
+}
+
+.track-url-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  outline: none;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+}
+
+.track-url-input:focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border-glow);
+  box-shadow: 0 0 0 3px rgba(150, 140, 255, 0.1);
+}
+
+.track-url-input::placeholder {
+  color: var(--text-muted);
+}
+
+.track-url-reload-btn {
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  color: var(--text-primary);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(150, 140, 255, 0.3);
+}
+
+.track-url-reload-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(150, 140, 255, 0.5);
+}
+
+.track-url-reload-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(150, 140, 255, 0.4);
+}
+
 .track-volume-container {
   width: 100%;
   display: flex;
@@ -859,6 +925,10 @@ body {
     font-size: 2rem;
   }
 
+  .app-header h1 .logo-image {
+    height: 60px;
+  }
+
   .playlists-section {
     padding: 1.5rem;
   }
@@ -881,6 +951,20 @@ body {
 
   .track-seek-container {
     min-width: 100%;
+  }
+
+  .track-url-container {
+    min-width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .track-url-input {
+    min-width: 100%;
+  }
+
+  .track-url-reload-btn {
+    width: 100%;
   }
 
   .track-seek,

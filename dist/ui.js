@@ -96,6 +96,10 @@ export function createTrackElement(track) {
             <input type="range" class="track-seek" min="0" max="100" value="${seekPercent}" />
             <span class="track-time">${currentTime} / ${duration}</span>
           </div>
+          <div class="track-url-container" style="display: none;">
+            <input type="text" class="track-url-input" value="${track.url}" placeholder="YouTube URL" />
+            <button class="track-url-reload-btn" title="Reload track with new URL">Reload</button>
+          </div>
         </div>
       </div>
       <div class="track-player-container"></div>

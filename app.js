@@ -526,6 +526,10 @@ function createTrackElement(track) {
             <input type="range" class="track-seek" min="0" max="100" value="${seekPercent}" />
             <span class="track-time">${currentTime} / ${duration}</span>
           </div>
+          <div class="track-url-container" style="display: none;">
+            <input type="text" class="track-url-input" value="${track.url}" placeholder="YouTube URL" />
+            <button class="track-url-reload-btn" title="Reload track with new URL">Reload</button>
+          </div>
         </div>
       </div>
       <div class="track-player-container"></div>
@@ -781,6 +785,10 @@ async function addTrackFromUrl(url) {
                   <input type="range" class="track-seek" min="0" max="100" value="0" />
                   <span class="track-time">0:00 / ${formatTime(meta.durationSeconds || 0)}</span>
                 </div>
+                <div class="track-url-container" style="display: none;">
+                  <input type="text" class="track-url-input" value="${updatedTrack.url}" placeholder="YouTube URL" />
+                  <button class="track-url-reload-btn" title="Reload track with new URL">Reload</button>
+                </div>
               </div>
             `;
                 }
@@ -904,6 +912,11 @@ function attachTrackEventListeners(trackElement, trackId) {
         if (seekContainer) {
             const isHidden = seekContainer.style.display === 'none';
             seekContainer.style.display = isHidden ? 'flex' : 'none';
+            // Also toggle URL container visibility
+            const urlContainer = trackElement.querySelector('.track-url-container');
+            if (urlContainer) {
+                urlContainer.style.display = isHidden ? 'flex' : 'none';
+            }
             // Rotate the arrow icon
             const svg = seekToggleBtn.querySelector('svg');
             if (svg) {
@@ -976,6 +989,211 @@ function attachTrackEventListeners(trackElement, trackId) {
             stopUpdateInterval();
         }
     });
+    // URL Reload
+    const urlReloadBtn = trackElement.querySelector('.track-url-reload-btn');
+    urlReloadBtn?.addEventListener('click', () => {
+        const urlInput = trackElement.querySelector('.track-url-input');
+        if (!urlInput)
+            return;
+        const newUrl = urlInput.value.trim();
+        if (!newUrl)
+            return;
+        // Validate URL
+        if (!isValidYouTubeUrl(newUrl)) {
+            alert('Invalid YouTube URL. Please enter a valid YouTube video URL.');
+            return;
+        }
+        const newVideoId = extractVideoId(newUrl);
+        if (!newVideoId) {
+            alert('Could not extract video ID from URL.');
+            return;
+        }
+        reloadTrack(trackId, newUrl, newVideoId);
+    });
+}
+/**
+ * Reload a track with a new URL
+ */
+function reloadTrack(trackId, newUrl, newVideoId) {
+    const track = playlistManager.getTrack(trackId);
+    if (!track)
+        return;
+    const trackElement = document.querySelector(`[data-track-id="${trackId}"]`);
+    if (!trackElement)
+        return;
+    // Store current state
+    const currentVolume = track.volume;
+    const currentLoop = track.loop;
+    // Destroy old controller
+    const oldController = playlistManager.getController(trackId);
+    if (oldController) {
+        oldController.destroy();
+    }
+    // Update track to loading state
+    playlistManager.updateTrack(trackId, {
+        url: newUrl,
+        videoId: newVideoId,
+        state: 'loading',
+        currentTime: 0,
+        meta: undefined,
+        duration: undefined,
+        error: undefined,
+    });
+    // Update UI to loading state
+    trackElement.classList.add('loading');
+    trackElement.classList.remove('error');
+    const trackMain = trackElement.querySelector('.track-main');
+    if (trackMain) {
+        trackMain.innerHTML = '<div class="track-loading">Loading...</div>';
+    }
+    // Remove old thumbnail
+    const oldImg = trackElement.querySelector('img');
+    if (oldImg) {
+        oldImg.remove();
+    }
+    // Get player container
+    const playerContainer = trackElement.querySelector('.track-player-container');
+    if (!playerContainer)
+        return;
+    // Clear player container
+    playerContainer.innerHTML = '';
+    // Create new player
+    const controller = playerFactory.createPlayer(trackId, playerContainer, newVideoId, (trackId, meta) => {
+        // On metadata loaded
+        playlistManager.updateTrack(trackId, {
+            meta,
+            state: 'paused',
+            duration: meta.durationSeconds,
+            volume: currentVolume,
+            loop: currentLoop,
+        });
+        const updatedTrack = playlistManager.getTrack(trackId);
+        if (updatedTrack) {
+            const element = document.querySelector(`[data-track-id="${trackId}"]`);
+            if (element) {
+                // Remove loading class
+                element.classList.remove('loading');
+                // Get the track-main container
+                const trackMain = element.querySelector('.track-main');
+                if (trackMain) {
+                    // Replace the loading message with full track UI
+                    trackMain.innerHTML = `
+              <div class="track-title">${meta.title}</div>
+              <div class="track-controls">
+                <button class="track-play-pause" title="Play">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+                  </svg>
+                </button>
+                <button class="track-stop" title="Stop">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/>
+                  </svg>
+                </button>
+                <button class="track-loop-toggle ${currentLoop ? 'active' : ''}" title="Loop ${currentLoop ? 'ON' : 'OFF'}">Loop ${currentLoop ? 'ON' : 'OFF'}</button>
+                <button class="track-delete" title="Delete">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                    <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                  </svg>
+                </button>
+                <div class="track-volume-container">
+                  <svg class="volume-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/>
+                    <path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/>
+                    <path d="M8.707 11.182A4.486 4.486 0 0 0 10.025 8a4.486 4.486 0 0 0-1.318-3.182L8 5.525A3.489 3.489 0 0 1 9.025 8 3.49 3.49 0 0 1 8 10.475l.707.707zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z"/>
+                  </svg>
+                  <span class="volume-display">${Math.round(updatedTrack.volume * 100)}</span>
+                  <input type="range" class="track-volume" min="0" max="1" step="0.01" value="${updatedTrack.volume}" />
+                </div>
+                 <button class="track-seek-toggle" title="Toggle seek bar">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 3.5L4 7h8l-4-3.5z"/>
+                  </svg>
+                </button>
+                <div class="track-seek-container" style="display: none;">
+                  <input type="range" class="track-seek" min="0" max="100" value="0" />
+                  <span class="track-time">0:00 / ${formatTime(meta.durationSeconds || 0)}</span>
+                </div>
+                <div class="track-url-container" style="display: none;">
+                  <input type="text" class="track-url-input" value="${updatedTrack.url}" placeholder="YouTube URL" />
+                  <button class="track-url-reload-btn" title="Reload track with new URL">Reload</button>
+                </div>
+              </div>
+            `;
+                }
+                // Add thumbnail image if it doesn't exist
+                if (!element.querySelector('img')) {
+                    const img = document.createElement('img');
+                    img.src = meta.thumbnailUrl;
+                    img.alt = 'Track thumbnail';
+                    element.insertBefore(img, element.firstChild);
+                }
+                // Set volume on new controller
+                controller.setVolume(currentVolume);
+                attachTrackEventListeners(element, trackId);
+            }
+        }
+    }, (trackId, state) => {
+        // On state change
+        playlistManager.updateTrack(trackId, { state });
+        updateGlobalPlayPauseButton(playlistManager, globalPlayPauseButton);
+        // Update the UI immediately for this track
+        const trackElement = document.querySelector(`[data-track-id="${trackId}"]`);
+        if (trackElement) {
+            const updatedTrack = playlistManager.getTrack(trackId);
+            if (updatedTrack) {
+                updateTrackElement(trackElement, updatedTrack);
+            }
+        }
+        // Start update interval when playing
+        if (state === 'playing') {
+            startUpdateInterval();
+        }
+        // Handle loop on ended
+        if (state === 'paused') {
+            const track = playlistManager.getTrack(trackId);
+            const controller = playlistManager.getController(trackId);
+            if (track && controller && track.loop) {
+                const currentTime = controller.getCurrentTime();
+                const duration = controller.getDuration();
+                // If at the end (within 1 second of duration), loop
+                // Use a larger threshold to catch the ended state reliably
+                if (duration > 0 && currentTime >= duration - 1) {
+                    // Small delay to ensure YouTube player is ready
+                    setTimeout(() => {
+                        controller.seekTo(0);
+                        controller.play();
+                    }, 100);
+                }
+            }
+        }
+    }, (trackId, error) => {
+        // On error
+        playlistManager.updateTrack(trackId, { state: 'error', error });
+        const updatedTrack = playlistManager.getTrack(trackId);
+        if (updatedTrack) {
+            const element = document.querySelector(`[data-track-id="${trackId}"]`);
+            if (element) {
+                // Update the element to show error state without replacing it
+                element.classList.remove('loading');
+                element.classList.add('error');
+                // Get the track-main container
+                const trackMain = element.querySelector('.track-main');
+                if (trackMain) {
+                    trackMain.innerHTML = `
+              <div class="track-title">Error loading video</div>
+              <div class="track-error-message">${error.message}</div>
+              <div class="track-controls">
+                <button class="track-delete">Delete</button>
+              </div>
+            `;
+                }
+                attachTrackEventListeners(element, trackId);
+            }
+        }
+    });
+    playlistManager.setController(trackId, controller);
 }
 /**
  * Start the update interval for track progress

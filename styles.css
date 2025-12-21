@@ -34,7 +34,7 @@
   --color-text-muted: #7a8088;           /* Dim text for less important info */
 
   /* Border Colors */
-  --color-border-subtle: #4a4f57;        /* Dim grey - card borders, dividers */
+  --color-border-subtle: #38393b;        /* Dim grey - card borders, dividers */
   --color-border-hover: #5a6068;         /* Slightly lighter for hover */
   --color-border-glow: rgba(255, 153, 0, 0.4); /* Orange glow for focus/active */
 
@@ -186,6 +186,76 @@ body {
   position: relative;
   z-index: 1;
 }
+
+/* Background container */
+.curved-background {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.1; /* keep it subtle */
+    overflow: hidden;
+}
+
+/* Base style for each curve */
+.curved-line {
+    position: absolute;
+    width: 260%;          /* wider arc, more curvature */
+    height: 120px;        /* taller = more curve */
+    left: 5%;           /* pull left so arcs wrap nicely */
+    border-radius: 50%;
+    border: 1.5px solid #e89a3c;
+    border-bottom: none;  /* keep only the upper arc */
+}
+
+/* Many lines, closer together */
+.curved-line:nth-child(1)  { top: 0%;   transform: rotate(-4deg); }
+.curved-line:nth-child(2)  { top: 6%;   transform: rotate(-3deg); }
+.curved-line:nth-child(3)  { top: 12%;  transform: rotate(-2deg); }
+.curved-line:nth-child(4)  { top: 18%;  transform: rotate(-1deg); }
+.curved-line:nth-child(5)  { top: 24%;  transform: rotate(0deg); }
+.curved-line:nth-child(6)  { top: 30%;  transform: rotate(1deg); }
+.curved-line:nth-child(7)  { top: 36%;  transform: rotate(2deg); }
+.curved-line:nth-child(8)  { top: 42%;  transform: rotate(3deg); }
+.curved-line:nth-child(9)  { top: 48%;  transform: rotate(4deg); }
+.curved-line:nth-child(10) { top: 54%;  transform: rotate(3deg); }
+.curved-line:nth-child(11) { top: 60%;  transform: rotate(2deg); }
+.curved-line:nth-child(12) { top: 66%;  transform: rotate(1deg); }
+.curved-line:nth-child(13) { top: 72%;  transform: rotate(0deg); }
+.curved-line:nth-child(14) { top: 78%;  transform: rotate(-1deg); }
+.curved-line:nth-child(15) { top: 84%;  transform: rotate(-2deg); }
+.curved-line:nth-child(16) { top: 90%;  transform: rotate(-3deg); }
+
+/* Optional: very subtle slow motion to keep it alive */
+@keyframes softWave {
+    0%, 100% { transform: translateX(0) rotate(var(--base-rot)); }
+    50%      { transform: translateX(20px) rotate(calc(var(--base-rot) * -1)); }
+}
+
+/* If you want animation, uncomment this block and add --base-rot */
+/* .curved-line {
+    --base-rot: 0deg; 
+    animation: softWave 35s ease-in-out infinite;
+}
+.curved-line:nth-child(1)  { top: 0%;   --base-rot: -4deg; }
+.curved-line:nth-child(2)  { top: 6%;   --base-rot: -4deg; }
+.curved-line:nth-child(3)  { top: 12%;   --base-rot: -4deg; }
+.curved-line:nth-child(4)  { top: 18%;   --base-rot: -4deg; }
+.curved-line:nth-child(5)  { top: 24%;   --base-rot: -4deg; }
+.curved-line:nth-child(6)  { top: 30%;   --base-rot: -4deg; }
+.curved-line:nth-child(7)  { top: 36%;   --base-rot: -4deg; }
+.curved-line:nth-child(8)  { top: 42%;   --base-rot: -4deg; }
+.curved-line:nth-child(9)  { top: 48%;   --base-rot: -4deg; }
+.curved-line:nth-child(10)  { top: 54%;   --base-rot: -4deg; }
+.curved-line:nth-child(11)  { top: 60%;   --base-rot: -4deg; }
+.curved-line:nth-child(12)  { top: 66%;   --base-rot: -4deg; }
+.curved-line:nth-child(13)  { top: 72%;   --base-rot: -4deg; }
+.curved-line:nth-child(14)  { top: 78%;   --base-rot: -4deg; }
+.curved-line:nth-child(15)  { top: 84%;   --base-rot: -4deg; }
+.curved-line:nth-child(16)  { top: 90%;   --base-rot: -4deg; } */
+/*
+...
+(curve rules as above, but set --base-rot instead of transform)
+*/
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HEADER

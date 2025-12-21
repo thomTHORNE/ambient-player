@@ -226,12 +226,13 @@ body {
 .curved-line:nth-child(16) { top: 90%;  transform: rotate(-3deg); }
 
 /* Optional: very subtle slow motion to keep it alive */
-@keyframes softWave {
+/* @keyframes softWave {
     0%, 100% { transform: translateX(0) rotate(var(--base-rot)); }
     50%      { transform: translateX(20px) rotate(calc(var(--base-rot) * -1)); }
-}
+} */
 
 /* If you want animation, uncomment this block and add --base-rot */
+
 /* .curved-line {
     --base-rot: 0deg; 
     animation: softWave 35s ease-in-out infinite;
@@ -252,10 +253,7 @@ body {
 .curved-line:nth-child(14)  { top: 78%;   --base-rot: -4deg; }
 .curved-line:nth-child(15)  { top: 84%;   --base-rot: -4deg; }
 .curved-line:nth-child(16)  { top: 90%;   --base-rot: -4deg; } */
-/*
-...
-(curve rules as above, but set --base-rot instead of transform)
-*/
+
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HEADER

@@ -378,8 +378,21 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.track-volume {
+.track-volume-container {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 120px;
+}
+
+.volume-icon {
+  color: #aaa;
+  flex-shrink: 0;
+}
+
+.track-volume {
+  flex: 1;
   height: 6px;
   -webkit-appearance: none;
   appearance: none;

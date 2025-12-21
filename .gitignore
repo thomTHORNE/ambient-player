@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.log
+
+# Keep dist/ and app.js for deployment
+# dist/ contains compiled JS modules
+# app.js is the bundled standalone version
+

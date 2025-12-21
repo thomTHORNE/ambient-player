@@ -1,0 +1,16 @@
+{
+  "name": "yt-audio-playlist",
+  "version": "1.0.0",
+  "description": "YouTube Multi-Track Audio Player",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && node bundle.js",
+    "build:ts": "tsc",
+    "bundle": "node bundle.js",
+    "watch": "tsc --watch",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

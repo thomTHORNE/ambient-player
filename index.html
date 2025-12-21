@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Audio Playlist</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body class="dark">
+  <main class="app">
+    <header class="app-header">
+      <h1>YouTube Audio Playlist</h1>
+      
+      <div class="input-group">
+        <input 
+          id="urlInput" 
+          type="text" 
+          placeholder="Paste full YouTube URL" 
+          aria-label="YouTube URL input"
+        />
+        <button id="addButton">Add to playlist</button>
+      </div>
+      
+      <p id="inputError" class="error-message" aria-live="polite"></p>
+      
+      <div class="global-controls">
+        <button id="globalPlayPause">Play All</button>
+        <button id="shareButton">Share Playlist</button>
+      </div>
+    </header>
+
+    <section class="playlists-section">
+      <h2>Saved Playlists</h2>
+      <div class="playlist-save">
+        <input 
+          id="playlistNameInput" 
+          type="text" 
+          placeholder="Playlist name" 
+          aria-label="Playlist name input"
+        />
+        <button id="savePlaylistButton">Save / Update playlist</button>
+      </div>
+      <ul id="savedPlaylistsList" class="saved-playlists"></ul>
+    </section>
+
+    <section id="playlist" class="playlist"></section>
+  </main>
+
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  
+  <!-- Application code -->
+  <script type="module" src="dist/main.js"></script>
+</body>
+</html>
+

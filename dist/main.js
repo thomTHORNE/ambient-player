@@ -65,12 +65,33 @@ async function addTrackFromUrl(url) {
                     trackMain.innerHTML = `
               <div class="track-title">${meta.title}</div>
               <div class="track-controls">
-                <button class="track-play-pause">Play</button>
-                <input type="range" class="track-seek" min="0" max="100" value="0" />
-                <span class="track-time">0:00 / ${formatTime(meta.durationSeconds || 0)}</span>
+                <button class="track-play-pause" title="Play">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+                  </svg>
+                </button>
+                <button class="track-stop" title="Stop">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/>
+                  </svg>
+                </button>
+                <button class="track-loop-toggle" title="Loop OFF">Loop OFF</button>
+                <button class="track-delete" title="Delete">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                    <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                  </svg>
+                </button>
                 <input type="range" class="track-volume" min="0" max="1" step="0.01" value="${updatedTrack.volume}" />
-                <button class="track-loop-toggle">Loop OFF</button>
-                <button class="track-delete">Delete</button>
+                 <button class="track-seek-toggle" title="Toggle seek bar">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 3.5L4 7h8l-4-3.5z"/>
+                  </svg>
+                </button>
+                <div class="track-seek-container" style="display: none;">
+                  <input type="range" class="track-seek" min="0" max="100" value="0" />
+                  <span class="track-time">0:00 / ${formatTime(meta.durationSeconds || 0)}</span>
+                </div>
               </div>
             `;
                 }
@@ -88,6 +109,14 @@ async function addTrackFromUrl(url) {
         // On state change
         playlistManager.updateTrack(trackId, { state });
         updateGlobalPlayPauseButton(playlistManager, globalPlayPauseButton);
+        // Update the UI immediately for this track
+        const trackElement = document.querySelector(`[data-track-id="${trackId}"]`);
+        if (trackElement) {
+            const updatedTrack = playlistManager.getTrack(trackId);
+            if (updatedTrack) {
+                updateTrackElement(trackElement, updatedTrack);
+            }
+        }
         // Start update interval when playing
         if (state === 'playing') {
             startUpdateInterval();
@@ -145,6 +174,9 @@ async function addTrackFromUrl(url) {
  */
 function attachTrackEventListeners(trackElement, trackId) {
     const playPauseBtn = trackElement.querySelector('.track-play-pause');
+    const stopBtn = trackElement.querySelector('.track-stop');
+    const seekToggleBtn = trackElement.querySelector('.track-seek-toggle');
+    const seekContainer = trackElement.querySelector('.track-seek-container');
     const seekBar = trackElement.querySelector('.track-seek');
     const volumeSlider = trackElement.querySelector('.track-volume');
     const loopToggle = trackElement.querySelector('.track-loop-toggle');
@@ -162,6 +194,32 @@ function attachTrackEventListeners(trackElement, trackId) {
         }
         else {
             controller.play();
+        }
+    });
+    // Stop
+    stopBtn?.addEventListener('click', () => {
+        const track = playlistManager.getTrack(trackId);
+        if (!track)
+            return;
+        controller.pause();
+        controller.seekTo(0);
+        playlistManager.updateTrack(trackId, { currentTime: 0 });
+        // Update the UI immediately
+        const updatedTrack = playlistManager.getTrack(trackId);
+        if (updatedTrack) {
+            updateTrackElement(trackElement, updatedTrack);
+        }
+    });
+    // Seek bar toggle
+    seekToggleBtn?.addEventListener('click', () => {
+        if (seekContainer) {
+            const isHidden = seekContainer.style.display === 'none';
+            seekContainer.style.display = isHidden ? 'flex' : 'none';
+            // Rotate the arrow icon
+            const svg = seekToggleBtn.querySelector('svg');
+            if (svg) {
+                svg.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+            }
         }
     });
     // Seek

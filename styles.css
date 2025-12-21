@@ -192,6 +192,7 @@ body {
   display: flex;
   gap: 0.75rem;
   margin-top: 1rem;
+  margin-bottom: 2rem;
   flex-wrap: wrap;
 }
 

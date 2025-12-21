@@ -189,7 +189,7 @@ export function renderSavedPlaylists(
   container.innerHTML = '';
 
   if (playlists.length === 0) {
-    container.innerHTML = '<li style="color: #888; padding: 0.5rem;">No saved playlists</li>';
+    container.innerHTML = '<li style="color: var(--text-muted); padding: 0.5rem;">No saved playlists</li>';
     return;
   }
 

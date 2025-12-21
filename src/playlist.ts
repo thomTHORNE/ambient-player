@@ -57,7 +57,7 @@ export class PlaylistManager {
       currentTime: 0,
       volume: 1,
       isMuted: false,
-      loop: false,
+      loop: true,
     };
     this.state.tracks.push(track);
     return track;

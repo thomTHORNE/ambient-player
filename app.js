@@ -93,7 +93,7 @@ class PlaylistManager {
             currentTime: 0,
             volume: 1,
             isMuted: false,
-            loop: false,
+            loop: true,
         };
         this.state.tracks.push(track);
         return track;
@@ -595,7 +595,7 @@ function updateGlobalPlayPauseButton(playlistManager, button) {
 function renderSavedPlaylists(playlists, container) {
     container.innerHTML = '';
     if (playlists.length === 0) {
-        container.innerHTML = '<li style="color: #888; padding: 0.5rem;">No saved playlists</li>';
+        container.innerHTML = '<li style="color: var(--text-muted); padding: 0.5rem;">No saved playlists</li>';
         return;
     }
     for (const playlist of playlists) {

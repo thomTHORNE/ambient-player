@@ -4,6 +4,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <script>
+    /* Apply the saved UI scale before the first paint (see src/scale.ts). */
+    (function () {
+      try {
+        var s = Number(localStorage.getItem('ambient-player:ui-scale'));
+        if (!(s >= 0.7 && s <= 1.3) || s === 1) return;
+        if (window.matchMedia('(pointer: coarse)').matches) {
+          document.querySelector('meta[name="viewport"]').content =
+            'width=device-width, initial-scale=' + s + ', minimum-scale=' + s + ', maximum-scale=' + s + ', viewport-fit=cover';
+        } else {
+          document.documentElement.classList.add('is-zoomed');
+          document.documentElement.style.setProperty('--ui-zoom', String(s));
+        }
+      } catch (e) {}
+    })();
+  </script>
   <title>Ambient Player — multi-channel YouTube audio mixer</title>
   <meta name="description" content="Mix several YouTube streams as audio, each with its own volume and repeat, and save or share the mix.">
   <meta name="theme-color" content="#08090A">
@@ -18,7 +34,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=31155eba8c">
+  <link rel="stylesheet" href="styles.css?v=5321b655eb">
 </head>
 
 <body>
@@ -197,7 +213,16 @@
                   <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>Source</dt>
                   <dd>YouTube</dd>
                 </div>
-              </dl>
+                <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 15v5h-5"/><path d="M4 4l7 7M20 20l-7-7"/></svg>UI scale</dt>
+            <dd class="scale-ctl" role="group" aria-label="Interface scale">
+              <button id="scaleDown" class="icon-btn" type="button" aria-label="Make the interface smaller"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+              <output id="scaleValue" class="scale-ctl__value" aria-live="polite">100%</output>
+              <button id="scaleUp" class="icon-btn" type="button" aria-label="Make the interface larger"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+            </dd>
+          </div>
+        </dl>
+        <p id="layoutReadout" class="status__readout">Layout —</p>
               <div class="status__actions">
                 <button id="globalPlayPause" class="btn" type="button" disabled>Play all</button>
                 <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
@@ -232,7 +257,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=3c7f2e6423"></script>
+  <script src="app.js?v=19fe2668e0"></script>
 </body>
 
 </html>

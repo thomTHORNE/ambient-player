@@ -20,6 +20,7 @@ const files = [
   'accent.js',
   'screen.js',
   'layout.js',
+  'scale.js',
   'main.js'
 ];
 

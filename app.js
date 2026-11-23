@@ -1297,6 +1297,80 @@ function goToSlideInstant(index) {
 }
 
 
+// ===== scale.js =====
+/**
+ * UI scale: a user setting that makes the whole interface smaller or larger.
+ *
+ * On touch devices (phones, a Fold) it changes the page's viewport scale, so
+ * the layout sees more (or fewer) CSS pixels: at 90% the app lays out as if
+ * the screen were about 11% bigger, which can move it into the large-screen
+ * layout. On desktop the browser ignores the viewport meta tag, so the page
+ * is zoomed instead (the browser's own Ctrl/Cmd +/- does the same thing).
+ *
+ * The saved value is also applied by a small inline script in index.html
+ * before the first paint, so the page never flashes at the wrong size.
+ */
+const SCALE_KEY = 'ambient-player:ui-scale';
+const SCALE_MIN = 0.7;
+const SCALE_MAX = 1.3;
+const SCALE_STEP = 0.05;
+const roundScale = (s) => Number((Math.round(s / SCALE_STEP) * SCALE_STEP).toFixed(2));
+/** Viewport scaling works where the browser honours the viewport meta tag. */
+function usesViewportScale() {
+    return window.matchMedia('(pointer: coarse)').matches;
+}
+function storedScale() {
+    try {
+        const v = Number(localStorage.getItem(SCALE_KEY));
+        if (v >= SCALE_MIN && v <= SCALE_MAX)
+            return roundScale(v);
+    }
+    catch {
+        // Storage unavailable: use the default.
+    }
+    return 1;
+}
+/** Desktop: zoom the app shell (styles.css resizes it to still fill the window). */
+function setAppZoom(s) {
+    const root = document.documentElement;
+    root.classList.toggle('is-zoomed', s !== 1);
+    if (s === 1)
+        root.style.removeProperty('--ui-zoom');
+    else
+        root.style.setProperty('--ui-zoom', String(s));
+}
+/** The desktop zoom in effect (1 on touch devices, which scale the viewport). */
+function appZoom() {
+    return parseFloat(document.documentElement.style.getPropertyValue('--ui-zoom')) || 1;
+}
+function applyScale(scale) {
+    const s = Math.min(SCALE_MAX, Math.max(SCALE_MIN, roundScale(scale)));
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (usesViewportScale() && meta) {
+        // Minimum and maximum pinned to the scale: some browsers otherwise keep
+        // their current zoom when the tag changes, cutting the wider layout off.
+        meta.content =
+            s === 1
+                ? 'width=device-width, initial-scale=1.0, viewport-fit=cover'
+                : `width=device-width, initial-scale=${s}, minimum-scale=${s}, maximum-scale=${s}, viewport-fit=cover`;
+        setAppZoom(1);
+    }
+    else {
+        setAppZoom(s);
+    }
+    try {
+        if (s === 1)
+            localStorage.removeItem(SCALE_KEY);
+        else
+            localStorage.setItem(SCALE_KEY, String(s));
+    }
+    catch {
+        // Not saved; it still applies for this visit.
+    }
+    return s;
+}
+
+
 // ===== main.js =====
 /**
  * Main entry point.
@@ -1305,6 +1379,7 @@ function goToSlideInstant(index) {
  * "focused": it fills the centre of the screen and the deck controls it.
  * Every channel stays playable from the channel list.
  */
+
 
 
 
@@ -1573,6 +1648,45 @@ function setupScreenTakeover() {
     };
     // Capture phase: the tap still reaches whatever it was aimed at.
     document.addEventListener('click', takeover, true);
+}
+// ---------------------------------------------------------------------------
+// UI scale (Status panel)
+// ---------------------------------------------------------------------------
+let uiScale = storedScale();
+/** Show the scale, and the layout size it produces, so the right step is easy to find. */
+function updateScaleReadout() {
+    const valueEl = document.getElementById('scaleValue');
+    const readout = document.getElementById('layoutReadout');
+    const down = document.getElementById('scaleDown');
+    const up = document.getElementById('scaleUp');
+    if (valueEl)
+        valueEl.textContent = `${Math.round(uiScale * 100)}%`;
+    if (down)
+        down.disabled = uiScale <= SCALE_MIN + 0.001;
+    if (up)
+        up.disabled = uiScale >= SCALE_MAX - 0.001;
+    if (readout) {
+        const zoom = appZoom();
+        const w = Math.round(window.innerWidth / zoom);
+        const h = Math.round(window.innerHeight / zoom);
+        const mode = document.documentElement.dataset.merged === 'true'
+            ? 'large-screen layout'
+            : window.matchMedia('(orientation: portrait)').matches
+                ? 'vertical layout'
+                : 'horizontal layout';
+        readout.textContent = `Layout ${w} × ${h} · ${mode}`;
+    }
+}
+function setupScaleControl() {
+    const step = (dir) => {
+        uiScale = applyScale(uiScale + dir * SCALE_STEP);
+        updateScaleReadout();
+    };
+    document.getElementById('scaleDown')?.addEventListener('click', () => step(-1));
+    document.getElementById('scaleUp')?.addEventListener('click', () => step(1));
+    // The new scale arrives as a resize; the readout follows once the layout has settled.
+    window.addEventListener('resize', () => requestAnimationFrame(updateScaleReadout));
+    updateScaleReadout();
 }
 /** Fill the centre from the focused channel. changed=true fades the new channel in. */
 function renderStage(changed) {
@@ -2190,6 +2304,7 @@ function initializeEventListeners() {
 async function initialize() {
     setupScreenTakeover();
     setupLayout();
+    setupScaleControl();
     buildStaticMeters();
     renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
     renderAll(false);

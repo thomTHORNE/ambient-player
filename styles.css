@@ -301,6 +301,16 @@ body {
 .brand { grid-area: brand; }
 .scroller { grid-area: scroller; }
 
+/* Desktop UI scale (src/scale.ts): the shell is zoomed and sized back up so it
+   still fills the window. Touch devices scale the viewport instead. */
+html.is-zoomed .app {
+  zoom: var(--ui-zoom);
+  right: auto;
+  bottom: auto;
+  width: calc(100vw / var(--ui-zoom));
+  height: calc(100dvh / var(--ui-zoom));
+}
+
 /* ---------- Vertical: one scroller, collapsing stage, sideways panels ---------- */
 
 .scroller {
@@ -2062,6 +2072,34 @@ body {
   font-family: var(--mono);
   font-size: 13px;
   color: var(--text);
+}
+
+/* UI scale stepper: − 100% + */
+.scale-ctl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scale-ctl .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+
+.scale-ctl__value {
+  min-width: 4.5ch;
+  font-family: var(--mono);
+  font-size: 13px;
+  text-align: center;
+  color: var(--text);
+}
+
+.status__readout {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
 }
 
 .status__actions {

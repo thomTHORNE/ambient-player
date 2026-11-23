@@ -1185,7 +1185,6 @@ function setActive(index) {
         return;
     activeSlide = index;
     lBars.forEach((bar) => bar.setAttribute('aria-current', String(Number(bar.dataset.slide) === index)));
-    lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
 }
 /** The panel in view, as an index into lSlideEls. */
 function currentIndex() {
@@ -1299,7 +1298,6 @@ function onScrollerScroll() {
 function setupLayout() {
     applyMerge();
     lBars.forEach((bar) => bar.addEventListener('click', () => goToSlide(Number(bar.dataset.slide))));
-    lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === 0));
     let slideFrame = 0;
     lSlides.addEventListener('scroll', () => {
         if (slideFrame)
@@ -1582,21 +1580,11 @@ function renderChannels() {
         .join('');
     channelCount.textContent = String(tracks.length);
     document.documentElement.dataset.empty = String(tracks.length === 0);
-    updateListScroll();
     renderStrip();
 }
-/** Mark whether the channel list overflows, and whether it is scrolled to the end. */
-function updateListScroll() {
-    const panel = channelList.closest('.channels');
-    if (!panel)
-        return;
-    const scrollable = channelList.scrollHeight > channelList.clientHeight + 1;
-    panel.classList.toggle('is-scrollable', scrollable);
-    panel.classList.toggle('is-at-end', channelList.scrollTop + channelList.clientHeight >= channelList.scrollHeight - 2);
-}
 /**
- * The box that scrolls the channel rows: the list itself on phones, the
- * controls pane in the pinned layout. Null when only the page scrolls.
+ * The panel that scrolls the channel rows (a horizontal screen's page).
+ * Null on vertical screens, where only the whole scroller moves.
  */
 function rowScroller(row) {
     for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
@@ -1635,7 +1623,6 @@ function renderRow(id) {
     row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openDrawers.has(id));
     if (hadFocus)
         rowFor(id)?.querySelector('.ch__focus')?.focus();
-    updateListScroll();
     renderStrip();
 }
 function renderStatus() {
@@ -1643,7 +1630,6 @@ function renderStatus() {
     const live = liveCount();
     telChannels.textContent = String(tracks.length);
     telLive.textContent = String(live);
-    document.documentElement.dataset.live = String(live > 0);
     statusCode.textContent = mixName || 'Unsaved mix';
     statusLine.textContent =
         tracks.length === 0
@@ -2218,7 +2204,6 @@ function initializeEventListeners() {
                 if (open)
                     keepRowVisible(row);
             }
-            updateListScroll();
         }
         else if (el.dataset.action === 'relink') {
             const input = rowFor(id)?.querySelector('.ch__link-input');
@@ -2262,8 +2247,6 @@ function initializeEventListeners() {
             row.querySelector('[data-action="remove-ask"]')?.focus();
         }
     });
-    channelList.addEventListener('scroll', updateListScroll, { passive: true });
-    window.addEventListener('resize', updateListScroll);
     channelList.addEventListener('input', (e) => {
         const input = e.target;
         const id = input.closest('[data-track-id]')?.dataset.trackId;
@@ -2373,7 +2356,6 @@ async function initialize() {
     await waitForYouTubeAPI();
     playerFactory = createYouTubePlayerFactory();
     initializeEventListeners();
-    document.documentElement.dataset.ready = 'true';
     const sharedUrls = decodePlaylistFromLocation();
     if (sharedUrls && sharedUrls.length > 0) {
         clearPlaylistHash();

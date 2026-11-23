@@ -76,7 +76,6 @@ function setActive(index: number): void {
   if (index === activeSlide) return;
   activeSlide = index;
   lBars.forEach((bar) => bar.setAttribute('aria-current', String(Number(bar.dataset.slide) === index)));
-  lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
 }
 
 /** The panel in view, as an index into lSlideEls. */
@@ -112,7 +111,7 @@ function portraitTop(index: number): number {
 }
 
 /** Show a panel: 0 deck, 1 channels, 2 status and saved mixes. */
-export function goToSlide(index: number): void {
+function goToSlide(index: number): void {
   const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
   if (isPortrait()) {
     lScroller.scrollTo({ top: portraitTop(index), behavior });
@@ -136,7 +135,7 @@ export function goToSlide(index: number): void {
 let range = 0;
 
 /** Re-measure the stage (after a resize or rotation). */
-export function refreshLayout(): void {
+function refreshLayout(): void {
   lArt.style.height = '';
   lStage.style.transform = '';
   lStageWrap.style.height = '';
@@ -192,7 +191,6 @@ function onScrollerScroll(): void {
 export function setupLayout(): void {
   applyMerge();
   lBars.forEach((bar) => bar.addEventListener('click', () => goToSlide(Number(bar.dataset.slide))));
-  lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === 0));
 
   let slideFrame = 0;
   lSlides.addEventListener(

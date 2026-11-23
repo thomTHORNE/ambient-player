@@ -1,13 +1,13 @@
 {
-  "name": "yt-audio-playlist",
+  "name": "ambient-player",
   "version": "1.0.0",
-  "description": "YouTube Multi-Track Audio Player",
+  "private": true,
+  "description": "Ambient Player: mix several YouTube streams as audio, each with its own volume.",
   "type": "module",
   "scripts": {
     "build": "tsc && node bundle.js",
-    "build:ts": "tsc",
-    "bundle": "node bundle.js",
     "watch": "tsc --watch",
+    "bundle": "node bundle.js",
     "serve": "python3 -m http.server 8000"
   },
   "devDependencies": {

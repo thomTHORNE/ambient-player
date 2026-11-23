@@ -67,8 +67,6 @@ html = html.replace(
   `<script src="app.js?v=${jsVersion}"></script>`
 );
 fs.writeFileSync('./index.html', html);
-// index-standalone.html is the same page, kept for anyone opening it from disk.
-fs.writeFileSync('./index-standalone.html', html);
 
-console.log(`✓ Stamped index.html and index-standalone.html: styles.css?v=${cssVersion}, app.js?v=${jsVersion}`);
+console.log(`✓ Stamped index.html: styles.css?v=${cssVersion}, app.js?v=${jsVersion}`);
 

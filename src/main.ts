@@ -226,25 +226,12 @@ function renderChannels(): void {
     .join('');
   channelCount.textContent = String(tracks.length);
   document.documentElement.dataset.empty = String(tracks.length === 0);
-  updateListScroll();
   renderStrip();
 }
 
-/** Mark whether the channel list overflows, and whether it is scrolled to the end. */
-function updateListScroll(): void {
-  const panel = channelList.closest<HTMLElement>('.channels');
-  if (!panel) return;
-  const scrollable = channelList.scrollHeight > channelList.clientHeight + 1;
-  panel.classList.toggle('is-scrollable', scrollable);
-  panel.classList.toggle(
-    'is-at-end',
-    channelList.scrollTop + channelList.clientHeight >= channelList.scrollHeight - 2
-  );
-}
-
 /**
- * The box that scrolls the channel rows: the list itself on phones, the
- * controls pane in the pinned layout. Null when only the page scrolls.
+ * The panel that scrolls the channel rows (a horizontal screen's page).
+ * Null on vertical screens, where only the whole scroller moves.
  */
 function rowScroller(row: HTMLElement): HTMLElement | null {
   for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
@@ -279,7 +266,6 @@ function renderRow(id: TrackId): void {
   const hadFocus = row.contains(document.activeElement);
   row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openDrawers.has(id));
   if (hadFocus) rowFor(id)?.querySelector<HTMLElement>('.ch__focus')?.focus();
-  updateListScroll();
   renderStrip();
 }
 
@@ -288,7 +274,6 @@ function renderStatus(): void {
   const live = liveCount();
   telChannels.textContent = String(tracks.length);
   telLive.textContent = String(live);
-  document.documentElement.dataset.live = String(live > 0);
 
   statusCode.textContent = mixName || 'Unsaved mix';
   statusLine.textContent =
@@ -871,7 +856,6 @@ function initializeEventListeners(): void {
         setRowDrawerOpen(row, open);
         if (open) keepRowVisible(row);
       }
-      updateListScroll();
     } else if (el.dataset.action === 'relink') {
       const input = rowFor(id)?.querySelector<HTMLInputElement>('.ch__link-input');
       const url = input?.value.trim();
@@ -908,8 +892,6 @@ function initializeEventListeners(): void {
       row.querySelector<HTMLElement>('[data-action="remove-ask"]')?.focus();
     }
   });
-  channelList.addEventListener('scroll', updateListScroll, { passive: true });
-  window.addEventListener('resize', updateListScroll);
   channelList.addEventListener('input', (e) => {
     const input = e.target as HTMLInputElement;
     const id = input.closest<HTMLElement>('[data-track-id]')?.dataset.trackId;
@@ -1019,7 +1001,6 @@ async function initialize(): Promise<void> {
   await waitForYouTubeAPI();
   playerFactory = createYouTubePlayerFactory();
   initializeEventListeners();
-  document.documentElement.dataset.ready = 'true';
 
   const sharedUrls = decodePlaylistFromLocation();
   if (sharedUrls && sharedUrls.length > 0) {

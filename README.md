@@ -1,167 +1,126 @@
-# YouTube Audio Playlist
+# Ambient Player
 
-A single-page, dark-mode, pure front-end application for playing multiple YouTube videos as audio tracks simultaneously.
+Mix several YouTube streams as audio at once: rain on a window, a fireplace,
+distant thunder. Each YouTube link becomes a **channel** with its own volume
+and repeat, and the mix can be saved on the device or shared as a link.
+
+Live at **https://thomthorne.github.io/ambient-player/**
+
+It is a static, front-end-only web app (TypeScript, HTML and CSS) with no
+backend. Playback runs through hidden YouTube players (the YouTube IFrame
+API); only the sound and the artwork are shown.
 
 ## Features
 
-- **Multi-track playback**: Add multiple YouTube videos and control each independently
-- **Audio-style controls**: Play/pause, seek, volume, and loop for each track
-- **Global controls**: Play or pause all tracks at once
-- **Playlist management**: Save, load, and delete named playlists (stored in localStorage)
-- **Shareable URLs**: Generate shareable links that encode your current playlist
-- **Dark theme**: Easy on the eyes with a modern dark interface
-- **No backend required**: Pure front-end application using only the YouTube IFrame API
+- **Many channels at once.** Each one plays, pauses and sets its volume on
+  its own. **Play all / Pause all** sits in the Channels panel header.
+- **Main display.** One channel at a time fills the screen with its artwork,
+  title and channel name. The deck (previous, play, next, stop, timeline and
+  volume) controls that channel. Tap the artwork to play or pause it.
+- **Strip of what's playing.** The numbered strip on the artwork, or the
+  thumbnail strip under the title on large horizontal screens, lists the
+  channels that are playing, numbered by their place in the mix. Tap one to
+  bring it to the main display.
+- **Per-channel settings.** The volume button on a channel row opens its
+  drawer: a volume slider, its YouTube link (paste a new one and press **Load
+  link**) and **Remove channel**, which asks for confirmation first.
+- **Accent from the artwork.** The interface's highlight colour comes from
+  the current channel's thumbnail. It falls back to amber when the thumbnail
+  is too dark or grey.
+- **Saved mixes.** Name a mix and save it on this device. The last saved mix
+  reopens next time. Loading a mix while channels are open asks whether to
+  replace them or add to them.
+- **Share links.** **Copy share link** puts the whole mix in a URL. Opening it
+  loads that mix.
+- **Fullscreen takeover.** The first tap enters fullscreen, and while
+  something plays there the screen stays awake. The button at the top right leaves or
+  re-enters fullscreen. Installed from the home screen (*Add to Home screen* /
+  *Install app*), it always opens fullscreen.
+- **UI scale.** The Status panel has a 70–130% setting for the whole
+  interface, kept per device. The line under it shows the size the app lays
+  out at and which layout that gives.
+- **Keyboard.** <kbd>Space</kbd> plays or pauses the main channel, and
+  <kbd>[</kbd> / <kbd>]</kbd> step between channels.
 
-## Getting Started
+## Layouts
 
-### Prerequisites
+| Screen | Layout |
+| --- | --- |
+| Vertical (phones, a Fold's cover display) | Artwork at full width above the panels. The first swipe up shrinks it; after that each swipe moves one panel: deck, channels, saved mixes with status. |
+| Horizontal | The artwork and title in a column on the left; the panels page vertically on the right. |
+| Large horizontal (960 × 680 and up: a Fold's inner display, laptops) | A wider left column with bigger artwork and the thumbnail strip; the deck and the channel list share the first panel. |
 
-- Node.js and npm (for TypeScript compilation)
-- A modern web browser
-- Python 3 (for the development server, or use any other HTTP server)
+The pager bars on the right edge show the panel in view and jump to a panel
+on tap.
 
-### Installation
+## Development
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd yt-player
-   ```
+You need Node.js (for the TypeScript compiler) and Python 3 (or any static
+file server).
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Compile TypeScript to JavaScript:
-   ```bash
-   npm run build
-   ```
-
-### Running the Application
-
-You have **two options**:
-
-#### Option 1: Standalone (No Server Required) ⭐ Recommended
-
-Simply open `index-standalone.html` directly in your browser:
-- **macOS**: `open index-standalone.html`
-- **Windows**: Double-click `index-standalone.html`
-- **Linux**: `xdg-open index-standalone.html`
-
-This uses the bundled `app.js` file and works without any server!
-
-#### Option 2: With Development Server
-
-If you prefer using ES modules (for development):
-
-1. Start a local web server:
-   ```bash
-   npm run serve
-   ```
-
-2. Open your browser and navigate to `http://localhost:8000`
-
-### Development
-
-To automatically recompile TypeScript files on changes:
 ```bash
-npm run watch
+npm install
 ```
 
-After making changes, rebuild the bundled version:
 ```bash
 npm run build
 ```
 
-Or just rebuild the bundle (if TypeScript is already compiled):
 ```bash
-npm run bundle
+npm run serve
 ```
 
-## Usage
+Then open http://localhost:8000.
 
-### Adding Tracks
+| Script | What it does |
+| --- | --- |
+| `npm run build` | Compiles `src/` to `dist/` with `tsc`, bundles it into `app.js` and stamps cache-busting versions into `index.html`. Run it after every change. |
+| `npm run watch` | Recompiles `src/` on save (run `npm run bundle` to refresh `app.js`). |
+| `npm run bundle` | Rebuilds `app.js` and the version stamps from `dist/`. |
+| `npm run serve` | Serves the folder at http://localhost:8000. |
 
-1. Paste a full YouTube URL (e.g., `https://www.youtube.com/watch?v=VIDEO_ID`) into the input field
-2. Click "Add to playlist"
-3. The video will load as an audio track with controls
+`app.js` is a classic script, so `index.html` also works opened straight from
+disk once it is built.
 
-### Track Controls
+## Deployment
 
-Each track has the following controls:
-- **Play/Pause**: Start or stop playback for this track
-- **Seek bar**: Drag to jump to a specific time
-- **Time display**: Shows current time and total duration
-- **Volume slider**: Adjust volume for this track (0-100%)
-- **Loop toggle**: Enable/disable looping for this track
-- **Delete**: Remove the track from the playlist
+GitHub Pages serves the `main` branch as it is. Build, commit the generated
+`app.js` and `index.html` together with your changes, and push. `dist/` is a
+build intermediate and is not committed.
 
-### Global Controls
-
-- **Play All / Pause All**: Control all tracks at once
-- **Share Playlist**: Copy a shareable URL to your clipboard
-
-### Saving Playlists
-
-1. Add tracks to your current playlist
-2. Enter a name in the "Playlist name" field
-3. Click "Save / Update playlist"
-4. Your playlist will be saved to localStorage
-
-### Loading Playlists
-
-1. Click "Load" next to a saved playlist
-2. If you have tracks in the current playlist, you'll be prompted to:
-   - **Replace**: Clear current tracks and load the saved playlist
-   - **Append**: Keep current tracks and add saved tracks after them
-   - **Cancel**: Don't load the playlist
-
-### Sharing Playlists
-
-1. Click "Share Playlist" to copy a shareable URL
-2. Share the URL with others
-3. When they open the URL, they'll be prompted to load your playlist
-
-## Technical Details
-
-- **TypeScript**: Strict typing for all application code
-- **No build tools at runtime**: TypeScript compiled to ES2020 modules
-- **YouTube IFrame API**: For video playback and control
-- **localStorage**: For persisting playlists
-- **Pure front-end**: No backend or server-side components
-
-## Project Structure
+## Project structure
 
 ```
-yt-player/
-├── index.html          # Main HTML file
-├── styles.css          # Dark theme styles
-├── src/                # TypeScript source files
-│   ├── main.ts         # Application entry point
-│   ├── playlist.ts     # Playlist manager and types
-│   ├── youtubePlayer.ts # YouTube IFrame API wrapper
-│   ├── storage.ts      # localStorage operations
-│   ├── shareLinks.ts   # URL encoding/decoding
-│   └── ui.ts           # DOM operations and UI helpers
-├── dist/               # Compiled JavaScript files
-├── tsconfig.json       # TypeScript configuration
-└── package.json        # Project metadata and scripts
+index.html            Page markup; loads styles.css and app.js
+styles.css            All styles: tokens, layouts, components
+app.js                Generated bundle of src/ (committed for GitHub Pages)
+bundle.js             Build step: bundles dist/ into app.js, stamps versions
+manifest.webmanifest  Installable app: name, icons, fullscreen display
+src/
+  main.ts             Controller: state, rendering, events, boot
+  layout.ts           Panels, pager, collapsing artwork, large-screen merge
+  ui.ts               HTML templates, formatting, small DOM helpers
+  playlist.ts         Track model and PlaylistManager
+  youtubePlayer.ts    YouTube IFrame API wrapper and URL parsing
+  accent.ts           Accent colour and square-art detection from artwork
+  screen.ts           Fullscreen and screen wake lock
+  scale.ts            UI scale setting
+  storage.ts          Saved mixes in localStorage
+  shareLinks.ts       Encode and decode share links
+assets/               Favicon, app icons and the logo artwork
+docs/                 Architecture and design notes
 ```
 
-## Browser Support
+## Documentation
 
-Modern browsers supporting:
-- ES2020 modules
-- localStorage
-- crypto.randomUUID() (or fallback)
-- YouTube IFrame API
+- [docs/architecture.md](docs/architecture.md): how the code is organised,
+  how playback, layout and the build work.
+- [docs/design.md](docs/design.md): the visual system (colour, type, surfaces,
+  layouts) and the interaction rules behind it.
 
-## License
+## Browser support
 
-This is a personal project. See LICENSE file for details.
-
-## Acknowledgments
-
-- Uses the YouTube IFrame Player API
-- Inter font from Google Fonts
+Current Chrome, Edge, Brave, Safari and Firefox. The app uses CSS container
+queries, `color-mix()`, `@property`, scroll snapping and `dvh` units.
+Fullscreen and keeping the screen awake depend on the browser; iPhone Safari
+has neither, but the installed app still runs without browser bars.

@@ -2,7 +2,6 @@ node_modules/
 .DS_Store
 *.log
 
-# Keep dist/ and app.js for deployment
-# dist/ contains compiled JS modules
-# app.js is the bundled standalone version
-
+# Build intermediate: tsc compiles src/ here, bundle.js combines it into app.js.
+# app.js is committed, since GitHub Pages serves the repository as it is.
+dist/

@@ -588,6 +588,42 @@ function channelRowHtml(track, index, focused, volumeOpen = false) {
       </label>
     </li>`;
 }
+/** One tile in the mix strip: thumbnail, number and state, with its own play toggle. */
+function stripItemHtml(track, index, focused) {
+    const title = esc(trackTitle(track));
+    const playing = track.state === 'playing';
+    const usable = track.state === 'playing' || track.state === 'paused';
+    const { label, tone } = stateInfo(track);
+    const thumb = track.meta?.thumbnailUrl
+        ? `<img src="${esc(track.meta.thumbnailUrl)}" alt="" loading="lazy" />`
+        : '';
+    return `
+    <li class="strip__item is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
+      <button class="strip__focus" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Show ${title} in the player" title="${title}">
+        <span class="strip__thumb">${thumb}<span class="strip__num">${pad2(index + 1)}</span></span>
+        <span class="strip__state tone-${tone}">${label}</span>
+      </button>
+      <button class="strip__toggle${playing ? ' is-on' : ''}" type="button" data-action="toggle" aria-label="${playing ? 'Pause' : 'Play'} ${title}"${usable ? '' : ' disabled'}>${playing ? icons.pause : icons.play}</button>
+    </li>`;
+}
+/** Update a strip tile in place. */
+function patchStripItem(li, track) {
+    const playing = track.state === 'playing';
+    li.classList.toggle('is-playing', playing);
+    li.classList.toggle('is-paused', track.state === 'paused');
+    const state = li.querySelector('.strip__state');
+    if (state) {
+        const { label, tone } = stateInfo(track);
+        state.textContent = label;
+        state.className = `strip__state tone-${tone}`;
+    }
+    const toggle = li.querySelector('.strip__toggle');
+    if (toggle && toggle.classList.contains('is-on') !== playing) {
+        toggle.classList.toggle('is-on', playing);
+        toggle.innerHTML = playing ? icons.pause : icons.play;
+        toggle.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} ${trackTitle(track)}`);
+    }
+}
 /** Update the live parts of a row in place, so focus and slider drags survive. */
 function patchChannelRow(li, track) {
     const playing = track.state === 'playing';
@@ -1112,6 +1148,8 @@ const backdropImg = $('backdropImg');
 const stage = $('stage');
 const art = $('art');
 const artImg = $('artImg');
+const artPlay = $('artPlay');
+const mixStrip = $('mixStrip');
 const stageIndex = $('stageIndex');
 const stageState = $('stageState');
 const stageArtist = $('stageArtist');
@@ -1141,6 +1179,19 @@ const volumeDb = $('volumeDb');
 // ---------------------------------------------------------------------------
 function focusedTrack() {
     return focusedId ? playlistManager.getTrack(focusedId) : undefined;
+}
+function stripFor(id) {
+    return mixStrip.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
+}
+/** The mix strip under the title: rebuilt with the list, patched in place on state changes. */
+function renderStrip() {
+    const tracks = playlistManager.getTracks();
+    const hadFocus = mixStrip.contains(document.activeElement)
+        ? document.activeElement.closest('[data-track-id]')?.dataset.trackId
+        : undefined;
+    mixStrip.innerHTML = tracks.map((t, i) => stripItemHtml(t, i, t.id === focusedId)).join('');
+    if (hadFocus)
+        stripFor(hadFocus)?.querySelector('.strip__focus')?.focus();
 }
 function rowFor(id) {
     return channelList.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
@@ -1189,6 +1240,7 @@ function renderChannels() {
     channelCount.textContent = String(tracks.length);
     document.documentElement.dataset.empty = String(tracks.length === 0);
     updateListScroll();
+    renderStrip();
 }
 /** Mark whether the channel list overflows, and whether it is scrolled to the end. */
 function updateListScroll() {
@@ -1237,6 +1289,7 @@ function renderRow(id) {
     if (hadFocus)
         rowFor(id)?.querySelector('.ch__focus')?.focus();
     updateListScroll();
+    renderStrip();
 }
 function renderStatus() {
     const tracks = playlistManager.getTracks();
@@ -1375,6 +1428,9 @@ function renderStage(changed) {
     playButton.querySelector('span').textContent = playing ? 'Pause' : 'Play';
     playButton.classList.toggle('is-on', !!playing);
     playButton.setAttribute('aria-label', playing ? 'Pause this channel' : 'Play this channel');
+    artPlay.disabled = !usable;
+    artPlay.setAttribute('aria-label', playing ? 'Pause this channel' : 'Play this channel');
+    art.classList.toggle('is-playing', !!playing);
     const loopOn = !!track?.loop;
     loopSwitch.disabled = !track;
     loopSwitch.setAttribute('aria-pressed', String(loopOn));
@@ -1394,6 +1450,7 @@ function renderTime() {
         el.textContent = d ? formatHMS(d * Number(el.dataset.tick)) : '—';
     });
     scrub.style.setProperty('--p', p.toFixed(5));
+    art.style.setProperty('--p', p.toFixed(5));
     scrub.classList.toggle('is-live', track?.state === 'playing');
     if (!seeking)
         seekInput.value = String(Math.round(p * 1000));
@@ -1452,6 +1509,13 @@ function setFocus(id) {
         row.querySelector('.ch__focus')?.setAttribute('aria-current', 'true');
         keepRowVisible(row);
     }
+    mixStrip.querySelectorAll('.strip__item').forEach((tile) => {
+        const on = tile.dataset.trackId === id;
+        tile.classList.toggle('is-focus', on);
+        tile.querySelector('.strip__focus')?.setAttribute('aria-current', String(on));
+        if (on)
+            tile.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    });
     renderStage(true);
 }
 function stepFocus(dir) {
@@ -1555,6 +1619,9 @@ function onTrackState(id, state) {
     const row = rowFor(id);
     if (row)
         patchChannelRow(row, track);
+    const tile = stripFor(id);
+    if (tile)
+        patchStripItem(tile, track);
     renderStatus();
     if (id === focusedId)
         renderStage(false);
@@ -1846,6 +1913,18 @@ function initializeEventListeners() {
         if (artImg.naturalWidth <= 120 && useFallback())
             return;
         applyArtworkAnalysis();
+    });
+    // Main display: tap the artwork to play or pause; the strip focuses or toggles channels.
+    artPlay.addEventListener('click', () => focusedId && togglePlay(focusedId));
+    mixStrip.addEventListener('click', (e) => {
+        const el = e.target.closest('[data-action]');
+        const id = el?.closest('[data-track-id]')?.dataset.trackId;
+        if (!el || !id)
+            return;
+        if (el.dataset.action === 'focus')
+            setFocus(id);
+        else if (el.dataset.action === 'toggle')
+            togglePlay(id);
     });
     // Deck
     playButton.addEventListener('click', () => focusedId && togglePlay(focusedId));

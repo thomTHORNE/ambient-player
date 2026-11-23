@@ -163,6 +163,44 @@ export function channelRowHtml(track: Track, index: number, focused: boolean, vo
     </li>`;
 }
 
+/** One tile in the mix strip: thumbnail, number and state, with its own play toggle. */
+export function stripItemHtml(track: Track, index: number, focused: boolean): string {
+  const title = esc(trackTitle(track));
+  const playing = track.state === 'playing';
+  const usable = track.state === 'playing' || track.state === 'paused';
+  const { label, tone } = stateInfo(track);
+  const thumb = track.meta?.thumbnailUrl
+    ? `<img src="${esc(track.meta.thumbnailUrl)}" alt="" loading="lazy" />`
+    : '';
+  return `
+    <li class="strip__item is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
+      <button class="strip__focus" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Show ${title} in the player" title="${title}">
+        <span class="strip__thumb">${thumb}<span class="strip__num">${pad2(index + 1)}</span></span>
+        <span class="strip__state tone-${tone}">${label}</span>
+      </button>
+      <button class="strip__toggle${playing ? ' is-on' : ''}" type="button" data-action="toggle" aria-label="${playing ? 'Pause' : 'Play'} ${title}"${usable ? '' : ' disabled'}>${playing ? icons.pause : icons.play}</button>
+    </li>`;
+}
+
+/** Update a strip tile in place. */
+export function patchStripItem(li: HTMLElement, track: Track): void {
+  const playing = track.state === 'playing';
+  li.classList.toggle('is-playing', playing);
+  li.classList.toggle('is-paused', track.state === 'paused');
+  const state = li.querySelector<HTMLElement>('.strip__state');
+  if (state) {
+    const { label, tone } = stateInfo(track);
+    state.textContent = label;
+    state.className = `strip__state tone-${tone}`;
+  }
+  const toggle = li.querySelector<HTMLButtonElement>('.strip__toggle');
+  if (toggle && toggle.classList.contains('is-on') !== playing) {
+    toggle.classList.toggle('is-on', playing);
+    toggle.innerHTML = playing ? icons.pause : icons.play;
+    toggle.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} ${trackTitle(track)}`);
+  }
+}
+
 /** Update the live parts of a row in place, so focus and slider drags survive. */
 export function patchChannelRow(li: HTMLElement, track: Track): void {
   const playing = track.state === 'playing';

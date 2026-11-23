@@ -29,6 +29,8 @@ import {
 import {
   channelRowHtml,
   patchChannelRow,
+  stripItemHtml,
+  patchStripItem,
   setRowVolumeOpen,
   renderSavedPlaylists,
   showReplaceAppendModal,
@@ -102,6 +104,8 @@ const backdropImg = $<HTMLImageElement>('backdropImg');
 const stage = $<HTMLElement>('stage');
 const art = $<HTMLElement>('art');
 const artImg = $<HTMLImageElement>('artImg');
+const artPlay = $<HTMLButtonElement>('artPlay');
+const mixStrip = $<HTMLOListElement>('mixStrip');
 const stageIndex = $<HTMLElement>('stageIndex');
 const stageState = $<HTMLElement>('stageState');
 const stageArtist = $<HTMLElement>('stageArtist');
@@ -136,6 +140,20 @@ const volumeDb = $<HTMLElement>('volumeDb');
 
 function focusedTrack(): Track | undefined {
   return focusedId ? playlistManager.getTrack(focusedId) : undefined;
+}
+
+function stripFor(id: TrackId): HTMLElement | null {
+  return mixStrip.querySelector<HTMLElement>(`[data-track-id="${CSS.escape(id)}"]`);
+}
+
+/** The mix strip under the title: rebuilt with the list, patched in place on state changes. */
+function renderStrip(): void {
+  const tracks = playlistManager.getTracks();
+  const hadFocus = mixStrip.contains(document.activeElement)
+    ? (document.activeElement as HTMLElement).closest<HTMLElement>('[data-track-id]')?.dataset.trackId
+    : undefined;
+  mixStrip.innerHTML = tracks.map((t, i) => stripItemHtml(t, i, t.id === focusedId)).join('');
+  if (hadFocus) stripFor(hadFocus)?.querySelector<HTMLElement>('.strip__focus')?.focus();
 }
 
 function rowFor(id: TrackId): HTMLElement | null {
@@ -196,6 +214,7 @@ function renderChannels(): void {
   channelCount.textContent = String(tracks.length);
   document.documentElement.dataset.empty = String(tracks.length === 0);
   updateListScroll();
+  renderStrip();
 }
 
 /** Mark whether the channel list overflows, and whether it is scrolled to the end. */
@@ -245,6 +264,7 @@ function renderRow(id: TrackId): void {
   row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openVolumes.has(id));
   if (hadFocus) rowFor(id)?.querySelector<HTMLElement>('.ch__focus')?.focus();
   updateListScroll();
+  renderStrip();
 }
 
 function renderStatus(): void {
@@ -392,6 +412,9 @@ function renderStage(changed: boolean): void {
   playButton.querySelector('span')!.textContent = playing ? 'Pause' : 'Play';
   playButton.classList.toggle('is-on', !!playing);
   playButton.setAttribute('aria-label', playing ? 'Pause this channel' : 'Play this channel');
+  artPlay.disabled = !usable;
+  artPlay.setAttribute('aria-label', playing ? 'Pause this channel' : 'Play this channel');
+  art.classList.toggle('is-playing', !!playing);
 
   const loopOn = !!track?.loop;
   loopSwitch.disabled = !track;
@@ -416,6 +439,7 @@ function renderTime(): void {
   });
 
   scrub.style.setProperty('--p', p.toFixed(5));
+  art.style.setProperty('--p', p.toFixed(5));
   scrub.classList.toggle('is-live', track?.state === 'playing');
   if (!seeking) seekInput.value = String(Math.round(p * 1000));
   seekInput.setAttribute('aria-valuetext', `${formatHMS(t)} of ${d ? formatHMS(d) : 'unknown'}`);
@@ -474,6 +498,12 @@ function setFocus(id: TrackId | null): void {
     row.querySelector('.ch__focus')?.setAttribute('aria-current', 'true');
     keepRowVisible(row);
   }
+  mixStrip.querySelectorAll<HTMLElement>('.strip__item').forEach((tile) => {
+    const on = tile.dataset.trackId === id;
+    tile.classList.toggle('is-focus', on);
+    tile.querySelector('.strip__focus')?.setAttribute('aria-current', String(on));
+    if (on) tile.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  });
   renderStage(true);
 }
 
@@ -580,6 +610,8 @@ function onTrackState(id: TrackId, state: TrackState): void {
 
   const row = rowFor(id);
   if (row) patchChannelRow(row, track);
+  const tile = stripFor(id);
+  if (tile) patchStripItem(tile, track);
   renderStatus();
   if (id === focusedId) renderStage(false);
 
@@ -857,6 +889,16 @@ function initializeEventListeners(): void {
     // A missing HD thumbnail comes back as a 120x90 grey placeholder rather than an error.
     if (artImg.naturalWidth <= 120 && useFallback()) return;
     applyArtworkAnalysis();
+  });
+
+  // Main display: tap the artwork to play or pause; the strip focuses or toggles channels.
+  artPlay.addEventListener('click', () => focusedId && togglePlay(focusedId));
+  mixStrip.addEventListener('click', (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
+    const id = el?.closest<HTMLElement>('[data-track-id]')?.dataset.trackId;
+    if (!el || !id) return;
+    if (el.dataset.action === 'focus') setFocus(id);
+    else if (el.dataset.action === 'toggle') togglePlay(id);
   });
 
   // Deck

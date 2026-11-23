@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=63e62ca577">
+  <link rel="stylesheet" href="styles.css?v=b383fe1ad6">
 </head>
 
 <body>
@@ -57,6 +57,14 @@
           </span>
           <span>Add a YouTube link to start the mix</span>
         </div>
+        <!-- Tap the artwork to play or pause; a progress line runs along its foot. -->
+        <button id="artPlay" class="art__play" type="button" aria-label="Play this channel" disabled>
+          <span class="art__glyph" aria-hidden="true">
+            <svg class="art__icon-play" viewBox="0 0 24 24"><path d="M8 5.2v13.6a.8.8 0 0 0 1.2.7l10.9-6.8a.8.8 0 0 0 0-1.4L9.2 4.5A.8.8 0 0 0 8 5.2z" fill="currentColor"/></svg>
+            <svg class="art__icon-pause" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/></svg>
+          </span>
+        </button>
+        <div class="art__progress" aria-hidden="true"><span></span></div>
       </figure>
 
       <div class="now__meta">
@@ -87,6 +95,8 @@
           </div>
         </div>
       </div>
+      <!-- Mix strip: every channel at a glance on wide screens. -->
+      <ol id="mixStrip" class="strip" aria-label="Channels in this mix"></ol>
     </main>
 
     <!-- ============ 2-3. Controls: deck and channels (scroll together on wide screens) ============ -->
@@ -231,7 +241,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=b20e155b07"></script>
+  <script src="app.js?v=361c2722aa"></script>
 </body>
 
 </html>

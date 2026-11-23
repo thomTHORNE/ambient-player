@@ -97,8 +97,11 @@ export function trackTitle(track) {
         return 'Loading channel';
     return track.meta?.title || 'Untitled video';
 }
-/** Markup for one channel row. */
-export function channelRowHtml(track, index, focused) {
+/**
+ * Markup for one channel row. The row's own volume slider stays hidden behind
+ * a toggle (volumeOpen) so scrolling the list cannot nudge it by accident.
+ */
+export function channelRowHtml(track, index, focused, volumeOpen = false) {
     const title = esc(trackTitle(track));
     const author = esc(track.meta?.author || 'YouTube');
     const thumb = track.meta?.thumbnailUrl
@@ -121,9 +124,12 @@ export function channelRowHtml(track, index, focused) {
             </span>
           </span>
         </button>
+        <button class="vol-toggle${volumeOpen ? ' is-open' : ''}" type="button" data-action="vol-toggle" aria-expanded="${volumeOpen}" aria-controls="vol-${esc(track.id)}" aria-label="Volume for ${title}: ${vol} percent"${usable ? '' : ' disabled'}>
+          ${icons.volume}<span class="vol-toggle__num">${vol}</span>
+        </button>
         <button class="round-btn ch__toggle${playing ? ' is-on' : ''}" type="button" data-action="toggle" aria-label="${playing ? 'Pause' : 'Play'} ${title}"${usable ? '' : ' disabled'}>${playing ? icons.pause : icons.play}</button>
       </div>
-      <label class="ch__vol">
+      <label class="ch__vol" id="vol-${esc(track.id)}"${volumeOpen && usable ? '' : ' hidden'}>
         <span class="visually-hidden">Volume for ${title}</span>
         <span class="ch__vol-icon" aria-hidden="true">${icons.volume}</span>
         <input class="slider" type="range" min="0" max="100" step="1" value="${vol}" style="--v:${vol}%" data-action="volume"${usable ? '' : ' disabled'} />
@@ -158,6 +164,22 @@ export function patchChannelRow(li, track) {
     }
     if (volNum)
         volNum.textContent = String(v);
+    const volToggle = li.querySelector('.vol-toggle');
+    const volToggleNum = volToggle?.querySelector('.vol-toggle__num');
+    if (volToggle && volToggleNum) {
+        volToggleNum.textContent = String(v);
+        volToggle.setAttribute('aria-label', `Volume for ${trackTitle(track)}: ${v} percent`);
+    }
+}
+/** Show or hide a row's own volume slider. */
+export function setRowVolumeOpen(li, open) {
+    const toggle = li.querySelector('.vol-toggle');
+    const panel = li.querySelector('.ch__vol');
+    if (!toggle || !panel)
+        return;
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.classList.toggle('is-open', open);
+    panel.hidden = !open;
 }
 /** Render the saved mixes list. */
 export function renderSavedPlaylists(playlists, container) {

@@ -1373,7 +1373,7 @@ svg {
 }
 
 .ch {
-  padding: 10px 10px 4px;
+  padding: 10px;
   border: 1px solid transparent;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.025);
@@ -1436,12 +1436,15 @@ svg {
 }
 
 .ch__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
+  overflow-wrap: anywhere;
   font-size: 13.5px;
   font-weight: 500;
   line-height: 1.35;
-  white-space: nowrap;
-  text-overflow: ellipsis;
   color: var(--text);
 }
 
@@ -1487,11 +1490,65 @@ svg {
   color: var(--text-3);
 }
 
+/* Per-channel volume: hidden until its toggle is pressed, so scrolling the
+   list can't change it. The main Channel volume slider is the primary control. */
 .ch__vol {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-top: 4px;
   padding-left: 76px;
+}
+
+.ch__vol[hidden] {
+  display: none;
+}
+
+.vol-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  transition: background-color 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease), transform 90ms var(--ease);
+}
+
+.vol-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.vol-toggle__num {
+  min-width: 3ch;
+  text-align: right;
+}
+
+.vol-toggle:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--fill);
+  color: var(--text);
+}
+
+.vol-toggle:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.vol-toggle.is-open {
+  border-color: var(--accent-line);
+  background: var(--accent-fill);
+  color: var(--accent);
+}
+
+.vol-toggle:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .ch__vol-icon svg {
@@ -1742,6 +1799,19 @@ svg {
   .ch__vol {
     padding-left: 0;
   }
+
+  .ch__focus {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .ch__thumb {
+    width: 52px;
+  }
+
+  .ch__main {
+    gap: 8px;
+  }
 }
 
 @media (pointer: coarse) {
@@ -1753,6 +1823,10 @@ svg {
 
   .round-btn {
     width: var(--tap);
+    height: var(--tap);
+  }
+
+  .vol-toggle {
     height: var(--tap);
   }
 

@@ -29,6 +29,7 @@ import {
 import {
   channelRowHtml,
   patchChannelRow,
+  setRowVolumeOpen,
   renderSavedPlaylists,
   showReplaceAppendModal,
   showError,
@@ -56,6 +57,8 @@ let pollTimer: number | null = null;
 let focusedId: TrackId | null = null;
 let mixName: string | null = null;
 let seeking = false;
+/** Channels whose own volume slider is open in the list. */
+const openVolumes = new Set<TrackId>();
 
 const VOLUME_BARS = 14;
 
@@ -163,7 +166,9 @@ function buildStaticMeters(): void {
 
 function renderChannels(): void {
   const tracks = playlistManager.getTracks();
-  channelList.innerHTML = tracks.map((t, i) => channelRowHtml(t, i, t.id === focusedId)).join('');
+  channelList.innerHTML = tracks
+    .map((t, i) => channelRowHtml(t, i, t.id === focusedId, openVolumes.has(t.id)))
+    .join('');
   channelCount.textContent = String(tracks.length);
   document.documentElement.dataset.empty = String(tracks.length === 0);
 }
@@ -174,7 +179,7 @@ function renderRow(id: TrackId): void {
   const row = rowFor(id);
   if (index < 0 || !row) return;
   const hadFocus = row.contains(document.activeElement);
-  row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId);
+  row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openVolumes.has(id));
   if (hadFocus) rowFor(id)?.querySelector<HTMLElement>('.ch__focus')?.focus();
 }
 
@@ -478,6 +483,7 @@ function addTrackFromUrl(url: string): boolean {
 function removeTrack(id: TrackId): void {
   const index = playlistManager.getTracks().findIndex((t) => t.id === id);
   playlistManager.removeTrack(id);
+  openVolumes.delete(id);
   playerBay.querySelector(`[data-slot="${CSS.escape(id)}"]`)?.remove();
   if (focusedId === id) {
     const rest = playlistManager.getTracks();
@@ -535,6 +541,7 @@ function setVolume(id: TrackId, volume: number): void {
 function loadTracksFromUrls(urls: string[], mode: 'replace' | 'append'): void {
   if (mode === 'replace') {
     playlistManager.clearTracks();
+    openVolumes.clear();
     playerBay.innerHTML = '';
     focusedId = null;
   }
@@ -654,6 +661,13 @@ function initializeEventListeners(): void {
     if (!el || !id) return;
     if (el.dataset.action === 'focus') setFocus(id);
     else if (el.dataset.action === 'toggle') togglePlay(id);
+    else if (el.dataset.action === 'vol-toggle') {
+      const open = !openVolumes.has(id);
+      if (open) openVolumes.add(id);
+      else openVolumes.delete(id);
+      const row = rowFor(id);
+      if (row) setRowVolumeOpen(row, open);
+    }
   });
   channelList.addEventListener('input', (e) => {
     const input = e.target as HTMLInputElement;

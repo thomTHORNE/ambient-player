@@ -9,7 +9,7 @@ import { PlaylistManager } from './playlist.js';
 import { waitForYouTubeAPI, createYouTubePlayerFactory, extractVideoId, isValidYouTubeUrl, } from './youtubePlayer.js';
 import { saveOrUpdatePlaylist, deletePlaylist, getLastPlaylist, getAllPlaylists, } from './storage.js';
 import { encodePlaylistToUrl, decodePlaylistFromLocation, clearPlaylistHash, } from './shareLinks.js';
-import { channelRowHtml, patchChannelRow, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, clockParts, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
+import { channelRowHtml, patchChannelRow, setRowVolumeOpen, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, clockParts, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
 import { extractAccent, FALLBACK_ACCENT } from './accent.js';
 // ---------------------------------------------------------------------------
 // State
@@ -20,6 +20,8 @@ let pollTimer = null;
 let focusedId = null;
 let mixName = null;
 let seeking = false;
+/** Channels whose own volume slider is open in the list. */
+const openVolumes = new Set();
 const VOLUME_BARS = 14;
 // ---------------------------------------------------------------------------
 // DOM
@@ -107,7 +109,9 @@ function buildStaticMeters() {
 // ---------------------------------------------------------------------------
 function renderChannels() {
     const tracks = playlistManager.getTracks();
-    channelList.innerHTML = tracks.map((t, i) => channelRowHtml(t, i, t.id === focusedId)).join('');
+    channelList.innerHTML = tracks
+        .map((t, i) => channelRowHtml(t, i, t.id === focusedId, openVolumes.has(t.id)))
+        .join('');
     channelCount.textContent = String(tracks.length);
     document.documentElement.dataset.empty = String(tracks.length === 0);
 }
@@ -118,7 +122,7 @@ function renderRow(id) {
     if (index < 0 || !row)
         return;
     const hadFocus = row.contains(document.activeElement);
-    row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId);
+    row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openVolumes.has(id));
     if (hadFocus)
         rowFor(id)?.querySelector('.ch__focus')?.focus();
 }
@@ -407,6 +411,7 @@ function addTrackFromUrl(url) {
 function removeTrack(id) {
     const index = playlistManager.getTracks().findIndex((t) => t.id === id);
     playlistManager.removeTrack(id);
+    openVolumes.delete(id);
     playerBay.querySelector(`[data-slot="${CSS.escape(id)}"]`)?.remove();
     if (focusedId === id) {
         const rest = playlistManager.getTracks();
@@ -466,6 +471,7 @@ function setVolume(id, volume) {
 function loadTracksFromUrls(urls, mode) {
     if (mode === 'replace') {
         playlistManager.clearTracks();
+        openVolumes.clear();
         playerBay.innerHTML = '';
         focusedId = null;
     }
@@ -590,6 +596,16 @@ function initializeEventListeners() {
             setFocus(id);
         else if (el.dataset.action === 'toggle')
             togglePlay(id);
+        else if (el.dataset.action === 'vol-toggle') {
+            const open = !openVolumes.has(id);
+            if (open)
+                openVolumes.add(id);
+            else
+                openVolumes.delete(id);
+            const row = rowFor(id);
+            if (row)
+                setRowVolumeOpen(row, open);
+        }
     });
     channelList.addEventListener('input', (e) => {
         const input = e.target;

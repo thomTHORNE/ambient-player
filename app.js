@@ -539,8 +539,11 @@ function trackTitle(track) {
         return 'Loading channel';
     return track.meta?.title || 'Untitled video';
 }
-/** Markup for one channel row. */
-function channelRowHtml(track, index, focused) {
+/**
+ * Markup for one channel row. The row's own volume slider stays hidden behind
+ * a toggle (volumeOpen) so scrolling the list cannot nudge it by accident.
+ */
+function channelRowHtml(track, index, focused, volumeOpen = false) {
     const title = esc(trackTitle(track));
     const author = esc(track.meta?.author || 'YouTube');
     const thumb = track.meta?.thumbnailUrl
@@ -563,9 +566,12 @@ function channelRowHtml(track, index, focused) {
             </span>
           </span>
         </button>
+        <button class="vol-toggle${volumeOpen ? ' is-open' : ''}" type="button" data-action="vol-toggle" aria-expanded="${volumeOpen}" aria-controls="vol-${esc(track.id)}" aria-label="Volume for ${title}: ${vol} percent"${usable ? '' : ' disabled'}>
+          ${icons.volume}<span class="vol-toggle__num">${vol}</span>
+        </button>
         <button class="round-btn ch__toggle${playing ? ' is-on' : ''}" type="button" data-action="toggle" aria-label="${playing ? 'Pause' : 'Play'} ${title}"${usable ? '' : ' disabled'}>${playing ? icons.pause : icons.play}</button>
       </div>
-      <label class="ch__vol">
+      <label class="ch__vol" id="vol-${esc(track.id)}"${volumeOpen && usable ? '' : ' hidden'}>
         <span class="visually-hidden">Volume for ${title}</span>
         <span class="ch__vol-icon" aria-hidden="true">${icons.volume}</span>
         <input class="slider" type="range" min="0" max="100" step="1" value="${vol}" style="--v:${vol}%" data-action="volume"${usable ? '' : ' disabled'} />
@@ -600,6 +606,22 @@ function patchChannelRow(li, track) {
     }
     if (volNum)
         volNum.textContent = String(v);
+    const volToggle = li.querySelector('.vol-toggle');
+    const volToggleNum = volToggle?.querySelector('.vol-toggle__num');
+    if (volToggle && volToggleNum) {
+        volToggleNum.textContent = String(v);
+        volToggle.setAttribute('aria-label', `Volume for ${trackTitle(track)}: ${v} percent`);
+    }
+}
+/** Show or hide a row's own volume slider. */
+function setRowVolumeOpen(li, open) {
+    const toggle = li.querySelector('.vol-toggle');
+    const panel = li.querySelector('.ch__vol');
+    if (!toggle || !panel)
+        return;
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.classList.toggle('is-open', open);
+    panel.hidden = !open;
 }
 /** Render the saved mixes list. */
 function renderSavedPlaylists(playlists, container) {
@@ -866,6 +888,8 @@ let pollTimer = null;
 let focusedId = null;
 let mixName = null;
 let seeking = false;
+/** Channels whose own volume slider is open in the list. */
+const openVolumes = new Set();
 const VOLUME_BARS = 14;
 // ---------------------------------------------------------------------------
 // DOM
@@ -953,7 +977,9 @@ function buildStaticMeters() {
 // ---------------------------------------------------------------------------
 function renderChannels() {
     const tracks = playlistManager.getTracks();
-    channelList.innerHTML = tracks.map((t, i) => channelRowHtml(t, i, t.id === focusedId)).join('');
+    channelList.innerHTML = tracks
+        .map((t, i) => channelRowHtml(t, i, t.id === focusedId, openVolumes.has(t.id)))
+        .join('');
     channelCount.textContent = String(tracks.length);
     document.documentElement.dataset.empty = String(tracks.length === 0);
 }
@@ -964,7 +990,7 @@ function renderRow(id) {
     if (index < 0 || !row)
         return;
     const hadFocus = row.contains(document.activeElement);
-    row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId);
+    row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openVolumes.has(id));
     if (hadFocus)
         rowFor(id)?.querySelector('.ch__focus')?.focus();
 }
@@ -1253,6 +1279,7 @@ function addTrackFromUrl(url) {
 function removeTrack(id) {
     const index = playlistManager.getTracks().findIndex((t) => t.id === id);
     playlistManager.removeTrack(id);
+    openVolumes.delete(id);
     playerBay.querySelector(`[data-slot="${CSS.escape(id)}"]`)?.remove();
     if (focusedId === id) {
         const rest = playlistManager.getTracks();
@@ -1312,6 +1339,7 @@ function setVolume(id, volume) {
 function loadTracksFromUrls(urls, mode) {
     if (mode === 'replace') {
         playlistManager.clearTracks();
+        openVolumes.clear();
         playerBay.innerHTML = '';
         focusedId = null;
     }
@@ -1436,6 +1464,16 @@ function initializeEventListeners() {
             setFocus(id);
         else if (el.dataset.action === 'toggle')
             togglePlay(id);
+        else if (el.dataset.action === 'vol-toggle') {
+            const open = !openVolumes.has(id);
+            if (open)
+                openVolumes.add(id);
+            else
+                openVolumes.delete(id);
+            const row = rowFor(id);
+            if (row)
+                setRowVolumeOpen(row, open);
+        }
     });
     channelList.addEventListener('input', (e) => {
         const input = e.target;

@@ -9,8 +9,9 @@ import { PlaylistManager } from './playlist.js';
 import { waitForYouTubeAPI, createYouTubePlayerFactory, extractVideoId, isValidYouTubeUrl, } from './youtubePlayer.js';
 import { saveOrUpdatePlaylist, deletePlaylist, getLastPlaylist, getAllPlaylists, } from './storage.js';
 import { encodePlaylistToUrl, decodePlaylistFromLocation, clearPlaylistHash, } from './shareLinks.js';
-import { channelRowHtml, patchChannelRow, stripItemHtml, patchStripItem, setRowVolumeOpen, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
+import { channelRowHtml, patchChannelRow, stripItemHtml, patchStripItem, setRowDrawerOpen, setRowConfirm, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
+import { setupLayout, refreshLayout } from './layout.js';
 import { fullscreenSupported, isFullscreen, runningAsApp, runningAsFullscreenApp, enterFullscreen, exitFullscreen, onFullscreenChange, setKeepAwake, } from './screen.js';
 // ---------------------------------------------------------------------------
 // State
@@ -21,8 +22,8 @@ let pollTimer = null;
 let focusedId = null;
 let mixName = null;
 let seeking = false;
-/** Channels whose own volume slider is open in the list. */
-const openVolumes = new Set();
+/** Channels whose settings drawer is open in the list. */
+const openDrawers = new Set();
 const VOLUME_BARS = 14;
 // ---------------------------------------------------------------------------
 // DOM
@@ -57,14 +58,6 @@ const stageIndex = $('stageIndex');
 const stageState = $('stageState');
 const stageArtist = $('stageArtist');
 const stageTitle = $('stageTitle');
-const retaskInput = $('retaskInput');
-const retaskButton = $('retaskButton');
-const retaskBox = $('retask');
-const removeButton = $('removeButton');
-const removeConfirm = $('removeConfirm');
-const removeYes = $('removeYes');
-const removeNo = $('removeNo');
-let removeTimer = null;
 const scrub = $('scrub');
 const seekInput = $('seekInput');
 const scrubTime = $('scrubTime');
@@ -104,7 +97,7 @@ function renderStrip() {
         : undefined;
     mixStrip.innerHTML = tracks.map((t, i) => stripItemHtml(t, i, t.id === focusedId)).join('');
     if (hadFocus)
-        stripFor(hadFocus)?.querySelector('.strip__focus')?.focus();
+        stripFor(hadFocus)?.querySelector('.strip__btn')?.focus();
 }
 function rowFor(id) {
     return channelList.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
@@ -123,7 +116,11 @@ function setAccent(color) {
     document.documentElement.style.setProperty('--accent', color || FALLBACK_ACCENT);
 }
 function setArtShape(square) {
-    stage.dataset.shape = square ? 'square' : 'wide';
+    const shape = square ? 'square' : 'wide';
+    if (stage.dataset.shape === shape)
+        return;
+    stage.dataset.shape = shape;
+    refreshLayout();
 }
 function applyArtworkAnalysis() {
     const key = artImg.currentSrc || artImg.src;
@@ -148,7 +145,7 @@ function buildStaticMeters() {
 function renderChannels() {
     const tracks = playlistManager.getTracks();
     channelList.innerHTML = tracks
-        .map((t, i) => channelRowHtml(t, i, t.id === focusedId, openVolumes.has(t.id)))
+        .map((t, i) => channelRowHtml(t, i, t.id === focusedId, openDrawers.has(t.id)))
         .join('');
     channelCount.textContent = String(tracks.length);
     document.documentElement.dataset.empty = String(tracks.length === 0);
@@ -198,7 +195,7 @@ function renderRow(id) {
     if (index < 0 || !row)
         return;
     const hadFocus = row.contains(document.activeElement);
-    row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openVolumes.has(id));
+    row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openDrawers.has(id));
     if (hadFocus)
         rowFor(id)?.querySelector('.ch__focus')?.focus();
     updateListScroll();
@@ -329,13 +326,6 @@ function renderStage(changed) {
     nextButton.disabled = tracks.length < 2;
     seekInput.disabled = !usable || !track?.duration;
     volumeInput.disabled = !track || !usable;
-    retaskInput.disabled = !track;
-    retaskButton.disabled = !track;
-    removeButton.disabled = !track;
-    if (track && document.activeElement !== retaskInput)
-        retaskInput.value = track.url;
-    if (!track)
-        retaskBox.open = false;
     const playing = track?.state === 'playing';
     playButton.querySelector('svg').outerHTML = playing ? icons.pause : icons.play;
     playButton.querySelector('span').textContent = playing ? 'Pause' : 'Play';
@@ -389,27 +379,9 @@ function renderAll(changed = false) {
     renderStatus();
     renderStage(changed);
 }
-/** Removing a channel takes two steps; this shows or cancels the second one. */
-function askRemove(open, restoreFocus = false) {
-    if (removeTimer !== null) {
-        clearTimeout(removeTimer);
-        removeTimer = null;
-    }
-    removeConfirm.hidden = !open;
-    removeButton.hidden = open;
-    if (open) {
-        removeNo.focus();
-        // Back out on its own so a forgotten question never lingers.
-        removeTimer = window.setTimeout(() => askRemove(false), 6000);
-    }
-    else if (restoreFocus) {
-        removeButton.focus();
-    }
-}
 function setFocus(id) {
     if (id === focusedId)
         return;
-    askRemove(false);
     const old = focusedId ? rowFor(focusedId) : null;
     focusedId = id;
     if (old) {
@@ -425,7 +397,7 @@ function setFocus(id) {
     mixStrip.querySelectorAll('.strip__item').forEach((tile) => {
         const on = tile.dataset.trackId === id;
         tile.classList.toggle('is-focus', on);
-        tile.querySelector('.strip__focus')?.setAttribute('aria-current', String(on));
+        tile.querySelector('.strip__btn')?.setAttribute('aria-current', String(on));
         if (on)
             keepTileVisible(tile);
     });
@@ -534,7 +506,7 @@ function onTrackState(id, state) {
         patchChannelRow(row, track);
     const tile = stripFor(id);
     if (tile)
-        patchStripItem(tile, track);
+        patchStripItem(tile, track, playlistManager.getTracks().indexOf(track));
     renderStatus();
     if (id === focusedId)
         renderStage(false);
@@ -566,7 +538,7 @@ function addTrackFromUrl(url) {
 function removeTrack(id) {
     const index = playlistManager.getTracks().findIndex((t) => t.id === id);
     playlistManager.removeTrack(id);
-    openVolumes.delete(id);
+    openDrawers.delete(id);
     playerBay.querySelector(`[data-slot="${CSS.escape(id)}"]`)?.remove();
     if (focusedId === id) {
         const rest = playlistManager.getTracks();
@@ -626,7 +598,7 @@ function setVolume(id, volume) {
 function loadTracksFromUrls(urls, mode) {
     if (mode === 'replace') {
         playlistManager.clearTracks();
-        openVolumes.clear();
+        openDrawers.clear();
         playerBay.innerHTML = '';
         focusedId = null;
     }
@@ -751,19 +723,60 @@ function initializeEventListeners() {
             setFocus(id);
         else if (el.dataset.action === 'toggle')
             togglePlay(id);
-        else if (el.dataset.action === 'vol-toggle') {
-            const open = !openVolumes.has(id);
+        else if (el.dataset.action === 'drawer') {
+            const open = !openDrawers.has(id);
             if (open)
-                openVolumes.add(id);
+                openDrawers.add(id);
             else
-                openVolumes.delete(id);
+                openDrawers.delete(id);
             const row = rowFor(id);
             if (row) {
-                setRowVolumeOpen(row, open);
+                setRowDrawerOpen(row, open);
                 if (open)
                     keepRowVisible(row);
             }
             updateListScroll();
+        }
+        else if (el.dataset.action === 'relink') {
+            const input = rowFor(id)?.querySelector('.ch__link-input');
+            const url = input?.value.trim();
+            if (url)
+                reloadTrack(id, url);
+        }
+        else if (el.dataset.action === 'remove-ask') {
+            const row = rowFor(id);
+            if (row) {
+                setRowConfirm(row, true);
+                row.querySelector('[data-action="remove-no"]')?.focus();
+            }
+        }
+        else if (el.dataset.action === 'remove-no') {
+            const row = rowFor(id);
+            if (row) {
+                setRowConfirm(row, false);
+                row.querySelector('[data-action="remove-ask"]')?.focus();
+            }
+        }
+        else if (el.dataset.action === 'remove-yes') {
+            const tracks = playlistManager.getTracks();
+            const next = tracks[tracks.findIndex((t) => t.id === id) + 1] ?? tracks[tracks.findIndex((t) => t.id === id) - 1];
+            removeTrack(id);
+            // Keep keyboard users in the list rather than dropping focus to the page.
+            (next ? rowFor(next.id)?.querySelector('.ch__focus') : urlInput)?.focus();
+        }
+    });
+    channelList.addEventListener('keydown', (e) => {
+        const target = e.target;
+        const row = target.closest('[data-track-id]');
+        if (!row)
+            return;
+        if (e.key === 'Enter' && target.matches('.ch__link-input')) {
+            row.querySelector('[data-action="relink"]')?.click();
+        }
+        else if (e.key === 'Escape' && target.closest('.ch__confirm')) {
+            e.preventDefault();
+            setRowConfirm(row, false);
+            row.querySelector('[data-action="remove-ask"]')?.focus();
         }
     });
     channelList.addEventListener('scroll', updateListScroll, { passive: true });
@@ -773,35 +786,6 @@ function initializeEventListeners() {
         const id = input.closest('[data-track-id]')?.dataset.trackId;
         if (id && input.dataset.action === 'volume')
             setVolume(id, Number(input.value) / 100);
-    });
-    // Now playing
-    removeButton.addEventListener('click', () => focusedId && askRemove(true));
-    removeNo.addEventListener('click', () => askRemove(false, true));
-    removeYes.addEventListener('click', () => {
-        const id = focusedId;
-        askRemove(false);
-        if (id)
-            removeTrack(id);
-        // Keep keyboard users in the player rather than dropping focus to the page.
-        if (!removeButton.disabled)
-            removeButton.focus();
-        else
-            stage.focus();
-    });
-    removeConfirm.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            askRemove(false, true);
-        }
-    });
-    retaskButton.addEventListener('click', () => {
-        const url = retaskInput.value.trim();
-        if (focusedId && url)
-            reloadTrack(focusedId, url);
-    });
-    retaskInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter')
-            retaskButton.click();
     });
     /** Switch to the always-present thumbnail; false when already on it. */
     const useFallback = () => {
@@ -902,6 +886,7 @@ function initializeEventListeners() {
 // ---------------------------------------------------------------------------
 async function initialize() {
     setupScreenTakeover();
+    setupLayout();
     buildStaticMeters();
     renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
     renderAll(false);

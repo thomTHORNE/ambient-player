@@ -31,7 +31,8 @@ import {
   patchChannelRow,
   stripItemHtml,
   patchStripItem,
-  setRowVolumeOpen,
+  setRowDrawerOpen,
+  setRowConfirm,
   renderSavedPlaylists,
   showReplaceAppendModal,
   showError,
@@ -47,6 +48,7 @@ import {
 } from './ui.js';
 import type { StateTone } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
+import { setupLayout, refreshLayout } from './layout.js';
 import {
   fullscreenSupported,
   isFullscreen,
@@ -68,8 +70,8 @@ let pollTimer: number | null = null;
 let focusedId: TrackId | null = null;
 let mixName: string | null = null;
 let seeking = false;
-/** Channels whose own volume slider is open in the list. */
-const openVolumes = new Set<TrackId>();
+/** Channels whose settings drawer is open in the list. */
+const openDrawers = new Set<TrackId>();
 
 const VOLUME_BARS = 14;
 
@@ -110,14 +112,6 @@ const stageIndex = $<HTMLElement>('stageIndex');
 const stageState = $<HTMLElement>('stageState');
 const stageArtist = $<HTMLElement>('stageArtist');
 const stageTitle = $<HTMLElement>('stageTitle');
-const retaskInput = $<HTMLInputElement>('retaskInput');
-const retaskButton = $<HTMLButtonElement>('retaskButton');
-const retaskBox = $<HTMLDetailsElement>('retask');
-const removeButton = $<HTMLButtonElement>('removeButton');
-const removeConfirm = $<HTMLElement>('removeConfirm');
-const removeYes = $<HTMLButtonElement>('removeYes');
-const removeNo = $<HTMLButtonElement>('removeNo');
-let removeTimer: number | null = null;
 
 const scrub = $<HTMLElement>('scrub');
 const seekInput = $<HTMLInputElement>('seekInput');
@@ -162,7 +156,7 @@ function renderStrip(): void {
     ? (document.activeElement as HTMLElement).closest<HTMLElement>('[data-track-id]')?.dataset.trackId
     : undefined;
   mixStrip.innerHTML = tracks.map((t, i) => stripItemHtml(t, i, t.id === focusedId)).join('');
-  if (hadFocus) stripFor(hadFocus)?.querySelector<HTMLElement>('.strip__focus')?.focus();
+  if (hadFocus) stripFor(hadFocus)?.querySelector<HTMLElement>('.strip__btn')?.focus();
 }
 
 function rowFor(id: TrackId): HTMLElement | null {
@@ -187,7 +181,10 @@ function setAccent(color: string | null): void {
 }
 
 function setArtShape(square: boolean): void {
-  stage.dataset.shape = square ? 'square' : 'wide';
+  const shape = square ? 'square' : 'wide';
+  if (stage.dataset.shape === shape) return;
+  stage.dataset.shape = shape;
+  refreshLayout();
 }
 
 function applyArtworkAnalysis(): void {
@@ -218,7 +215,7 @@ function buildStaticMeters(): void {
 function renderChannels(): void {
   const tracks = playlistManager.getTracks();
   channelList.innerHTML = tracks
-    .map((t, i) => channelRowHtml(t, i, t.id === focusedId, openVolumes.has(t.id)))
+    .map((t, i) => channelRowHtml(t, i, t.id === focusedId, openDrawers.has(t.id)))
     .join('');
   channelCount.textContent = String(tracks.length);
   document.documentElement.dataset.empty = String(tracks.length === 0);
@@ -270,7 +267,7 @@ function renderRow(id: TrackId): void {
   const row = rowFor(id);
   if (index < 0 || !row) return;
   const hadFocus = row.contains(document.activeElement);
-  row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openVolumes.has(id));
+  row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openDrawers.has(id));
   if (hadFocus) rowFor(id)?.querySelector<HTMLElement>('.ch__focus')?.focus();
   updateListScroll();
   renderStrip();
@@ -410,11 +407,6 @@ function renderStage(changed: boolean): void {
   nextButton.disabled = tracks.length < 2;
   seekInput.disabled = !usable || !track?.duration;
   volumeInput.disabled = !track || !usable;
-  retaskInput.disabled = !track;
-  retaskButton.disabled = !track;
-  removeButton.disabled = !track;
-  if (track && document.activeElement !== retaskInput) retaskInput.value = track.url;
-  if (!track) retaskBox.open = false;
 
   const playing = track?.state === 'playing';
   playButton.querySelector('svg')!.outerHTML = playing ? icons.pause : icons.play;
@@ -475,26 +467,8 @@ function renderAll(changed = false): void {
   renderStage(changed);
 }
 
-/** Removing a channel takes two steps; this shows or cancels the second one. */
-function askRemove(open: boolean, restoreFocus = false): void {
-  if (removeTimer !== null) {
-    clearTimeout(removeTimer);
-    removeTimer = null;
-  }
-  removeConfirm.hidden = !open;
-  removeButton.hidden = open;
-  if (open) {
-    removeNo.focus();
-    // Back out on its own so a forgotten question never lingers.
-    removeTimer = window.setTimeout(() => askRemove(false), 6000);
-  } else if (restoreFocus) {
-    removeButton.focus();
-  }
-}
-
 function setFocus(id: TrackId | null): void {
   if (id === focusedId) return;
-  askRemove(false);
   const old = focusedId ? rowFor(focusedId) : null;
   focusedId = id;
   if (old) {
@@ -510,7 +484,7 @@ function setFocus(id: TrackId | null): void {
   mixStrip.querySelectorAll<HTMLElement>('.strip__item').forEach((tile) => {
     const on = tile.dataset.trackId === id;
     tile.classList.toggle('is-focus', on);
-    tile.querySelector('.strip__focus')?.setAttribute('aria-current', String(on));
+    tile.querySelector('.strip__btn')?.setAttribute('aria-current', String(on));
     if (on) keepTileVisible(tile);
   });
   renderStage(true);
@@ -620,7 +594,7 @@ function onTrackState(id: TrackId, state: TrackState): void {
   const row = rowFor(id);
   if (row) patchChannelRow(row, track);
   const tile = stripFor(id);
-  if (tile) patchStripItem(tile, track);
+  if (tile) patchStripItem(tile, track, playlistManager.getTracks().indexOf(track));
   renderStatus();
   if (id === focusedId) renderStage(false);
 
@@ -653,7 +627,7 @@ function addTrackFromUrl(url: string): boolean {
 function removeTrack(id: TrackId): void {
   const index = playlistManager.getTracks().findIndex((t) => t.id === id);
   playlistManager.removeTrack(id);
-  openVolumes.delete(id);
+  openDrawers.delete(id);
   playerBay.querySelector(`[data-slot="${CSS.escape(id)}"]`)?.remove();
   if (focusedId === id) {
     const rest = playlistManager.getTracks();
@@ -711,7 +685,7 @@ function setVolume(id: TrackId, volume: number): void {
 function loadTracksFromUrls(urls: string[], mode: 'replace' | 'append'): void {
   if (mode === 'replace') {
     playlistManager.clearTracks();
-    openVolumes.clear();
+    openDrawers.clear();
     playerBay.innerHTML = '';
     focusedId = null;
   }
@@ -831,16 +805,50 @@ function initializeEventListeners(): void {
     if (!el || !id) return;
     if (el.dataset.action === 'focus') setFocus(id);
     else if (el.dataset.action === 'toggle') togglePlay(id);
-    else if (el.dataset.action === 'vol-toggle') {
-      const open = !openVolumes.has(id);
-      if (open) openVolumes.add(id);
-      else openVolumes.delete(id);
+    else if (el.dataset.action === 'drawer') {
+      const open = !openDrawers.has(id);
+      if (open) openDrawers.add(id);
+      else openDrawers.delete(id);
       const row = rowFor(id);
       if (row) {
-        setRowVolumeOpen(row, open);
+        setRowDrawerOpen(row, open);
         if (open) keepRowVisible(row);
       }
       updateListScroll();
+    } else if (el.dataset.action === 'relink') {
+      const input = rowFor(id)?.querySelector<HTMLInputElement>('.ch__link-input');
+      const url = input?.value.trim();
+      if (url) reloadTrack(id, url);
+    } else if (el.dataset.action === 'remove-ask') {
+      const row = rowFor(id);
+      if (row) {
+        setRowConfirm(row, true);
+        row.querySelector<HTMLElement>('[data-action="remove-no"]')?.focus();
+      }
+    } else if (el.dataset.action === 'remove-no') {
+      const row = rowFor(id);
+      if (row) {
+        setRowConfirm(row, false);
+        row.querySelector<HTMLElement>('[data-action="remove-ask"]')?.focus();
+      }
+    } else if (el.dataset.action === 'remove-yes') {
+      const tracks = playlistManager.getTracks();
+      const next = tracks[tracks.findIndex((t) => t.id === id) + 1] ?? tracks[tracks.findIndex((t) => t.id === id) - 1];
+      removeTrack(id);
+      // Keep keyboard users in the list rather than dropping focus to the page.
+      (next ? rowFor(next.id)?.querySelector<HTMLElement>('.ch__focus') : urlInput)?.focus();
+    }
+  });
+  channelList.addEventListener('keydown', (e) => {
+    const target = e.target as HTMLElement;
+    const row = target.closest<HTMLElement>('[data-track-id]');
+    if (!row) return;
+    if (e.key === 'Enter' && target.matches('.ch__link-input')) {
+      row.querySelector<HTMLButtonElement>('[data-action="relink"]')?.click();
+    } else if (e.key === 'Escape' && target.closest('.ch__confirm')) {
+      e.preventDefault();
+      setRowConfirm(row, false);
+      row.querySelector<HTMLElement>('[data-action="remove-ask"]')?.focus();
     }
   });
   channelList.addEventListener('scroll', updateListScroll, { passive: true });
@@ -851,30 +859,6 @@ function initializeEventListeners(): void {
     if (id && input.dataset.action === 'volume') setVolume(id, Number(input.value) / 100);
   });
 
-  // Now playing
-  removeButton.addEventListener('click', () => focusedId && askRemove(true));
-  removeNo.addEventListener('click', () => askRemove(false, true));
-  removeYes.addEventListener('click', () => {
-    const id = focusedId;
-    askRemove(false);
-    if (id) removeTrack(id);
-    // Keep keyboard users in the player rather than dropping focus to the page.
-    if (!removeButton.disabled) removeButton.focus();
-    else stage.focus();
-  });
-  removeConfirm.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      askRemove(false, true);
-    }
-  });
-  retaskButton.addEventListener('click', () => {
-    const url = retaskInput.value.trim();
-    if (focusedId && url) reloadTrack(focusedId, url);
-  });
-  retaskInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') retaskButton.click();
-  });
 
   /** Switch to the always-present thumbnail; false when already on it. */
   const useFallback = (): boolean => {
@@ -969,6 +953,7 @@ function initializeEventListeners(): void {
 
 async function initialize(): Promise<void> {
   setupScreenTakeover();
+  setupLayout();
   buildStaticMeters();
   renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
   renderAll(false);

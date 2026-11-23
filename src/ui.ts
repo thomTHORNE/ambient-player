@@ -121,10 +121,11 @@ function rowClock(track: Track): string {
 }
 
 /**
- * Markup for one channel row. The row's own volume slider stays hidden behind
- * a toggle (volumeOpen) so scrolling the list cannot nudge it by accident.
+ * Markup for one channel row. Its settings drawer (volume, change link,
+ * remove) stays closed behind a toggle (drawerOpen), so scrolling the list
+ * can't nudge a slider and the row stays compact.
  */
-export function channelRowHtml(track: Track, index: number, focused: boolean, volumeOpen = false): string {
+export function channelRowHtml(track: Track, index: number, focused: boolean, drawerOpen = false): string {
   const title = esc(trackTitle(track));
   const author = esc(track.meta?.author || 'YouTube');
   const thumb = track.meta?.thumbnailUrl
@@ -134,9 +135,10 @@ export function channelRowHtml(track: Track, index: number, focused: boolean, vo
   const usable = track.state === 'playing' || track.state === 'paused';
   const { label, tone } = stateInfo(track);
   const vol = Math.round(track.volume * 100);
+  const id = esc(track.id);
 
   return `
-    <li class="ch is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
+    <li class="ch is-${track.state}${focused ? ' is-focus' : ''}${drawerOpen ? ' is-open' : ''}" data-track-id="${id}">
       <div class="ch__main">
         <button class="ch__focus" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Show ${title} in the player">
           ${thumb}
@@ -149,56 +151,52 @@ export function channelRowHtml(track: Track, index: number, focused: boolean, vo
             <span class="ch__clock">${rowClock(track)}</span>
           </span>
         </button>
-        <button class="vol-toggle${volumeOpen ? ' is-open' : ''}" type="button" data-action="vol-toggle" aria-expanded="${volumeOpen}" aria-controls="vol-${esc(track.id)}" aria-label="Volume for ${title}: ${vol} percent"${usable ? '' : ' disabled'}>
+        <button class="vol-toggle${drawerOpen ? ' is-open' : ''}" type="button" data-action="drawer" aria-expanded="${drawerOpen}" aria-controls="drawer-${id}" aria-label="Settings for ${title}: volume ${vol} percent">
           ${icons.volume}<span class="vol-toggle__num">${vol}</span>
         </button>
         <button class="round-btn ch__toggle${playing ? ' is-on' : ''}" type="button" data-action="toggle" aria-label="${playing ? 'Pause' : 'Play'} ${title}"${usable ? '' : ' disabled'}>${playing ? icons.pause : icons.play}</button>
       </div>
-      <label class="ch__vol" id="vol-${esc(track.id)}"${volumeOpen && usable ? '' : ' hidden'}>
-        <span class="visually-hidden">Volume for ${title}</span>
-        <span class="ch__vol-icon" aria-hidden="true">${icons.volume}</span>
-        <input class="slider" type="range" min="0" max="100" step="1" value="${vol}" style="--v:${vol}%" data-action="volume"${usable ? '' : ' disabled'} />
-        <span class="ch__volnum" aria-hidden="true">${vol}</span>
-      </label>
+      <div class="ch__drawer" id="drawer-${id}"${drawerOpen ? '' : ' hidden'}>
+        <label class="ch__vol">
+          <span class="visually-hidden">Volume for ${title}</span>
+          <span class="ch__vol-icon" aria-hidden="true">${icons.volume}</span>
+          <input class="slider" type="range" min="0" max="100" step="1" value="${vol}" style="--v:${vol}%" data-action="volume"${usable ? '' : ' disabled'} />
+          <span class="ch__volnum" aria-hidden="true">${vol}</span>
+        </label>
+        <div class="ch__link">
+          <label class="visually-hidden" for="link-${id}">YouTube link for ${title}</label>
+          <input id="link-${id}" class="ch__link-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" value="${esc(track.url)}" data-action="link-input" />
+          <button class="btn btn--small" type="button" data-action="relink">Load link</button>
+        </div>
+        <div class="ch__remove">
+          <button class="text-btn text-btn--danger" type="button" data-action="remove-ask">${icons.trash}Remove channel</button>
+          <div class="ch__confirm" role="group" aria-label="Confirm removing ${title}" hidden>
+            <span class="remove__question">Remove from this mix?</span>
+            <button class="btn btn--danger btn--small" type="button" data-action="remove-yes">Remove</button>
+            <button class="btn btn--quiet btn--small" type="button" data-action="remove-no">Keep</button>
+          </div>
+        </div>
+      </div>
     </li>`;
 }
 
-/** One tile in the mix strip: thumbnail, number and state, with its own play toggle. */
+/** One number in the strip: jumps to that channel; marks playing and selected. */
 export function stripItemHtml(track: Track, index: number, focused: boolean): string {
   const title = esc(trackTitle(track));
-  const playing = track.state === 'playing';
-  const usable = track.state === 'playing' || track.state === 'paused';
-  const { label, tone } = stateInfo(track);
-  const thumb = track.meta?.thumbnailUrl
-    ? `<img src="${esc(track.meta.thumbnailUrl)}" alt="" loading="lazy" />`
-    : '';
+  const { label } = stateInfo(track);
+  const n = pad2(index + 1);
   return `
     <li class="strip__item is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
-      <button class="strip__focus" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Show ${title} in the player" title="${title}">
-        <span class="strip__thumb">${thumb}<span class="strip__num">${pad2(index + 1)}</span></span>
-        <span class="strip__state tone-${tone}">${label}</span>
-      </button>
-      <button class="strip__toggle${playing ? ' is-on' : ''}" type="button" data-action="toggle" aria-label="${playing ? 'Pause' : 'Play'} ${title}"${usable ? '' : ' disabled'}>${playing ? icons.pause : icons.play}</button>
+      <button class="strip__btn" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Channel ${n}: ${title}, ${label}" title="${n} · ${title}">${n}</button>
     </li>`;
 }
 
-/** Update a strip tile in place. */
-export function patchStripItem(li: HTMLElement, track: Track): void {
-  const playing = track.state === 'playing';
-  li.classList.toggle('is-playing', playing);
+/** Update a strip number in place. */
+export function patchStripItem(li: HTMLElement, track: Track, index: number): void {
+  li.classList.toggle('is-playing', track.state === 'playing');
   li.classList.toggle('is-paused', track.state === 'paused');
-  const state = li.querySelector<HTMLElement>('.strip__state');
-  if (state) {
-    const { label, tone } = stateInfo(track);
-    state.textContent = label;
-    state.className = `strip__state tone-${tone}`;
-  }
-  const toggle = li.querySelector<HTMLButtonElement>('.strip__toggle');
-  if (toggle && toggle.classList.contains('is-on') !== playing) {
-    toggle.classList.toggle('is-on', playing);
-    toggle.innerHTML = playing ? icons.pause : icons.play;
-    toggle.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} ${trackTitle(track)}`);
-  }
+  const btn = li.querySelector<HTMLButtonElement>('.strip__btn');
+  if (btn) btn.setAttribute('aria-label', `Channel ${pad2(index + 1)}: ${trackTitle(track)}, ${stateInfo(track).label}`);
 }
 
 /** Update the live parts of a row in place, so focus and slider drags survive. */
@@ -240,18 +238,29 @@ export function patchChannelRow(li: HTMLElement, track: Track): void {
   const volToggleNum = volToggle?.querySelector<HTMLElement>('.vol-toggle__num');
   if (volToggle && volToggleNum) {
     volToggleNum.textContent = String(v);
-    volToggle.setAttribute('aria-label', `Volume for ${trackTitle(track)}: ${v} percent`);
+    volToggle.setAttribute('aria-label', `Settings for ${trackTitle(track)}: volume ${v} percent`);
   }
 }
 
-/** Show or hide a row's own volume slider. */
-export function setRowVolumeOpen(li: HTMLElement, open: boolean): void {
+/** Open or close a row's settings drawer. */
+export function setRowDrawerOpen(li: HTMLElement, open: boolean): void {
   const toggle = li.querySelector<HTMLButtonElement>('.vol-toggle');
-  const panel = li.querySelector<HTMLElement>('.ch__vol');
-  if (!toggle || !panel) return;
+  const drawer = li.querySelector<HTMLElement>('.ch__drawer');
+  if (!toggle || !drawer) return;
   toggle.setAttribute('aria-expanded', String(open));
   toggle.classList.toggle('is-open', open);
-  panel.hidden = !open;
+  li.classList.toggle('is-open', open);
+  drawer.hidden = !open;
+  if (!open) setRowConfirm(li, false);
+}
+
+/** Show or hide a row's "Remove from this mix?" question. */
+export function setRowConfirm(li: HTMLElement, open: boolean): void {
+  const ask = li.querySelector<HTMLElement>('[data-action="remove-ask"]');
+  const confirm = li.querySelector<HTMLElement>('.ch__confirm');
+  if (!ask || !confirm) return;
+  ask.hidden = open;
+  confirm.hidden = !open;
 }
 
 /** Render the saved mixes list. */

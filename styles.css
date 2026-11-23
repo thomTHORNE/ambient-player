@@ -261,42 +261,154 @@ svg {
 }
 
 /* ==========================================================================
-   Layout
-   One order everywhere: 1 now playing, 2 deck (transport, timeline, volume),
-   3 channels, 4 status, 5 saved mixes.
-   2 and 3 share the "controls" pane, 4 and 5 the "info" pane.
-   - Phones stack it and the page scrolls.
-   - Landscape-ish screens from 760px (a Fold opened at 4:3) and anything
-     from 1000px pin the app to the window: the artwork and its text stay
-     put on the left with status and mixes scrolling beneath them, while
-     the deck and channels scroll together on the right.
+   Layout: an app shell pinned to the screen on every size.
+   - Vertical screens: the stage (artwork, numbered strip, title) sits at the
+     top of the scroller and collapses as you scroll (src/layout.ts); the
+     panels below swipe horizontally: deck, channels, status + mixes.
+   - Horizontal screens: the stage is a narrow column on the left and the
+     panels swipe vertically on the right.
+   The pager bars show the panel in view and jump on tap.
    ========================================================================== */
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .app {
-  position: relative;
+  position: fixed;
+  inset: 0;
   z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     "brand"
-    "now"
-    "controls"
-    "info";
-  align-content: start;
+    "scroller";
   gap: var(--gap) var(--gutter);
-  min-height: 100dvh;
-  /* In fullscreen or the installed app, keep clear of notches and camera cutouts. */
+  overflow: hidden;
+  overflow: clip;
+  /* Keep clear of notches and camera cutouts in fullscreen and the installed app. */
   padding:
     max(var(--gutter), env(safe-area-inset-top))
     max(var(--gutter), env(safe-area-inset-right))
-    max(var(--gutter), env(safe-area-inset-bottom))
+    0
     max(var(--gutter), env(safe-area-inset-left));
 }
 
 .brand { grid-area: brand; }
-.now { grid-area: now; }
-.pane--controls { grid-area: controls; }
-.pane--info { grid-area: info; }
+.scroller { grid-area: scroller; }
+
+/* ---------- Vertical: one scroller, collapsing stage, sideways panels ---------- */
+
+.scroller {
+  min-height: 0;
+  margin: 0 calc(var(--gutter) * -1);
+  padding: 0 var(--gutter) calc(72px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+/* The stage stays pinned at the top while it shrinks; panels scroll under it. */
+.stage-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0 calc(var(--gutter) * -1);
+  padding: 0 var(--gutter) 14px;
+  background: linear-gradient(180deg, rgba(8, 9, 10, 0.86), rgba(8, 9, 10, 0.72));
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid transparent;
+  transition: border-color 200ms var(--ease);
+}
+
+.stage-wrap.is-collapsed {
+  border-bottom-color: var(--line);
+}
+
+/* Panels: side by side, one screen wide each, snapping. Their box takes the
+   height of the panel in view (src/layout.ts). A spacer the size of the
+   stage's collapse keeps them from jumping as it shrinks. */
+.slides {
+  display: flex;
+  align-items: flex-start;
+  margin: calc(var(--collapse, 0px) + 8px) -6px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.slides::-webkit-scrollbar {
+  display: none;
+}
+
+.slide {
+  display: flex;
+  flex: 0 0 100%;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+  padding: 6px;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* ---------- Pager: one bar per panel ---------- */
+
+.pager {
+  position: fixed;
+  left: 50%;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 10;
+  display: flex;
+  gap: 2px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  background: rgba(8, 9, 10, 0.7);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  transform: translateX(-50%);
+}
+
+.pager__bar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.pager__bar::before {
+  content: "";
+  width: 20px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.28);
+  transition: width 220ms var(--ease), background-color 220ms var(--ease);
+}
+
+.pager__bar:hover::before {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.pager__bar[aria-current="true"]::before {
+  width: 32px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
 
 /* ---------- Surfaces ---------- */
 
@@ -853,17 +965,11 @@ svg {
    ========================================================================== */
 
 .now {
-  /* Artwork size. Phones size it by width; the side-by-side and fixed
-     layouts also fit it to the height. Square album art (detected in
-     src/accent.ts) gets a square frame and its own cap. */
+  /* Square album art (detected in src/accent.ts) uses a 1:1 frame. */
   --art-ratio: 1.778;
-  --art-cap: 780px;
-  --art-w: min(100%, var(--art-cap), max(240px, calc((100svh - 220px) * var(--art-ratio))));
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 18px;
+  gap: 12px;
   min-width: 0;
   min-height: 0;
 }
@@ -872,17 +978,16 @@ svg {
   outline: none;
 }
 
-.art,
-.now__meta {
-  width: var(--art-w);
-  min-width: min(220px, 100%);
-  max-width: 100%;
+/* Artwork beside the numbered strip. On vertical screens the artwork's height
+   is set while scrolling (src/layout.ts); the image fills and stays centred. */
+.now__visual {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
 }
 
-/* Square album art published with bars at the sides: show just the square. */
-.now.now[data-shape="square"] {
+.now[data-shape="square"] {
   --art-ratio: 1;
-  --art-cap: 520px;
 }
 
 .now[data-shape="square"] .art {
@@ -891,6 +996,8 @@ svg {
 
 .art {
   position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border: 1px solid var(--line-strong);
@@ -1015,149 +1122,93 @@ svg {
   display: none;
 }
 
-/* ---------- Mix strip: every channel at a glance, under the title ---------- */
+/* ---------- Numbered strip: jump to any channel ---------- */
 
+/* As tall as the artwork beside it (size containment lets the artwork set the
+   row height); scrolls when there are more channels than fit. */
 .strip {
   display: flex;
-  gap: 8px;
-  width: calc(100% + 12px);
-  margin: 0 -6px;
-  padding: 6px 6px 4px;
-  overflow-x: auto;
+  flex: 0 0 40px;
+  flex-direction: column;
+  gap: 6px;
+  width: 40px;
+  margin: 0;
+  padding: 0 0 0 4px;
   list-style: none;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  contain: size;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y proximity;
+  scrollbar-width: none;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
 }
 
 .strip__item {
   position: relative;
-  flex: 0 0 auto;
-  width: 118px;
+  flex: none;
   scroll-snap-align: start;
 }
 
-.strip__focus {
-  display: grid;
-  gap: 5px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-.strip__thumb {
+.strip__btn {
   position: relative;
-  display: block;
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  border: 1px solid var(--line-strong);
-  background: var(--noise), var(--dither), var(--fill);
-  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
-}
-
-.strip__thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: saturate(0.8) brightness(0.9);
-  transition: transform 220ms var(--ease), filter 220ms var(--ease);
-}
-
-.strip__focus:hover .strip__thumb img {
-  transform: scale(1.04);
-  filter: none;
-}
-
-.strip__num {
-  position: absolute;
-  left: 0;
-  top: 0;
-  padding: 1px 5px;
-  background: rgba(8, 9, 10, 0.78);
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-2);
-}
-
-.strip__state {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.strip__state::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  background: currentColor;
-}
-
-.strip__state.tone-live { color: var(--accent); }
-.strip__state.tone-busy { color: var(--blue); }
-.strip__state.tone-warn { color: var(--orange); }
-
-.strip__item.is-playing .strip__thumb {
-  border-color: var(--accent-line);
-}
-
-/* The channel on the main display: a bright frame. */
-.strip__item.is-focus .strip__thumb {
-  border-color: var(--text);
-  box-shadow: 0 0 0 1px var(--text);
-}
-
-.strip__item.is-focus .strip__num {
-  background: var(--text);
-  color: var(--bg);
-}
-
-.strip__toggle {
-  position: absolute;
-  right: 4px;
-  top: calc(118px * 9 / 16 - 34px);
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 100%;
+  height: 34px;
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: 0;
-  background: rgba(8, 9, 10, 0.7);
+  background: rgba(8, 9, 10, 0.55);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+  transition: background-color 160ms var(--ease), border-color 160ms var(--ease), color 160ms var(--ease), box-shadow 220ms var(--ease);
+}
+
+.strip__btn:hover {
+  border-color: var(--text);
   color: var(--text);
-  transition: background-color 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease), transform 90ms var(--ease);
 }
 
-.strip__toggle svg {
-  width: 13px;
-  height: 13px;
+.strip__btn:active {
+  transform: scale(0.95);
 }
 
-.strip__toggle:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+/* Playing: a small accent mark in the corner. */
+.strip__item.is-playing .strip__btn::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 4px;
+  height: 4px;
+  background: var(--accent);
 }
 
-.strip__toggle:active:not(:disabled) {
-  transform: scale(0.92);
-}
-
-.strip__toggle.is-on {
+/* The channel on the main display: accent flare and a marker bar. */
+.strip__item.is-focus .strip__btn {
   border-color: var(--accent);
   background: var(--accent);
   color: #08090A;
+  font-weight: 500;
+  box-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow), 0 0 28px var(--accent-glow);
 }
 
-.strip__toggle:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+.strip__item.is-focus .strip__btn::after {
+  background: #08090A;
+}
+
+.strip__item.is-focus::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: -4px;
+  width: 2px;
+  background: var(--accent);
 }
 
 .art__img:not([src]),
@@ -1249,94 +1300,12 @@ svg {
   color: var(--text-2);
 }
 
-.now__tools {
-  display: flex;
-  align-items: flex-start;
-  gap: 0 20px;
-}
-
-/* Change link opens downwards in place; Remove keeps its spot at the end. */
-.now__tools .retask {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.retask summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  cursor: pointer;
-  list-style: none;
-  transition: color 140ms var(--ease);
-}
-
-.retask summary::-webkit-details-marker {
-  display: none;
-}
-
-.retask summary::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: translateY(-2px) rotate(45deg);
-  transition: transform 160ms var(--ease);
-}
-
-.retask[open] summary::after {
-  transform: translateY(1px) rotate(225deg);
-}
-
-.retask summary:hover {
-  color: var(--text);
-}
-
-.retask .field-row {
-  padding: 4px 0 8px;
-}
-
-/* Removing sits apart from the harmless actions, at the far end of the row. */
-.remove {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: flex-end;
-  /* Never squeezed by an open Change link; its confirmation may wrap. */
-  max-width: calc(100% - 150px);
-  margin-left: auto;
-}
-
-.remove .text-btn {
-  white-space: nowrap;
-}
-
-.remove__confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  min-height: 40px;
-  animation: fade-in 160ms var(--ease);
-}
-
 .remove__question {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--danger);
-}
-
-[data-empty="true"] .now__tools {
-  display: none;
 }
 
 /* ==========================================================================
@@ -1676,16 +1645,8 @@ svg {
 }
 
 /* ==========================================================================
-   Panes: controls (deck + channels) and info (status + saved mixes)
+   Panels
    ========================================================================== */
-
-.pane {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
-  min-height: 0;
-  min-width: 0;
-}
 
 /* ---------- Channels ---------- */
 
@@ -1764,36 +1725,13 @@ svg {
   transform: scale(0.94);
 }
 
-/* Long mixes scroll inside the panel; the add field stays put above. */
+/* The list grows with its panel; the panel (or the page) does the scrolling. */
 .channel-list {
   display: grid;
   gap: 6px;
   align-content: start;
-  max-height: min(60dvh, 560px);
   margin: 0 -6px;
   padding: 6px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
-}
-
-.channel-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.channel-list::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
-}
-
-/* A soft fade at the bottom edge while there is more list to scroll. */
-.channels.is-scrollable .channel-list {
-  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent);
-  mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent);
-}
-
-.channels.is-scrollable.is-at-end .channel-list {
-  -webkit-mask-image: none;
-  mask-image: none;
 }
 
 .channel-empty {
@@ -1955,14 +1893,66 @@ svg {
   color: var(--text-2);
 }
 
-/* Per-channel volume: hidden until its toggle is pressed, so scrolling the
-   list can't change it. The deck's volume slider is the primary control. */
+/* Per-channel settings drawer: volume, change link, remove. Closed until its
+   toggle is pressed, so scrolling the list can't change anything. */
+.ch__drawer {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 0 2px 76px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+  animation: fade-in 160ms var(--ease);
+}
+
 .ch__vol {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 4px;
-  padding-left: 76px;
+}
+
+.ch__link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.ch__link-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease);
+}
+
+.ch__link-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.ch__remove {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ch__remove .text-btn {
+  min-height: 34px;
+  white-space: nowrap;
+}
+
+.ch__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  animation: fade-in 160ms var(--ease);
 }
 
 .ch__vol-icon svg {
@@ -2218,157 +2208,134 @@ svg {
 
 .brand,
 .now,
-.pane > .panel,
+.slide > .panel,
 .deck__grid > * {
   animation: rise-in 520ms var(--ease) both;
 }
 
 .now { animation-delay: 60ms; }
 .deck__grid > * { animation-delay: 120ms; }
-.pane > .panel { animation-delay: 180ms; }
+.slide > .panel { animation-delay: 180ms; }
 
 /* ==========================================================================
    Breakpoints
    ========================================================================== */
 
-/* Tablet portrait: status beside saved mixes. */
-@media (min-width: 680px) {
-  .pane--info {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: start;
-  }
-}
-
-/* Pinned app: landscape-ish screens from 760px (a Fold opened at 4:3, a
-   tablet on its side) and anything from 1000px, when there is height for it.
-   The artwork and its text stay put; each column below them scrolls by itself. */
-@media (min-width: 760px) and (min-aspect-ratio: 1/1) and (min-height: 480px),
-       (min-width: 1000px) and (min-height: 480px) {
-  :root {
-    --gutter: 20px;
-    --gap: 14px;
-  }
-
-  /* App shell: pinned to the screen edges, so it always matches the visible
-     area even while a mobile browser's toolbars slide in and out. The page
-     underneath has no height of its own and so can never scroll; "clip"
-     also stops focus from nudging the app's content. */
-  html,
-  body {
-    overflow: hidden;
-    overscroll-behavior: none;
-  }
-
+/* Horizontal screens: the stage becomes a narrow column on the left (artwork,
+   strip and title, scaled down), the panels swipe vertically on the right,
+   one screen each, and the pager runs down the right edge. */
+@media (orientation: landscape) {
   .app {
-    position: fixed;
-    inset: 0;
-    height: auto;
-    min-height: 0;
-    overflow: hidden;
-    overflow: clip;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-columns: clamp(240px, 32vw, 440px) minmax(0, 1fr) 36px;
+    grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas:
-      "brand brand"
-      "now   controls"
-      "info  controls";
-    align-items: stretch;
+      "brand slides pager"
+      "stage slides pager";
+    column-gap: var(--gutter);
+    padding-bottom: max(var(--gutter), env(safe-area-inset-bottom));
   }
 
-  /* Fixed artwork size: about two-fifths of the screen height, capped, so
-     the title, tools and the panels below stay in view. */
-  .now {
-    align-self: start;
-    --art-cap: 440px;
-    --art-w: max(min(200px, 100%), min(100%, var(--art-cap), calc((100dvh - 2 * var(--gutter)) * 0.4 * var(--art-ratio))));
-    align-items: flex-start;
-    gap: 12px;
+  .scroller {
+    display: contents;
   }
 
-  .now.now[data-shape="square"] {
-    --art-cap: 320px;
+  .stage-wrap {
+    grid-area: stage;
+    position: static;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 0;
+    scrollbar-width: none;
   }
 
-  .now__meta {
-    width: 100%;
+  /* Artwork fits the column and leaves room for the title under it. */
+  .art {
+    flex: 0 1 auto;
+    width: min(100%, calc((100dvh - 2 * var(--gutter) - 230px) * var(--art-ratio)));
   }
 
   .now__title {
-    font-size: 22px;
+    font-size: 20px;
   }
 
+  /* The brand fits the narrow column on one line. */
   .brand__tile {
-    width: 42px;
-    height: 42px;
+    width: 40px;
+    height: 40px;
   }
 
   .brand__title {
-    font-size: 19px;
+    font-size: clamp(15px, 1.6vw, 22px);
+    letter-spacing: 0.08em;
+    white-space: nowrap;
   }
 
-  .brand__sub {
-    margin-top: 4px;
-  }
-
-  /* Each pane scrolls on its own. The small inset gives the corner
-     brackets (which step outwards on hover) room inside the scroll box. */
-  .pane {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    overflow-y: auto;
-    overscroll-behavior: contain;
+  .slides {
+    grid-area: slides;
+    display: block;
+    height: auto !important;
+    min-height: 0;
     margin: -6px;
-    padding: 6px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+    overscroll-behavior-y: contain;
+  }
+
+  .slide {
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;
   }
 
-  .pane::-webkit-scrollbar {
-    width: 6px;
+  /* Centred when there's room; top-aligned (never clipped) when there isn't. */
+  .slide--deck > .deck {
+    margin-block: auto;
   }
 
-  .pane::-webkit-scrollbar-thumb {
-    background: var(--line-strong);
+  .pager {
+    grid-area: pager;
+    position: static;
+    flex-direction: column;
+    align-self: center;
+    justify-self: center;
+    padding: 6px 2px;
+    transform: none;
   }
 
-  /* The channel list grows with the pane instead of scrolling inside it. */
-  .channel-list,
-  .channels.is-scrollable .channel-list {
-    max-height: none;
-    overflow: visible;
-    -webkit-mask-image: none;
-    mask-image: none;
+  .pager__bar {
+    width: 32px;
+    height: 40px;
+  }
+
+  .pager__bar::before {
+    width: 3px;
+    height: 20px;
+    transition: height 220ms var(--ease), background-color 220ms var(--ease);
+  }
+
+  .pager__bar[aria-current="true"]::before {
+    width: 3px;
+    height: 32px;
   }
 }
 
-/* Pinned but short (under 700px tall): the strip would squeeze the status
-   and mixes pane to nothing, so it steps aside there. */
-@media (min-width: 760px) and (min-aspect-ratio: 1/1) and (min-height: 480px) and (max-height: 699px),
-       (min-width: 1000px) and (min-height: 480px) and (max-height: 699px) {
-  .strip {
-    display: none;
-  }
-}
-
-/* Large, tall screens: a bigger artwork and the full-size type. */
+/* Large screens: the full-size type. */
 @media (min-width: 1440px) and (min-height: 760px) {
   :root {
     --gutter: 28px;
     --gap: 18px;
   }
 
-  .now {
-    --art-cap: 600px;
-  }
-
-  .now.now[data-shape="square"] {
-    --art-cap: 400px;
-  }
-
   .now__title {
-    font-size: 26px;
+    font-size: 24px;
   }
 
   .brand__tile {
@@ -2407,7 +2374,7 @@ svg {
     width: 100%;
   }
 
-  .ch__vol {
+  .ch__drawer {
     padding-left: 0;
   }
 
@@ -2437,10 +2404,13 @@ svg {
     height: var(--tap);
   }
 
-  .strip__toggle {
-    width: 36px;
-    height: 36px;
-    top: calc(118px * 9 / 16 - 40px);
+  .strip {
+    flex-basis: 44px;
+    width: 44px;
+  }
+
+  .strip__btn {
+    height: 40px;
   }
 
   .round-btn {

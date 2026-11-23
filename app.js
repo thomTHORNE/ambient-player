@@ -548,10 +548,11 @@ function rowClock(track) {
     return `${formatTime(t)} <span class="ch__clock-sep">/</span> −${formatTime(Math.max(0, d - t))}`;
 }
 /**
- * Markup for one channel row. The row's own volume slider stays hidden behind
- * a toggle (volumeOpen) so scrolling the list cannot nudge it by accident.
+ * Markup for one channel row. Its settings drawer (volume, change link,
+ * remove) stays closed behind a toggle (drawerOpen), so scrolling the list
+ * can't nudge a slider and the row stays compact.
  */
-function channelRowHtml(track, index, focused, volumeOpen = false) {
+function channelRowHtml(track, index, focused, drawerOpen = false) {
     const title = esc(trackTitle(track));
     const author = esc(track.meta?.author || 'YouTube');
     const thumb = track.meta?.thumbnailUrl
@@ -561,8 +562,9 @@ function channelRowHtml(track, index, focused, volumeOpen = false) {
     const usable = track.state === 'playing' || track.state === 'paused';
     const { label, tone } = stateInfo(track);
     const vol = Math.round(track.volume * 100);
+    const id = esc(track.id);
     return `
-    <li class="ch is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
+    <li class="ch is-${track.state}${focused ? ' is-focus' : ''}${drawerOpen ? ' is-open' : ''}" data-track-id="${id}">
       <div class="ch__main">
         <button class="ch__focus" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Show ${title} in the player">
           ${thumb}
@@ -575,54 +577,51 @@ function channelRowHtml(track, index, focused, volumeOpen = false) {
             <span class="ch__clock">${rowClock(track)}</span>
           </span>
         </button>
-        <button class="vol-toggle${volumeOpen ? ' is-open' : ''}" type="button" data-action="vol-toggle" aria-expanded="${volumeOpen}" aria-controls="vol-${esc(track.id)}" aria-label="Volume for ${title}: ${vol} percent"${usable ? '' : ' disabled'}>
+        <button class="vol-toggle${drawerOpen ? ' is-open' : ''}" type="button" data-action="drawer" aria-expanded="${drawerOpen}" aria-controls="drawer-${id}" aria-label="Settings for ${title}: volume ${vol} percent">
           ${icons.volume}<span class="vol-toggle__num">${vol}</span>
         </button>
         <button class="round-btn ch__toggle${playing ? ' is-on' : ''}" type="button" data-action="toggle" aria-label="${playing ? 'Pause' : 'Play'} ${title}"${usable ? '' : ' disabled'}>${playing ? icons.pause : icons.play}</button>
       </div>
-      <label class="ch__vol" id="vol-${esc(track.id)}"${volumeOpen && usable ? '' : ' hidden'}>
-        <span class="visually-hidden">Volume for ${title}</span>
-        <span class="ch__vol-icon" aria-hidden="true">${icons.volume}</span>
-        <input class="slider" type="range" min="0" max="100" step="1" value="${vol}" style="--v:${vol}%" data-action="volume"${usable ? '' : ' disabled'} />
-        <span class="ch__volnum" aria-hidden="true">${vol}</span>
-      </label>
+      <div class="ch__drawer" id="drawer-${id}"${drawerOpen ? '' : ' hidden'}>
+        <label class="ch__vol">
+          <span class="visually-hidden">Volume for ${title}</span>
+          <span class="ch__vol-icon" aria-hidden="true">${icons.volume}</span>
+          <input class="slider" type="range" min="0" max="100" step="1" value="${vol}" style="--v:${vol}%" data-action="volume"${usable ? '' : ' disabled'} />
+          <span class="ch__volnum" aria-hidden="true">${vol}</span>
+        </label>
+        <div class="ch__link">
+          <label class="visually-hidden" for="link-${id}">YouTube link for ${title}</label>
+          <input id="link-${id}" class="ch__link-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" value="${esc(track.url)}" data-action="link-input" />
+          <button class="btn btn--small" type="button" data-action="relink">Load link</button>
+        </div>
+        <div class="ch__remove">
+          <button class="text-btn text-btn--danger" type="button" data-action="remove-ask">${icons.trash}Remove channel</button>
+          <div class="ch__confirm" role="group" aria-label="Confirm removing ${title}" hidden>
+            <span class="remove__question">Remove from this mix?</span>
+            <button class="btn btn--danger btn--small" type="button" data-action="remove-yes">Remove</button>
+            <button class="btn btn--quiet btn--small" type="button" data-action="remove-no">Keep</button>
+          </div>
+        </div>
+      </div>
     </li>`;
 }
-/** One tile in the mix strip: thumbnail, number and state, with its own play toggle. */
+/** One number in the strip: jumps to that channel; marks playing and selected. */
 function stripItemHtml(track, index, focused) {
     const title = esc(trackTitle(track));
-    const playing = track.state === 'playing';
-    const usable = track.state === 'playing' || track.state === 'paused';
-    const { label, tone } = stateInfo(track);
-    const thumb = track.meta?.thumbnailUrl
-        ? `<img src="${esc(track.meta.thumbnailUrl)}" alt="" loading="lazy" />`
-        : '';
+    const { label } = stateInfo(track);
+    const n = pad2(index + 1);
     return `
     <li class="strip__item is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
-      <button class="strip__focus" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Show ${title} in the player" title="${title}">
-        <span class="strip__thumb">${thumb}<span class="strip__num">${pad2(index + 1)}</span></span>
-        <span class="strip__state tone-${tone}">${label}</span>
-      </button>
-      <button class="strip__toggle${playing ? ' is-on' : ''}" type="button" data-action="toggle" aria-label="${playing ? 'Pause' : 'Play'} ${title}"${usable ? '' : ' disabled'}>${playing ? icons.pause : icons.play}</button>
+      <button class="strip__btn" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Channel ${n}: ${title}, ${label}" title="${n} · ${title}">${n}</button>
     </li>`;
 }
-/** Update a strip tile in place. */
-function patchStripItem(li, track) {
-    const playing = track.state === 'playing';
-    li.classList.toggle('is-playing', playing);
+/** Update a strip number in place. */
+function patchStripItem(li, track, index) {
+    li.classList.toggle('is-playing', track.state === 'playing');
     li.classList.toggle('is-paused', track.state === 'paused');
-    const state = li.querySelector('.strip__state');
-    if (state) {
-        const { label, tone } = stateInfo(track);
-        state.textContent = label;
-        state.className = `strip__state tone-${tone}`;
-    }
-    const toggle = li.querySelector('.strip__toggle');
-    if (toggle && toggle.classList.contains('is-on') !== playing) {
-        toggle.classList.toggle('is-on', playing);
-        toggle.innerHTML = playing ? icons.pause : icons.play;
-        toggle.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} ${trackTitle(track)}`);
-    }
+    const btn = li.querySelector('.strip__btn');
+    if (btn)
+        btn.setAttribute('aria-label', `Channel ${pad2(index + 1)}: ${trackTitle(track)}, ${stateInfo(track).label}`);
 }
 /** Update the live parts of a row in place, so focus and slider drags survive. */
 function patchChannelRow(li, track) {
@@ -661,18 +660,30 @@ function patchChannelRow(li, track) {
     const volToggleNum = volToggle?.querySelector('.vol-toggle__num');
     if (volToggle && volToggleNum) {
         volToggleNum.textContent = String(v);
-        volToggle.setAttribute('aria-label', `Volume for ${trackTitle(track)}: ${v} percent`);
+        volToggle.setAttribute('aria-label', `Settings for ${trackTitle(track)}: volume ${v} percent`);
     }
 }
-/** Show or hide a row's own volume slider. */
-function setRowVolumeOpen(li, open) {
+/** Open or close a row's settings drawer. */
+function setRowDrawerOpen(li, open) {
     const toggle = li.querySelector('.vol-toggle');
-    const panel = li.querySelector('.ch__vol');
-    if (!toggle || !panel)
+    const drawer = li.querySelector('.ch__drawer');
+    if (!toggle || !drawer)
         return;
     toggle.setAttribute('aria-expanded', String(open));
     toggle.classList.toggle('is-open', open);
-    panel.hidden = !open;
+    li.classList.toggle('is-open', open);
+    drawer.hidden = !open;
+    if (!open)
+        setRowConfirm(li, false);
+}
+/** Show or hide a row's "Remove from this mix?" question. */
+function setRowConfirm(li, open) {
+    const ask = li.querySelector('[data-action="remove-ask"]');
+    const confirm = li.querySelector('.ch__confirm');
+    if (!ask || !confirm)
+        return;
+    ask.hidden = open;
+    confirm.hidden = !open;
 }
 /** Render the saved mixes list. */
 function renderSavedPlaylists(playlists, container) {
@@ -1094,6 +1105,154 @@ document.addEventListener('visibilitychange', () => {
 });
 
 
+// ===== layout.js =====
+/**
+ * Layout behaviour that CSS can't do alone.
+ *
+ * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
+ * pinned to the top of the scroller and shrinks as you scroll, from its full
+ * size down to a minimum height; after that the panels scroll under it. The
+ * panels (deck, channels, status + mixes) sit side by side and swipe
+ * horizontally; their box takes the height of the panel in view.
+ *
+ * Horizontal screens (landscape): the stage stays still on the left and the
+ * panels swipe vertically on the right, one screen each.
+ *
+ * In both, the pager bars show which panel is in view and jump on tap.
+ */
+
+const portraitQuery = window.matchMedia('(orientation: portrait)');
+const byId = (id) => document.getElementById(id);
+const lScroller = byId('scroller');
+const lStageWrap = byId('stageWrap');
+const lStage = byId('stage');
+const lArt = byId('art');
+const lSlides = byId('slides');
+const lPager = byId('pager');
+const lSlideEls = Array.from(lSlides.querySelectorAll('.slide'));
+const lBars = Array.from(lPager.querySelectorAll('.pager__bar'));
+let activeSlide = 0;
+let artMaxH = 0;
+let artMinH = 0;
+let collapseFrame = 0;
+function isPortrait() {
+    return portraitQuery.matches;
+}
+// ---------------------------------------------------------------------------
+// Pager
+// ---------------------------------------------------------------------------
+function setActive(index) {
+    if (index === activeSlide)
+        return;
+    activeSlide = index;
+    lBars.forEach((bar, i) => bar.setAttribute('aria-current', String(i === index)));
+    lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
+    syncSlidesHeight();
+}
+function currentIndex() {
+    if (isPortrait()) {
+        const w = lSlides.clientWidth || 1;
+        return Math.max(0, Math.min(lSlideEls.length - 1, Math.round(lSlides.scrollLeft / w)));
+    }
+    const h = lSlides.clientHeight || 1;
+    return Math.max(0, Math.min(lSlideEls.length - 1, Math.round(lSlides.scrollTop / h)));
+}
+/** Show a panel: 0 deck, 1 channels, 2 status and saved mixes. */
+function goToSlide(index) {
+    const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
+    if (isPortrait())
+        lSlides.scrollTo({ left: index * lSlides.clientWidth, behavior });
+    else
+        lSlides.scrollTo({ top: index * lSlides.clientHeight, behavior });
+}
+// ---------------------------------------------------------------------------
+// Portrait: the panels' box follows the panel in view, and is always tall
+// enough to scroll the stage all the way down to its minimum size.
+// ---------------------------------------------------------------------------
+function syncSlidesHeight() {
+    if (!isPortrait()) {
+        lSlides.style.height = '';
+        return;
+    }
+    const panel = lSlideEls[activeSlide];
+    if (!panel)
+        return;
+    const stageMin = lStageWrap.offsetHeight - (lArt.offsetHeight - artMinH);
+    const fill = Math.max(0, lScroller.clientHeight - stageMin);
+    lSlides.style.height = `${Math.max(panel.scrollHeight, fill)}px`;
+}
+// ---------------------------------------------------------------------------
+// Portrait: the collapsing stage
+// ---------------------------------------------------------------------------
+/** Re-measure the artwork's full and minimum heights (after resize or a new shape). */
+function refreshLayout() {
+    if (!isPortrait()) {
+        lArt.style.height = '';
+        lScroller.style.removeProperty('--collapse');
+        artMaxH = artMinH = 0;
+        syncSlidesHeight();
+        return;
+    }
+    lArt.style.height = '';
+    const ratio = lStage.dataset.shape === 'square' ? 1 : 16 / 9;
+    const width = lArt.clientWidth;
+    artMaxH = Math.round(Math.min(width / ratio, window.innerHeight * 0.6));
+    artMinH = Math.round(Math.min(artMaxH, Math.max(84, window.innerHeight * 0.12)));
+    applyCollapse();
+    syncSlidesHeight();
+}
+function applyCollapse() {
+    collapseFrame = 0;
+    if (!isPortrait() || !artMaxH)
+        return;
+    const range = artMaxH - artMinH;
+    const c = Math.max(0, Math.min(range, lScroller.scrollTop));
+    lArt.style.height = `${artMaxH - c}px`;
+    // A spacer of the same size keeps the panels' place, so they follow the
+    // shrinking stage instead of jumping.
+    lScroller.style.setProperty('--collapse', `${c}px`);
+    lStageWrap.classList.toggle('is-collapsed', c >= range - 1);
+}
+function onScrollerScroll() {
+    if (!collapseFrame)
+        collapseFrame = requestAnimationFrame(applyCollapse);
+}
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+function setupLayout() {
+    lBars.forEach((bar, i) => bar.addEventListener('click', () => goToSlide(i)));
+    lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === 0));
+    let slideFrame = 0;
+    lSlides.addEventListener('scroll', () => {
+        if (slideFrame)
+            return;
+        slideFrame = requestAnimationFrame(() => {
+            slideFrame = 0;
+            setActive(currentIndex());
+        });
+    }, { passive: true });
+    lScroller.addEventListener('scroll', onScrollerScroll, { passive: true });
+    // Panels change height as channels load, drawers open and so on.
+    const observer = new ResizeObserver(() => syncSlidesHeight());
+    lSlideEls.forEach((slide) => observer.observe(slide));
+    const relayout = () => {
+        refreshLayout();
+        goToSlideInstant(activeSlide);
+    };
+    window.addEventListener('resize', relayout);
+    portraitQuery.addEventListener('change', relayout);
+    refreshLayout();
+}
+/** After a resize or rotation, keep the same panel in view without animating. */
+function goToSlideInstant(index) {
+    if (isPortrait())
+        lSlides.scrollLeft = index * lSlides.clientWidth;
+    else
+        lSlides.scrollTop = index * lSlides.clientHeight;
+}
+
+
 // ===== main.js =====
 /**
  * Main entry point.
@@ -1102,6 +1261,7 @@ document.addEventListener('visibilitychange', () => {
  * "focused": it fills the centre of the screen and the deck controls it.
  * Every channel stays playable from the channel list.
  */
+
 
 
 
@@ -1118,8 +1278,8 @@ let pollTimer = null;
 let focusedId = null;
 let mixName = null;
 let seeking = false;
-/** Channels whose own volume slider is open in the list. */
-const openVolumes = new Set();
+/** Channels whose settings drawer is open in the list. */
+const openDrawers = new Set();
 const VOLUME_BARS = 14;
 // ---------------------------------------------------------------------------
 // DOM
@@ -1154,14 +1314,6 @@ const stageIndex = $('stageIndex');
 const stageState = $('stageState');
 const stageArtist = $('stageArtist');
 const stageTitle = $('stageTitle');
-const retaskInput = $('retaskInput');
-const retaskButton = $('retaskButton');
-const retaskBox = $('retask');
-const removeButton = $('removeButton');
-const removeConfirm = $('removeConfirm');
-const removeYes = $('removeYes');
-const removeNo = $('removeNo');
-let removeTimer = null;
 const scrub = $('scrub');
 const seekInput = $('seekInput');
 const scrubTime = $('scrubTime');
@@ -1201,7 +1353,7 @@ function renderStrip() {
         : undefined;
     mixStrip.innerHTML = tracks.map((t, i) => stripItemHtml(t, i, t.id === focusedId)).join('');
     if (hadFocus)
-        stripFor(hadFocus)?.querySelector('.strip__focus')?.focus();
+        stripFor(hadFocus)?.querySelector('.strip__btn')?.focus();
 }
 function rowFor(id) {
     return channelList.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
@@ -1220,7 +1372,11 @@ function setAccent(color) {
     document.documentElement.style.setProperty('--accent', color || FALLBACK_ACCENT);
 }
 function setArtShape(square) {
-    stage.dataset.shape = square ? 'square' : 'wide';
+    const shape = square ? 'square' : 'wide';
+    if (stage.dataset.shape === shape)
+        return;
+    stage.dataset.shape = shape;
+    refreshLayout();
 }
 function applyArtworkAnalysis() {
     const key = artImg.currentSrc || artImg.src;
@@ -1245,7 +1401,7 @@ function buildStaticMeters() {
 function renderChannels() {
     const tracks = playlistManager.getTracks();
     channelList.innerHTML = tracks
-        .map((t, i) => channelRowHtml(t, i, t.id === focusedId, openVolumes.has(t.id)))
+        .map((t, i) => channelRowHtml(t, i, t.id === focusedId, openDrawers.has(t.id)))
         .join('');
     channelCount.textContent = String(tracks.length);
     document.documentElement.dataset.empty = String(tracks.length === 0);
@@ -1295,7 +1451,7 @@ function renderRow(id) {
     if (index < 0 || !row)
         return;
     const hadFocus = row.contains(document.activeElement);
-    row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openVolumes.has(id));
+    row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openDrawers.has(id));
     if (hadFocus)
         rowFor(id)?.querySelector('.ch__focus')?.focus();
     updateListScroll();
@@ -1426,13 +1582,6 @@ function renderStage(changed) {
     nextButton.disabled = tracks.length < 2;
     seekInput.disabled = !usable || !track?.duration;
     volumeInput.disabled = !track || !usable;
-    retaskInput.disabled = !track;
-    retaskButton.disabled = !track;
-    removeButton.disabled = !track;
-    if (track && document.activeElement !== retaskInput)
-        retaskInput.value = track.url;
-    if (!track)
-        retaskBox.open = false;
     const playing = track?.state === 'playing';
     playButton.querySelector('svg').outerHTML = playing ? icons.pause : icons.play;
     playButton.querySelector('span').textContent = playing ? 'Pause' : 'Play';
@@ -1486,27 +1635,9 @@ function renderAll(changed = false) {
     renderStatus();
     renderStage(changed);
 }
-/** Removing a channel takes two steps; this shows or cancels the second one. */
-function askRemove(open, restoreFocus = false) {
-    if (removeTimer !== null) {
-        clearTimeout(removeTimer);
-        removeTimer = null;
-    }
-    removeConfirm.hidden = !open;
-    removeButton.hidden = open;
-    if (open) {
-        removeNo.focus();
-        // Back out on its own so a forgotten question never lingers.
-        removeTimer = window.setTimeout(() => askRemove(false), 6000);
-    }
-    else if (restoreFocus) {
-        removeButton.focus();
-    }
-}
 function setFocus(id) {
     if (id === focusedId)
         return;
-    askRemove(false);
     const old = focusedId ? rowFor(focusedId) : null;
     focusedId = id;
     if (old) {
@@ -1522,7 +1653,7 @@ function setFocus(id) {
     mixStrip.querySelectorAll('.strip__item').forEach((tile) => {
         const on = tile.dataset.trackId === id;
         tile.classList.toggle('is-focus', on);
-        tile.querySelector('.strip__focus')?.setAttribute('aria-current', String(on));
+        tile.querySelector('.strip__btn')?.setAttribute('aria-current', String(on));
         if (on)
             keepTileVisible(tile);
     });
@@ -1631,7 +1762,7 @@ function onTrackState(id, state) {
         patchChannelRow(row, track);
     const tile = stripFor(id);
     if (tile)
-        patchStripItem(tile, track);
+        patchStripItem(tile, track, playlistManager.getTracks().indexOf(track));
     renderStatus();
     if (id === focusedId)
         renderStage(false);
@@ -1663,7 +1794,7 @@ function addTrackFromUrl(url) {
 function removeTrack(id) {
     const index = playlistManager.getTracks().findIndex((t) => t.id === id);
     playlistManager.removeTrack(id);
-    openVolumes.delete(id);
+    openDrawers.delete(id);
     playerBay.querySelector(`[data-slot="${CSS.escape(id)}"]`)?.remove();
     if (focusedId === id) {
         const rest = playlistManager.getTracks();
@@ -1723,7 +1854,7 @@ function setVolume(id, volume) {
 function loadTracksFromUrls(urls, mode) {
     if (mode === 'replace') {
         playlistManager.clearTracks();
-        openVolumes.clear();
+        openDrawers.clear();
         playerBay.innerHTML = '';
         focusedId = null;
     }
@@ -1848,19 +1979,60 @@ function initializeEventListeners() {
             setFocus(id);
         else if (el.dataset.action === 'toggle')
             togglePlay(id);
-        else if (el.dataset.action === 'vol-toggle') {
-            const open = !openVolumes.has(id);
+        else if (el.dataset.action === 'drawer') {
+            const open = !openDrawers.has(id);
             if (open)
-                openVolumes.add(id);
+                openDrawers.add(id);
             else
-                openVolumes.delete(id);
+                openDrawers.delete(id);
             const row = rowFor(id);
             if (row) {
-                setRowVolumeOpen(row, open);
+                setRowDrawerOpen(row, open);
                 if (open)
                     keepRowVisible(row);
             }
             updateListScroll();
+        }
+        else if (el.dataset.action === 'relink') {
+            const input = rowFor(id)?.querySelector('.ch__link-input');
+            const url = input?.value.trim();
+            if (url)
+                reloadTrack(id, url);
+        }
+        else if (el.dataset.action === 'remove-ask') {
+            const row = rowFor(id);
+            if (row) {
+                setRowConfirm(row, true);
+                row.querySelector('[data-action="remove-no"]')?.focus();
+            }
+        }
+        else if (el.dataset.action === 'remove-no') {
+            const row = rowFor(id);
+            if (row) {
+                setRowConfirm(row, false);
+                row.querySelector('[data-action="remove-ask"]')?.focus();
+            }
+        }
+        else if (el.dataset.action === 'remove-yes') {
+            const tracks = playlistManager.getTracks();
+            const next = tracks[tracks.findIndex((t) => t.id === id) + 1] ?? tracks[tracks.findIndex((t) => t.id === id) - 1];
+            removeTrack(id);
+            // Keep keyboard users in the list rather than dropping focus to the page.
+            (next ? rowFor(next.id)?.querySelector('.ch__focus') : urlInput)?.focus();
+        }
+    });
+    channelList.addEventListener('keydown', (e) => {
+        const target = e.target;
+        const row = target.closest('[data-track-id]');
+        if (!row)
+            return;
+        if (e.key === 'Enter' && target.matches('.ch__link-input')) {
+            row.querySelector('[data-action="relink"]')?.click();
+        }
+        else if (e.key === 'Escape' && target.closest('.ch__confirm')) {
+            e.preventDefault();
+            setRowConfirm(row, false);
+            row.querySelector('[data-action="remove-ask"]')?.focus();
         }
     });
     channelList.addEventListener('scroll', updateListScroll, { passive: true });
@@ -1870,35 +2042,6 @@ function initializeEventListeners() {
         const id = input.closest('[data-track-id]')?.dataset.trackId;
         if (id && input.dataset.action === 'volume')
             setVolume(id, Number(input.value) / 100);
-    });
-    // Now playing
-    removeButton.addEventListener('click', () => focusedId && askRemove(true));
-    removeNo.addEventListener('click', () => askRemove(false, true));
-    removeYes.addEventListener('click', () => {
-        const id = focusedId;
-        askRemove(false);
-        if (id)
-            removeTrack(id);
-        // Keep keyboard users in the player rather than dropping focus to the page.
-        if (!removeButton.disabled)
-            removeButton.focus();
-        else
-            stage.focus();
-    });
-    removeConfirm.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            askRemove(false, true);
-        }
-    });
-    retaskButton.addEventListener('click', () => {
-        const url = retaskInput.value.trim();
-        if (focusedId && url)
-            reloadTrack(focusedId, url);
-    });
-    retaskInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter')
-            retaskButton.click();
     });
     /** Switch to the always-present thumbnail; false when already on it. */
     const useFallback = () => {
@@ -1999,6 +2142,7 @@ function initializeEventListeners() {
 // ---------------------------------------------------------------------------
 async function initialize() {
     setupScreenTakeover();
+    setupLayout();
     buildStaticMeters();
     renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
     renderAll(false);

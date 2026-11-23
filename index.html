@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=8dcc07afaa">
+  <link rel="stylesheet" href="styles.css?v=6456ca4c24">
 </head>
 
 <body>
@@ -89,72 +89,71 @@
       </div>
     </main>
 
-    <!-- ============ 2. Deck: time, timeline, transport, volume ============ -->
-    <section class="deck" aria-label="Playback">
-      <div class="deck__grid">
-      <div class="transport" role="group" aria-label="Transport">
-        <button id="prevButton" class="tile-btn" type="button" title="Previous channel ( [ )" disabled>
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6v12l-9-6z"/><path d="M6 6v12"/></svg>
-          <span>Previous</span>
-        </button>
-        <button id="playButton" class="tile-btn tile-btn--primary" type="button" title="Play or pause (Space)" disabled>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6a.8.8 0 0 0 1.2.7l10.9-6.8a.8.8 0 0 0 0-1.4L9.2 4.5A.8.8 0 0 0 8 5.2z" fill="currentColor"/></svg>
-          <span id="playLabel">Play</span>
-        </button>
-        <button id="nextButton" class="tile-btn" type="button" title="Next channel ( ] )" disabled>
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6v12l9-6z"/><path d="M18 6v12"/></svg>
-          <span>Next</span>
-        </button>
-        <button id="resetButton" class="tile-btn" type="button" disabled>
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-          <span>Stop</span>
-        </button>
-      </div>
-      <div id="scrub" class="card timeline" style="--p:0">
-        <div class="timeline__head">
-          <p class="card__label">
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-4l-3 8-4-16-3 8H3"/></svg>
-            Timeline
-          </p>
-          <p id="scrubTime" class="timeline__time">— / —</p>
+    <!-- ============ 2-3. Controls: deck and channels (scroll together on wide screens) ============ -->
+    <div class="pane pane--controls">
+      <section class="deck" aria-label="Playback">
+        <div class="deck__grid">
+        <div class="transport" role="group" aria-label="Transport">
+          <button id="prevButton" class="tile-btn" type="button" title="Previous channel ( [ )" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6v12l-9-6z"/><path d="M6 6v12"/></svg>
+            <span>Previous</span>
+          </button>
+          <button id="playButton" class="tile-btn tile-btn--primary" type="button" title="Play or pause (Space)" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6a.8.8 0 0 0 1.2.7l10.9-6.8a.8.8 0 0 0 0-1.4L9.2 4.5A.8.8 0 0 0 8 5.2z" fill="currentColor"/></svg>
+            <span id="playLabel">Play</span>
+          </button>
+          <button id="nextButton" class="tile-btn" type="button" title="Next channel ( ] )" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6v12l9-6z"/><path d="M18 6v12"/></svg>
+            <span>Next</span>
+          </button>
+          <button id="resetButton" class="tile-btn" type="button" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            <span>Stop</span>
+          </button>
         </div>
-        <div class="timeline__track">
-          <div class="timeline__rail" aria-hidden="true">
-            <span class="timeline__fill"></span>
-            <span class="timeline__knob"></span>
+        <div id="scrub" class="card timeline" style="--p:0">
+          <div class="timeline__head">
+            <p class="card__label">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-4l-3 8-4-16-3 8H3"/></svg>
+              Timeline
+            </p>
+            <p id="scrubTime" class="timeline__time">— / —</p>
           </div>
-          <label class="visually-hidden" for="seekInput">Seek in this channel</label>
-          <input id="seekInput" class="timeline__input" type="range" min="0" max="1000" step="1" value="0" disabled />
-        </div>
-        <div class="timeline__ticks" aria-hidden="true">
-          <span data-tick="0">—</span>
-          <span data-tick="0.25">—</span>
-          <span data-tick="0.5">—</span>
-          <span data-tick="0.75">—</span>
-          <span data-tick="1">—</span>
-        </div>
-      </div>
-
-        <section class="card output" aria-labelledby="outputTitle">
-          <h2 id="outputTitle" class="card__label">
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
-            Channel volume
-          </h2>
-          <div class="output__body">
-            <div>
-              <p class="output__value"><span id="volumeReadout">—</span></p>
-              <p id="volumeDb" class="output__db">—</p>
+          <div class="timeline__track">
+            <div class="timeline__rail" aria-hidden="true">
+              <span class="timeline__fill"></span>
+              <span class="timeline__knob"></span>
             </div>
-            <div id="volumeBars" class="output__bars" aria-hidden="true"></div>
+            <label class="visually-hidden" for="seekInput">Seek in this channel</label>
+            <input id="seekInput" class="timeline__input" type="range" min="0" max="1000" step="1" value="0" disabled />
           </div>
-          <label class="visually-hidden" for="volumeInput">Volume of this channel</label>
-          <input id="volumeInput" class="slider" type="range" min="0" max="100" step="1" value="0" style="--v:0%" disabled />
-        </section>
-      </div>
-    </section>
+          <div class="timeline__ticks" aria-hidden="true">
+            <span data-tick="0">—</span>
+            <span data-tick="0.25">—</span>
+            <span data-tick="0.5">—</span>
+            <span data-tick="0.75">—</span>
+            <span data-tick="1">—</span>
+          </div>
+        </div>
 
-    <!-- ============ 3-5. Channels, status, saved mixes ============ -->
-    <aside class="side" aria-label="Mix">
+          <section class="card output" aria-labelledby="outputTitle">
+            <h2 id="outputTitle" class="card__label">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+              Channel volume
+            </h2>
+            <div class="output__body">
+              <div>
+                <p class="output__value"><span id="volumeReadout">—</span></p>
+                <p id="volumeDb" class="output__db">—</p>
+              </div>
+              <div id="volumeBars" class="output__bars" aria-hidden="true"></div>
+            </div>
+            <label class="visually-hidden" for="volumeInput">Volume of this channel</label>
+            <input id="volumeInput" class="slider" type="range" min="0" max="100" step="1" value="0" style="--v:0%" disabled />
+          </section>
+        </div>
+      </section>
+
       <section class="panel channels" aria-labelledby="channelsTitle">
         <header class="panel__head">
           <h2 id="channelsTitle" class="panel__title">Channels</h2>
@@ -174,7 +173,10 @@
         <ol id="playlist" class="channel-list"></ol>
         <p class="channel-empty">No channels yet. Paste a link above; each one plays alongside the others.</p>
       </section>
+    </div>
 
+    <!-- ============ 4-5. Status and saved mixes (scroll together on wide screens) ============ -->
+    <aside class="pane pane--info" aria-label="Mix status">
       <section class="panel status" aria-labelledby="statusTitle">
         <h2 id="statusTitle" class="visually-hidden">Mix status</h2>
         <dl class="rows">
@@ -229,7 +231,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=95789c8c14"></script>
+  <script src="app.js?v=b20e155b07"></script>
 </body>
 
 </html>

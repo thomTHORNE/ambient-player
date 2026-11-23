@@ -210,15 +210,29 @@ function updateListScroll(): void {
   );
 }
 
-/** Scroll the list (not the page) just enough to show a row. */
+/**
+ * The box that scrolls the channel rows: the list itself on phones, the
+ * controls pane in the pinned layout. Null when only the page scrolls.
+ */
+function rowScroller(row: HTMLElement): HTMLElement | null {
+  for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
+    const overflow = getComputedStyle(el).overflowY;
+    if ((overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el;
+  }
+  return null;
+}
+
+/** Scroll that box (never the page) just enough to show a row. */
 function keepRowVisible(row: HTMLElement): void {
-  const list = channelList.getBoundingClientRect();
+  const box = rowScroller(row);
+  if (!box) return;
+  const view = box.getBoundingClientRect();
   const r = row.getBoundingClientRect();
   const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
-  if (r.top < list.top) {
-    channelList.scrollBy({ top: r.top - list.top - 4, behavior });
-  } else if (r.bottom > list.bottom) {
-    channelList.scrollBy({ top: r.bottom - list.bottom + 4, behavior });
+  if (r.top < view.top) {
+    box.scrollBy({ top: r.top - view.top - 8, behavior });
+  } else if (r.bottom > view.bottom) {
+    box.scrollBy({ top: r.bottom - view.bottom + 8, behavior });
   }
 }
 

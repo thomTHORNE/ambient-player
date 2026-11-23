@@ -210,7 +210,7 @@ svg {
   transform: scale(var(--bd-scale));
   transform-origin: 50% 50%;
   will-change: transform;
-  animation: backdrop-drift 15s ease-in-out infinite alternate;
+  animation: backdrop-drift 45s ease-in-out infinite alternate;
   transition: opacity 600ms var(--ease);
 }
 
@@ -264,11 +264,12 @@ svg {
    Layout
    One order everywhere: 1 now playing, 2 deck (transport, timeline, volume),
    3 channels, 4 status, 5 saved mixes.
-   - Phones stack it.
-   - Landscape-ish screens from 760px (a Fold opened at 4:3) put the player
-     and the deck side by side so the controls never sit below the fold;
-     channels, then status and mixes, follow underneath.
-   - Wide, tall screens pin everything to one window with a side column.
+   2 and 3 share the "controls" pane, 4 and 5 the "info" pane.
+   - Phones stack it and the page scrolls.
+   - Landscape-ish screens from 760px (a Fold opened at 4:3) and anything
+     from 1000px pin the app to the window: the artwork and its text stay
+     put on the left with status and mixes scrolling beneath them, while
+     the deck and channels scroll together on the right.
    ========================================================================== */
 
 .app {
@@ -279,8 +280,8 @@ svg {
   grid-template-areas:
     "brand"
     "now"
-    "deck"
-    "side";
+    "controls"
+    "info";
   align-content: start;
   gap: var(--gap) var(--gutter);
   min-height: 100dvh;
@@ -294,8 +295,8 @@ svg {
 
 .brand { grid-area: brand; }
 .now { grid-area: now; }
-.deck { grid-area: deck; }
-.side { grid-area: side; }
+.pane--controls { grid-area: controls; }
+.pane--info { grid-area: info; }
 
 /* ---------- Surfaces ---------- */
 
@@ -1434,10 +1435,10 @@ svg {
 }
 
 /* ==========================================================================
-   Side: channels, status, saved mixes
+   Panes: controls (deck + channels) and info (status + saved mixes)
    ========================================================================== */
 
-.side {
+.pane {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
@@ -1976,69 +1977,58 @@ svg {
 
 .brand,
 .now,
-.side > *,
+.pane > .panel,
 .deck__grid > * {
   animation: rise-in 520ms var(--ease) both;
 }
 
 .now { animation-delay: 60ms; }
 .deck__grid > * { animation-delay: 120ms; }
-.side > * { animation-delay: 180ms; }
+.pane > .panel { animation-delay: 180ms; }
 
 /* ==========================================================================
    Breakpoints
    ========================================================================== */
 
-/* Tablet portrait: channels full width, status beside saved mixes. */
+/* Tablet portrait: status beside saved mixes. */
 @media (min-width: 680px) {
-  .side {
+  .pane--info {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas:
-      "channels channels"
-      "status   mixes";
     align-items: start;
   }
-
-  .channels { grid-area: channels; }
-  .status { grid-area: status; }
-  .mixes { grid-area: mixes; }
 }
 
-/* Side by side: landscape-ish screens from 760px (a Fold opened at 4:3, a
-   tablet on its side) and anything from 1000px. Player beside the deck, so
-   transport, timeline and volume are on screen without scrolling. */
-@media (min-width: 760px) and (min-aspect-ratio: 1/1), (min-width: 1000px) {
+/* Pinned app: landscape-ish screens from 760px (a Fold opened at 4:3, a
+   tablet on its side) and anything from 1000px, when there is height for it.
+   The artwork and its text stay put; each column below them scrolls by itself. */
+@media (min-width: 760px) and (min-aspect-ratio: 1/1) and (min-height: 480px),
+       (min-width: 1000px) and (min-height: 480px) {
   :root {
     --gutter: 20px;
     --gap: 14px;
   }
 
-  /* Left: player, then status and saved mixes. Right: deck, then channels.
-     The side column dissolves so its three panels can be placed apart. */
   .app {
+    height: 100dvh;
+    overflow: hidden;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr);
     grid-template-areas:
-      "brand  brand"
-      "now    deck"
-      "now    channels"
-      "status channels"
-      "mixes  channels";
-    align-items: start;
+      "brand brand"
+      "now   controls"
+      "info  controls";
+    align-items: stretch;
   }
 
-  .side {
-    display: contents;
-  }
-
-  /* Fixed artwork size: big enough to recognise, small enough that the
-     title, tools and the panels below stay in view. */
+  /* Fixed artwork size: about two-fifths of the screen height, capped, so
+     the title, tools and the panels below stay in view. */
   .now {
+    align-self: start;
     --art-cap: 440px;
-    --art-w: max(min(220px, 100%), min(100%, var(--art-cap), calc((100dvh - 330px) * var(--art-ratio))));
+    --art-w: max(min(200px, 100%), min(100%, var(--art-cap), calc((100dvh - 2 * var(--gutter)) * 0.4 * var(--art-ratio))));
     align-items: flex-start;
-    gap: 14px;
+    gap: 12px;
   }
 
   .now.now[data-shape="square"] {
@@ -2066,32 +2056,51 @@ svg {
     margin-top: 4px;
   }
 
+  /* Each pane scrolls on its own. The small inset gives the corner
+     brackets (which step outwards on hover) room inside the scroll box. */
+  .pane {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: -6px;
+    padding: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+
+  .pane::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .pane::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+  }
+
+  /* The channel list grows with the pane instead of scrolling inside it. */
+  .channel-list,
+  .channels.is-scrollable .channel-list {
+    max-height: none;
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
 }
 
-/* Wide, tall screens fill the window like an app; the side column scrolls by itself. */
+/* Large, tall screens: a bigger artwork and the full-size type. */
 @media (min-width: 1440px) and (min-height: 760px) {
   :root {
     --gutter: 28px;
     --gap: 18px;
   }
 
-  .app {
-    height: 100dvh;
-    overflow: hidden;
-    grid-template-columns: minmax(0, 1fr) 400px;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      "brand side"
-      "now   side"
-      "deck  side";
-    align-items: stretch;
+  .now {
+    --art-cap: 600px;
   }
 
-  .now {
-    container-type: size;
-    --art-cap: 860px;
-    --art-w: min(100%, var(--art-cap), calc((100cqh - 210px) * var(--art-ratio)));
-    justify-content: center;
+  .now.now[data-shape="square"] {
+    --art-cap: 400px;
   }
 
   .now__title {
@@ -2105,24 +2114,6 @@ svg {
 
   .brand__title {
     font-size: 24px;
-  }
-
-  .side {
-    display: flex;
-    flex-direction: column;
-    align-self: stretch;
-    align-items: stretch;
-    overflow-y: auto;
-    margin-right: calc(var(--gutter) * -0.5);
-    padding-right: calc(var(--gutter) * 0.5);
-    scrollbar-width: thin;
-    scrollbar-color: var(--line-strong) transparent;
-  }
-}
-
-@media (min-width: 1700px) and (min-height: 760px) {
-  .app {
-    grid-template-columns: minmax(0, 1fr) 440px;
   }
 }
 

@@ -10,6 +10,7 @@ import { waitForYouTubeAPI, createYouTubePlayerFactory, extractVideoId, isValidY
 import { saveOrUpdatePlaylist, deletePlaylist, getLastPlaylist, getAllPlaylists, } from './storage.js';
 import { encodePlaylistToUrl, decodePlaylistFromLocation, clearPlaylistHash, } from './shareLinks.js';
 import { channelRowHtml, patchChannelRow, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, clockParts, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
+import { extractAccent, FALLBACK_ACCENT } from './accent.js';
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -83,6 +84,20 @@ function liveCount() {
 function setPill(el, label, tone, extra = '') {
     el.textContent = label;
     el.className = `pill${extra} tone-${tone}`;
+}
+/** Accent per artwork URL, so switching back to a channel needs no new sampling. */
+const accentCache = new Map();
+/** Set the page accent; null means "no usable colour" and uses the amber fallback. */
+function setAccent(color) {
+    document.documentElement.style.setProperty('--accent', color || FALLBACK_ACCENT);
+}
+function applyAccentFromArtwork() {
+    const key = artImg.currentSrc || artImg.src;
+    if (!key)
+        return setAccent(null);
+    if (!accentCache.has(key))
+        accentCache.set(key, extractAccent(artImg));
+    setAccent(accentCache.get(key) ?? null);
 }
 function buildStaticMeters() {
     volumeBars.innerHTML = Array.from({ length: VOLUME_BARS }, (_, i) => `<span style="--i:${i};--n:${VOLUME_BARS}"></span>`).join('');
@@ -171,6 +186,7 @@ function renderStage(changed) {
         else {
             artImg.removeAttribute('src');
             backdropImg.removeAttribute('src');
+            setAccent(null);
         }
         if (changed && src && !prefersReducedMotion()) {
             art.animate([{ opacity: 0.4, transform: 'scale(0.985)' }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' });
@@ -592,6 +608,7 @@ function initializeEventListeners() {
         if (e.key === 'Enter')
             retaskButton.click();
     });
+    /** Switch to the always-present thumbnail; false when already on it. */
     const useFallback = () => {
         const fallback = artImg.dataset.fallback;
         if (fallback && !artImg.classList.contains('is-letterboxed')) {
@@ -599,13 +616,19 @@ function initializeEventListeners() {
             backdropImg.classList.add('is-letterboxed');
             artImg.src = fallback;
             backdropImg.src = fallback;
+            return true;
         }
+        return false;
     };
-    artImg.addEventListener('error', useFallback);
-    // A missing HD thumbnail comes back as a 120x90 grey placeholder rather than an error.
+    artImg.addEventListener('error', () => {
+        if (!useFallback())
+            setAccent(null);
+    });
     artImg.addEventListener('load', () => {
-        if (artImg.naturalWidth <= 120)
-            useFallback();
+        // A missing HD thumbnail comes back as a 120x90 grey placeholder rather than an error.
+        if (artImg.naturalWidth <= 120 && useFallback())
+            return;
+        applyAccentFromArtwork();
     });
     // Deck
     playButton.addEventListener('click', () => focusedId && togglePlay(focusedId));

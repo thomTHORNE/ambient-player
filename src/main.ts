@@ -44,6 +44,7 @@ import {
   trackTitle,
 } from './ui.js';
 import type { StateTone } from './ui.js';
+import { extractAccent, FALLBACK_ACCENT } from './accent.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -133,6 +134,21 @@ function liveCount(): number {
 function setPill(el: HTMLElement, label: string, tone: StateTone, extra = ''): void {
   el.textContent = label;
   el.className = `pill${extra} tone-${tone}`;
+}
+
+/** Accent per artwork URL, so switching back to a channel needs no new sampling. */
+const accentCache = new Map<string, string | null>();
+
+/** Set the page accent; null means "no usable colour" and uses the amber fallback. */
+function setAccent(color: string | null): void {
+  document.documentElement.style.setProperty('--accent', color || FALLBACK_ACCENT);
+}
+
+function applyAccentFromArtwork(): void {
+  const key = artImg.currentSrc || artImg.src;
+  if (!key) return setAccent(null);
+  if (!accentCache.has(key)) accentCache.set(key, extractAccent(artImg));
+  setAccent(accentCache.get(key) ?? null);
 }
 
 function buildStaticMeters(): void {
@@ -228,6 +244,7 @@ function renderStage(changed: boolean): void {
     } else {
       artImg.removeAttribute('src');
       backdropImg.removeAttribute('src');
+      setAccent(null);
     }
     if (changed && src && !prefersReducedMotion()) {
       art.animate(
@@ -654,19 +671,25 @@ function initializeEventListeners(): void {
     if (e.key === 'Enter') retaskButton.click();
   });
 
-  const useFallback = () => {
+  /** Switch to the always-present thumbnail; false when already on it. */
+  const useFallback = (): boolean => {
     const fallback = artImg.dataset.fallback;
     if (fallback && !artImg.classList.contains('is-letterboxed')) {
       artImg.classList.add('is-letterboxed');
       backdropImg.classList.add('is-letterboxed');
       artImg.src = fallback;
       backdropImg.src = fallback;
+      return true;
     }
+    return false;
   };
-  artImg.addEventListener('error', useFallback);
-  // A missing HD thumbnail comes back as a 120x90 grey placeholder rather than an error.
+  artImg.addEventListener('error', () => {
+    if (!useFallback()) setAccent(null);
+  });
   artImg.addEventListener('load', () => {
-    if (artImg.naturalWidth <= 120) useFallback();
+    // A missing HD thumbnail comes back as a 120x90 grey placeholder rather than an error.
+    if (artImg.naturalWidth <= 120 && useFallback()) return;
+    applyAccentFromArtwork();
   });
 
   // Deck

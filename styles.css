@@ -1,8 +1,17 @@
 /* ==========================================================================
    Ambient Player — mission console theme
    Calm slate panels over the focused channel's artwork. Labels are quiet,
-   values are bright, green means "playing", orange marks the main action.
+   values are bright, the accent means "playing", orange marks the main action.
+   The accent is taken from the current channel's artwork (src/accent.ts) and
+   falls back to amber when the artwork is too dark or has no clear colour.
    ========================================================================== */
+
+/* Registered so a change of channel fades the accent instead of snapping. */
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #FFB24A;
+}
 
 :root {
   --bg: #0B0F10;
@@ -17,10 +26,11 @@
   --text-2: #A5AEAB;
   --text-3: #6E7875;
 
-  --green: #8FE39B;
-  --green-deep: #4FBF63;
-  --green-fill: rgba(95, 209, 113, 0.12);
-  --green-line: rgba(143, 227, 155, 0.35);
+  --accent: #FFB24A;
+  --accent-deep: color-mix(in srgb, var(--accent) 70%, #0B0F10);
+  --accent-fill: color-mix(in srgb, var(--accent) 13%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 38%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 14%, transparent);
   --orange: #FF7A3D;
   --orange-fill: rgba(255, 122, 61, 0.12);
   --orange-line: rgba(255, 122, 61, 0.6);
@@ -36,6 +46,7 @@
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 
   color-scheme: dark;
+  transition: --accent 700ms var(--ease);
 }
 
 *,
@@ -85,11 +96,11 @@ svg {
 }
 
 ::selection {
-  background: rgba(143, 227, 155, 0.3);
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
 }
 
 :focus-visible {
-  outline: 2px solid var(--green);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -170,16 +181,20 @@ svg {
    Layout
    ========================================================================== */
 
+/* One order everywhere: 1 now playing, 2 deck (with volume), 3 channels,
+   4 status, 5 saved mixes. Phones stack it; wider screens move 3-5 into a
+   side column; wide screens pin everything to one window. */
 .app {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr) 340px;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
-    "brand brand right"
-    "left  now   right"
-    "left  deck  deck";
+    "brand"
+    "now"
+    "deck"
+    "side";
+  align-content: start;
   gap: var(--gap) var(--gutter);
   min-height: 100dvh;
   padding: var(--gutter);
@@ -187,9 +202,8 @@ svg {
 
 .brand { grid-area: brand; }
 .now { grid-area: now; }
-.side--right { grid-area: right; }
-.side--left { grid-area: left; }
 .deck { grid-area: deck; }
+.side { grid-area: side; }
 
 /* ---------- Surfaces ---------- */
 
@@ -276,9 +290,9 @@ svg {
 }
 
 .pill.tone-live {
-  border-color: var(--green-line);
-  background: var(--green-fill);
-  color: var(--green);
+  border-color: var(--accent-line);
+  background: var(--accent-fill);
+  color: var(--accent);
 }
 
 .pill.tone-busy {
@@ -312,7 +326,7 @@ svg {
 }
 
 .pill--btn.tone-live:hover:not(:disabled) {
-  border-color: var(--green);
+  border-color: var(--accent);
 }
 
 .pill--btn:active:not(:disabled) {
@@ -432,9 +446,9 @@ svg {
 }
 
 .round-btn.is-on {
-  border-color: var(--green-line);
-  background: var(--green-fill);
-  color: var(--green);
+  border-color: var(--accent-line);
+  background: var(--accent-fill);
+  color: var(--accent);
 }
 
 .mix .icon-btn:hover {
@@ -509,8 +523,8 @@ svg {
 
 .field input:focus {
   outline: none;
-  border-color: var(--green-line);
-  box-shadow: 0 0 0 3px rgba(143, 227, 155, 0.12);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .field input:disabled {
@@ -543,7 +557,7 @@ svg {
 .slider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--green-deep) 0 var(--v), rgba(255, 255, 255, 0.12) var(--v) 100%);
+  background: linear-gradient(90deg, var(--accent-deep) 0 var(--v), rgba(255, 255, 255, 0.12) var(--v) 100%);
 }
 
 .slider::-moz-range-track {
@@ -555,7 +569,7 @@ svg {
 .slider::-moz-range-progress {
   height: 4px;
   border-radius: 2px;
-  background: var(--green-deep);
+  background: var(--accent-deep);
 }
 
 .slider::-webkit-slider-thumb {
@@ -587,11 +601,11 @@ svg {
 }
 
 .slider:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--green);
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent);
 }
 
 .slider:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--green);
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent);
 }
 
 .slider:disabled {
@@ -627,7 +641,7 @@ svg {
   width: 28px;
   height: 28px;
   fill: none;
-  stroke: var(--green);
+  stroke: var(--accent);
   stroke-width: 4.5;
   stroke-miterlimit: 10;
 }
@@ -657,7 +671,7 @@ svg {
 }
 
 .brand__code {
-  color: var(--green);
+  color: var(--accent);
 }
 
 /* ==========================================================================
@@ -856,14 +870,15 @@ svg {
 }
 
 /* ==========================================================================
-   Right side: status + output
+   Side column: channels, status, saved mixes
    ========================================================================== */
 
-.side--right {
+.side {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
   min-height: 0;
+  min-width: 0;
 }
 
 .rows {
@@ -913,19 +928,27 @@ svg {
   margin-top: 16px;
 }
 
+.output {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
 .output__body {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin: 14px 0 8px;
+  margin: 12px 0 6px;
 }
 
 .output__value {
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 500;
   line-height: 1.1;
-  color: var(--green);
+  white-space: nowrap;
+  color: var(--accent);
 }
 
 .output__db {
@@ -937,11 +960,15 @@ svg {
 .output__bars {
   display: flex;
   align-items: flex-end;
+  justify-content: flex-end;
   gap: 3px;
+  min-width: 0;
   height: 46px;
+  overflow: hidden;
 }
 
 .output__bars span {
+  flex: none;
   width: 5px;
   height: calc(18% + 82% * var(--i) / (var(--n) - 1));
   border-radius: 1px;
@@ -950,7 +977,7 @@ svg {
 }
 
 .output__bars span.is-on {
-  background: var(--green);
+  background: var(--accent);
 }
 
 /* ==========================================================================
@@ -963,49 +990,29 @@ svg {
 }
 
 /* The deck picks its layout from its own width, not the window's, so the
-   timeline never gets squeezed between the time cards and the transport. */
+   timeline never gets squeezed. Wide: times | timeline over transport | volume. */
 .deck__grid {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr) auto;
-  grid-template-areas: "times timeline transport";
+  grid-template-columns: 180px minmax(0, 1fr) 250px;
+  grid-template-areas:
+    "times timeline  output"
+    "times transport output";
   gap: 16px;
 }
 
 .deck__times { grid-area: times; }
 .timeline { grid-area: timeline; }
 .transport { grid-area: transport; }
+.output { grid-area: output; }
 
-/* Tight single row: slimmer transport tiles leave the timeline more room. */
-@container deck (max-width: 1100px) {
-  .tile-btn {
-    width: 84px;
-  }
-
-  .tile-btn--primary {
-    width: 104px;
-  }
-}
-
-/* Medium: time cards beside the timeline, transport as a full-width row. */
-@container deck (max-width: 1000px) {
+/* Medium: time cards beside volume, then the timeline, then transport. */
+@container deck (max-width: 860px) {
   .deck__grid {
-    grid-template-columns: minmax(180px, 0.6fr) minmax(0, 1.4fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
-      "times timeline"
+      "times     output"
+      "timeline  timeline"
       "transport transport";
-  }
-
-  .transport {
-    display: grid;
-    grid-template-columns: 1fr 1.3fr 1fr 1fr;
-  }
-
-  .tile-btn,
-  .tile-btn--primary {
-    width: auto;
-    min-height: 76px;
-    flex-direction: row;
-    gap: 10px;
   }
 }
 
@@ -1016,15 +1023,15 @@ svg {
     grid-template-areas:
       "times"
       "timeline"
-      "transport";
+      "transport"
+      "output";
   }
 
   .deck__times {
     grid-template-columns: 1fr 1fr;
   }
 
-  .tile-btn,
-  .tile-btn--primary {
+  .tile-btn {
     flex-direction: column;
     gap: 8px;
     min-height: 84px;
@@ -1057,7 +1064,7 @@ svg {
 }
 
 .time__value.is-live {
-  color: var(--green);
+  color: var(--accent);
 }
 
 .time__value--quiet {
@@ -1134,11 +1141,11 @@ svg {
   bottom: 0;
   width: calc(var(--p) * 100%);
   border-radius: 3px;
-  background: linear-gradient(90deg, rgba(79, 191, 99, 0.35), var(--green-deep));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent-deep) 40%, transparent), var(--accent-deep));
 }
 
 .timeline.is-live .timeline__fill {
-  background: linear-gradient(90deg, rgba(79, 191, 99, 0.4), var(--green));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 40%, transparent), var(--accent));
 }
 
 .timeline__knob {
@@ -1175,7 +1182,7 @@ svg {
 }
 
 .timeline__track:has(.timeline__input:focus-visible) .timeline__knob {
-  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--green);
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent);
 }
 
 .timeline__track:has(.timeline__input:disabled) .timeline__knob {
@@ -1192,19 +1199,19 @@ svg {
 /* Transport */
 
 .transport {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1.3fr 1fr 1fr;
   gap: 10px;
 }
 
 .tile-btn {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  width: 96px;
-  min-height: 96px;
-  padding: 12px 8px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
@@ -1240,7 +1247,6 @@ svg {
 }
 
 .tile-btn--primary {
-  width: 120px;
   border-color: var(--orange-line);
   background:
     radial-gradient(ellipse at 50% 120%, rgba(255, 122, 61, 0.28), transparent 70%),
@@ -1267,22 +1273,13 @@ svg {
 }
 
 /* ==========================================================================
-   Left side: channels + saved mixes
+   Channels + saved mixes
    ========================================================================== */
-
-.side--left {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
-  min-height: 0;
-  min-width: 0;
-}
 
 .channels {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  flex: 1 1 auto;
+  flex: none;
 }
 
 .add {
@@ -1299,8 +1296,8 @@ svg {
 }
 
 .add:focus-within {
-  border-color: var(--green-line);
-  box-shadow: 0 0 0 3px rgba(143, 227, 155, 0.1);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .add__icon svg {
@@ -1344,9 +1341,9 @@ svg {
 }
 
 .add__btn:hover {
-  border-color: var(--green-line);
-  background: var(--green-fill);
-  color: var(--green);
+  border-color: var(--accent-line);
+  background: var(--accent-fill);
+  color: var(--accent);
 }
 
 .add__btn:active {
@@ -1478,7 +1475,7 @@ svg {
   opacity: 0.8;
 }
 
-.ch__state.tone-live { color: var(--green); }
+.ch__state.tone-live { color: var(--accent); }
 .ch__state.tone-busy { color: var(--blue); }
 .ch__state.tone-warn { color: var(--orange); }
 .ch__state.tone-idle { color: var(--text-3); }
@@ -1630,70 +1627,78 @@ svg {
 }
 
 .now { animation-delay: 60ms; }
-.side--right > * { animation-delay: 120ms; }
-.side--left > * { animation-delay: 160ms; }
-.deck > * { animation-delay: 200ms; }
+.deck > * { animation-delay: 120ms; }
+.side > * { animation-delay: 180ms; }
 
 /* ==========================================================================
    Breakpoints
    ========================================================================== */
 
-/* Wide screens fill the window like an app; the channel list scrolls inside. */
-@media (min-width: 1440px) and (min-height: 760px) {
-  .app {
-    height: 100dvh;
-    overflow: hidden;
+/* Tablet portrait: channels full width, status beside saved mixes. */
+@media (min-width: 680px) and (max-width: 899px) {
+  .side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
   }
 
-  .now {
-    container-type: size;
-    --art-w: min(100%, 780px, calc((100cqh - 230px) * 1.778));
-  }
-
-  .channel-list {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    margin: 0 -6px;
-    padding: 0 6px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--line-strong) transparent;
-  }
-
-  .mix-list {
-    max-height: 158px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--line-strong) transparent;
+  .channels {
+    grid-column: 1 / -1;
   }
 }
 
-@media (min-width: 1600px) {
+/* From 900px: player and deck on the left, channels / status / mixes on the right. */
+@media (min-width: 900px) {
   .app {
-    grid-template-columns: 380px minmax(0, 1fr) 360px;
-  }
-}
-
-@media (max-width: 1439px), (max-height: 759px) {
-  .app {
-    grid-template-columns: minmax(0, 1fr) 320px;
-    grid-template-rows: auto;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-rows: auto auto auto 1fr;
     grid-template-areas:
-      "brand brand"
-      "now   right"
-      "deck  deck"
-      "left  left";
+      "brand side"
+      "now   side"
+      "deck  side"
+      ".     side";
   }
 
   .now {
     --art-w: min(100%, 820px);
-    justify-content: flex-start;
   }
 
-  .side--left {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
+  .side {
+    align-self: start;
+  }
+}
+
+/* Wide screens fill the window like an app; the side column scrolls by itself. */
+@media (min-width: 1440px) and (min-height: 760px) {
+  .app {
+    height: 100dvh;
+    overflow: hidden;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand side"
+      "now   side"
+      "deck  side";
+  }
+
+  .now {
+    container-type: size;
+    --art-w: min(100%, 860px, calc((100cqh - 230px) * 1.778));
+  }
+
+  .side {
+    align-self: stretch;
+    overflow-y: auto;
+    margin-right: calc(var(--gutter) * -0.5);
+    padding-right: calc(var(--gutter) * 0.5);
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+@media (min-width: 1700px) and (min-height: 760px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr) 440px;
   }
 }
 
@@ -1702,23 +1707,6 @@ svg {
     --gutter: 20px;
     --gap: 16px;
   }
-
-  .app {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "brand"
-      "now"
-      "deck"
-      "right"
-      "left";
-  }
-
-  .side--right {
-    display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-    align-items: start;
-  }
-
 }
 
 @media (max-width: 640px) {
@@ -1737,13 +1725,6 @@ svg {
 
   .now__title {
     font-size: 21px;
-  }
-
-  .side--right,
-  .side--left {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .time__value {

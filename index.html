@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=72fd10d3ad">
+  <link rel="stylesheet" href="styles.css?v=f6d83aa86c">
 </head>
 
 <body>
@@ -19,7 +19,7 @@
 
   <!-- The focused channel's artwork, blurred and dimmed, as the backdrop. -->
   <div class="backdrop" aria-hidden="true">
-    <img id="backdropImg" class="backdrop__img" alt="" />
+    <img id="backdropImg" class="backdrop__img" alt="" crossorigin="anonymous" />
   </div>
 
   <div class="app">
@@ -36,10 +36,10 @@
       </div>
     </header>
 
-    <!-- ============ Now playing ============ -->
+    <!-- ============ 1. Now playing ============ -->
     <main id="stage" class="now" tabindex="-1" aria-labelledby="stageTitle">
       <figure class="art" id="art" data-state="empty">
-        <img id="artImg" class="art__img" alt="" />
+        <img id="artImg" class="art__img" alt="" crossorigin="anonymous" />
         <div class="art__empty">
           <span class="art__empty-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>
@@ -68,60 +68,7 @@
       </div>
     </main>
 
-    <!-- ============ Status + output (right) ============ -->
-    <aside class="side side--right" aria-label="Status">
-      <section class="panel status" aria-labelledby="statusTitle">
-        <h2 id="statusTitle" class="visually-hidden">Mix status</h2>
-        <dl class="rows">
-          <div class="row">
-            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-4l-3 8-4-16-3 8H3"/></svg>Playback</dt>
-            <dd><span id="statPlayback" class="pill tone-idle">Standby</span></dd>
-          </div>
-          <div class="row">
-            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>Channels</dt>
-            <dd id="telChannels">0</dd>
-          </div>
-          <div class="row">
-            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/></svg>Playing now</dt>
-            <dd id="telLive">0</dd>
-          </div>
-          <div class="row">
-            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11M6.5 21h11"/><path d="M7.5 3c0 5 9 5 9 9s-9 4-9 9M16.5 3c0 5-9 5-9 9s9 4 9 9"/></svg>Duration</dt>
-            <dd id="statDur">—</dd>
-          </div>
-          <div class="row">
-            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>Repeat</dt>
-            <dd><button id="loopSwitch" class="pill pill--btn tone-idle" type="button" aria-pressed="false" aria-label="Repeat this channel" disabled>Off</button></dd>
-          </div>
-          <div class="row">
-            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>Source</dt>
-            <dd>YouTube</dd>
-          </div>
-        </dl>
-        <div class="status__actions">
-          <button id="globalPlayPause" class="btn" type="button" disabled>Play all</button>
-          <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
-        </div>
-      </section>
-
-      <section class="panel output" aria-labelledby="outputTitle">
-        <h2 id="outputTitle" class="card__label">
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
-          Channel volume
-        </h2>
-        <div class="output__body">
-          <div>
-            <p class="output__value"><span id="volumeReadout">—</span></p>
-            <p id="volumeDb" class="output__db">—</p>
-          </div>
-          <div id="volumeBars" class="output__bars" aria-hidden="true"></div>
-        </div>
-        <label class="visually-hidden" for="volumeInput">Volume of this channel</label>
-        <input id="volumeInput" class="slider" type="range" min="0" max="100" step="1" value="0" style="--v:0%" disabled />
-      </section>
-    </aside>
-
-    <!-- ============ Deck (bottom) ============ -->
+    <!-- ============ 2. Deck: time, timeline, transport, volume ============ -->
     <section class="deck" aria-label="Playback">
       <div class="deck__grid">
       <div class="deck__times">
@@ -186,11 +133,26 @@
           <span>Stop</span>
         </button>
       </div>
+        <section class="card output" aria-labelledby="outputTitle">
+          <h2 id="outputTitle" class="card__label">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+            Channel volume
+          </h2>
+          <div class="output__body">
+            <div>
+              <p class="output__value"><span id="volumeReadout">—</span></p>
+              <p id="volumeDb" class="output__db">—</p>
+            </div>
+            <div id="volumeBars" class="output__bars" aria-hidden="true"></div>
+          </div>
+          <label class="visually-hidden" for="volumeInput">Volume of this channel</label>
+          <input id="volumeInput" class="slider" type="range" min="0" max="100" step="1" value="0" style="--v:0%" disabled />
+        </section>
       </div>
     </section>
 
-    <!-- ============ Channels + mixes (left) ============ -->
-    <aside class="side side--left" aria-label="Mix">
+    <!-- ============ 3-5. Channels, status, saved mixes ============ -->
+    <aside class="side" aria-label="Mix">
       <section class="panel channels" aria-labelledby="channelsTitle">
         <header class="panel__head">
           <h2 id="channelsTitle" class="panel__title">Channels</h2>
@@ -209,6 +171,40 @@
         <p id="inputError" class="status-msg" role="status" aria-live="polite"></p>
         <ol id="playlist" class="channel-list"></ol>
         <p class="channel-empty">No channels yet. Paste a link above; each one plays alongside the others.</p>
+      </section>
+
+      <section class="panel status" aria-labelledby="statusTitle">
+        <h2 id="statusTitle" class="visually-hidden">Mix status</h2>
+        <dl class="rows">
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-4l-3 8-4-16-3 8H3"/></svg>Playback</dt>
+            <dd><span id="statPlayback" class="pill tone-idle">Standby</span></dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>Channels</dt>
+            <dd id="telChannels">0</dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/></svg>Playing now</dt>
+            <dd id="telLive">0</dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11M6.5 21h11"/><path d="M7.5 3c0 5 9 5 9 9s-9 4-9 9M16.5 3c0 5-9 5-9 9s9 4 9 9"/></svg>Duration</dt>
+            <dd id="statDur">—</dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>Repeat</dt>
+            <dd><button id="loopSwitch" class="pill pill--btn tone-idle" type="button" aria-pressed="false" aria-label="Repeat this channel" disabled>Off</button></dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>Source</dt>
+            <dd>YouTube</dd>
+          </div>
+        </dl>
+        <div class="status__actions">
+          <button id="globalPlayPause" class="btn" type="button" disabled>Play all</button>
+          <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
+        </div>
       </section>
 
       <section class="panel mixes" aria-labelledby="mixesTitle">
@@ -231,7 +227,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=b84478be59"></script>
+  <script src="app.js?v=d9c9a8124d"></script>
 </body>
 
 </html>

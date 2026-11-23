@@ -17,6 +17,7 @@ const files = [
   'youtubePlayer.js',
   'shareLinks.js',
   'ui.js',
+  'accent.js',
   'main.js'
 ];
 
@@ -55,16 +56,16 @@ const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(file))
 const cssVersion = hash('./styles.css');
 const jsVersion = hash(outputFile);
 
-for (const page of ['./index.html', './index-standalone.html']) {
-  let html = fs.readFileSync(page, 'utf8');
-  html = html.replace(/href="styles\.css(\?v=[^"]*)?"/, `href="styles.css?v=${cssVersion}"`);
-  // Both pages load the single bundle: one file, so no module import can go stale.
-  html = html.replace(
-    /<script( type="module")? src="(dist\/main\.js|app\.js)(\?v=[^"]*)?"><\/script>/,
-    `<script src="app.js?v=${jsVersion}"></script>`
-  );
-  fs.writeFileSync(page, html);
-}
+let html = fs.readFileSync('./index.html', 'utf8');
+html = html.replace(/href="styles\.css(\?v=[^"]*)?"/, `href="styles.css?v=${cssVersion}"`);
+// The page loads the single bundle: one file, so no module import can go stale.
+html = html.replace(
+  /<script( type="module")? src="(dist\/main\.js|app\.js)(\?v=[^"]*)?"><\/script>/,
+  `<script src="app.js?v=${jsVersion}"></script>`
+);
+fs.writeFileSync('./index.html', html);
+// index-standalone.html is the same page, kept for anyone opening it from disk.
+fs.writeFileSync('./index-standalone.html', html);
 
-console.log(`✓ Stamped index pages: styles.css?v=${cssVersion}, app.js?v=${jsVersion}`);
+console.log(`✓ Stamped index.html and index-standalone.html: styles.css?v=${cssVersion}, app.js?v=${jsVersion}`);
 

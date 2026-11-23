@@ -100,6 +100,10 @@ const retaskInput = $<HTMLInputElement>('retaskInput');
 const retaskButton = $<HTMLButtonElement>('retaskButton');
 const retaskBox = $<HTMLDetailsElement>('retask');
 const removeButton = $<HTMLButtonElement>('removeButton');
+const removeConfirm = $<HTMLElement>('removeConfirm');
+const removeYes = $<HTMLButtonElement>('removeYes');
+const removeNo = $<HTMLButtonElement>('removeNo');
+let removeTimer: number | null = null;
 
 const clockEl = $<HTMLElement>('stageClock');
 const clockFields = Array.from(clockEl.querySelectorAll<HTMLElement>('[data-clock]'));
@@ -375,8 +379,26 @@ function renderAll(changed = false): void {
   renderStage(changed);
 }
 
+/** Removing a channel takes two steps; this shows or cancels the second one. */
+function askRemove(open: boolean, restoreFocus = false): void {
+  if (removeTimer !== null) {
+    clearTimeout(removeTimer);
+    removeTimer = null;
+  }
+  removeConfirm.hidden = !open;
+  removeButton.hidden = open;
+  if (open) {
+    removeNo.focus();
+    // Back out on its own so a forgotten question never lingers.
+    removeTimer = window.setTimeout(() => askRemove(false), 6000);
+  } else if (restoreFocus) {
+    removeButton.focus();
+  }
+}
+
 function setFocus(id: TrackId | null): void {
   if (id === focusedId) return;
+  askRemove(false);
   const old = focusedId ? rowFor(focusedId) : null;
   focusedId = id;
   if (old) {
@@ -723,7 +745,22 @@ function initializeEventListeners(): void {
   });
 
   // Now playing
-  removeButton.addEventListener('click', () => focusedId && removeTrack(focusedId));
+  removeButton.addEventListener('click', () => focusedId && askRemove(true));
+  removeNo.addEventListener('click', () => askRemove(false, true));
+  removeYes.addEventListener('click', () => {
+    const id = focusedId;
+    askRemove(false);
+    if (id) removeTrack(id);
+    // Keep keyboard users in the player rather than dropping focus to the page.
+    if (!removeButton.disabled) removeButton.focus();
+    else stage.focus();
+  });
+  removeConfirm.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      askRemove(false, true);
+    }
+  });
   retaskButton.addEventListener('click', () => {
     const url = retaskInput.value.trim();
     if (focusedId && url) reloadTrack(focusedId, url);

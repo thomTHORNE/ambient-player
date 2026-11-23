@@ -11,8 +11,9 @@ export const FALLBACK_ACCENT = '#FFB24A';
 /** The darkest surface accent text sits on (panel over the backdrop). */
 const PANEL_RGB = [0x16, 0x1b, 0x1c];
 const MIN_CONTRAST = 4.5;
-const SAMPLE_W = 64;
-const SAMPLE_H = 36;
+// Fine enough that thin coloured lettering (logos on black) survives the downscale.
+const SAMPLE_W = 96;
+const SAMPLE_H = 54;
 const HUE_BINS = 36; // 10° each
 function luminance([r, g, b]) {
     const lin = (c) => {
@@ -63,8 +64,13 @@ export function extractAccent(img) {
     if (!ctx)
         return null;
     let data;
+    // Sample the 16:9 picture: a 4:3 fallback thumbnail has black bars top and bottom.
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    const sh = Math.min(nh, (nw * 9) / 16);
+    const sy = (nh - sh) / 2;
     try {
-        ctx.drawImage(img, 0, 0, SAMPLE_W, SAMPLE_H);
+        ctx.drawImage(img, 0, sy, nw, sh, 0, 0, SAMPLE_W, SAMPLE_H);
         data = ctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
     }
     catch {
@@ -76,6 +82,7 @@ export function extractAccent(img) {
     const hueY = new Float64Array(HUE_BINS);
     const total = SAMPLE_W * SAMPLE_H;
     let vivid = 0;
+    let lit = 0; // pixels that aren't near-black
     for (let i = 0; i < data.length; i += 4) {
         const r = data[i] / 255;
         const g = data[i + 1] / 255;
@@ -85,7 +92,10 @@ export function extractAccent(img) {
         const chroma = max - min;
         const sat = max === 0 ? 0 : chroma / max;
         // Skip near-black, near-white and greyish pixels: they carry no accent.
-        if (max < 0.2 || (min > 0.88 && sat < 0.15) || sat < 0.25 || chroma < 0.12)
+        if (max < 0.2)
+            continue;
+        lit++;
+        if ((min > 0.88 && sat < 0.15) || sat < 0.25 || chroma < 0.12)
             continue;
         const h = rgbToHue(r, g, b, max, min);
         const bin = Math.floor(h / (360 / HUE_BINS)) % HUE_BINS;
@@ -98,8 +108,10 @@ export function extractAccent(img) {
         hueY[bin] += Math.sin(rad) * w;
         vivid++;
     }
-    // Too few coloured pixels: a dark or monochrome image.
-    if (vivid / total < 0.05)
+    // Judge colour against the visible (non-black) part of the picture, so a
+    // bright logo on a black background still counts. Too little colour there,
+    // or almost none in the whole frame: a dark or monochrome image.
+    if (lit === 0 || vivid / lit < 0.1 || vivid / total < 0.015)
         return null;
     // Most prevalent hue, smoothed over neighbouring bins.
     let best = -1;
@@ -113,7 +125,11 @@ export function extractAccent(img) {
             best = i;
         }
     }
-    if (best < 0 || bestWeight / total < 0.02)
+    // The winning hue must be a real share of the colour, not a stray tint.
+    let allWeight = 0;
+    for (let i = 0; i < HUE_BINS; i++)
+        allWeight += weight[i];
+    if (best < 0 || bestWeight / allWeight < 0.25 || bestWeight / total < 0.004)
         return null;
     let x = 0, y = 0, sw = 0, ss = 0;
     for (const i of [best - 1, best, best + 1]) {

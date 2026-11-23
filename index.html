@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=544afe88c4">
+  <link rel="stylesheet" href="styles.css?v=cadeab4c54">
 </head>
 
 <body>
@@ -63,7 +63,17 @@
               <button id="retaskButton" class="btn" type="button" disabled>Load link</button>
             </div>
           </details>
-          <button id="removeButton" class="text-btn" type="button" disabled>Remove channel</button>
+          <div class="remove">
+            <button id="removeButton" class="text-btn text-btn--danger" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 12.5h9l1-12.5"/><path d="M10 11v5M14 11v5"/></svg>
+              Remove channel
+            </button>
+            <div id="removeConfirm" class="remove__confirm" role="group" aria-labelledby="removeQuestion" hidden>
+              <span id="removeQuestion" class="remove__question">Remove from this mix?</span>
+              <button id="removeYes" class="btn btn--danger btn--small" type="button">Remove</button>
+              <button id="removeNo" class="btn btn--quiet btn--small" type="button">Keep</button>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -227,7 +237,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=dd7f7a1863"></script>
+  <script src="app.js?v=129cc2baa8"></script>
 </body>
 
 </html>

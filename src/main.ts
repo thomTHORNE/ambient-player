@@ -45,7 +45,7 @@ import {
   trackTitle,
 } from './ui.js';
 import type { StateTone } from './ui.js';
-import { extractAccent, FALLBACK_ACCENT } from './accent.js';
+import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -89,6 +89,7 @@ const statPlayback = $<HTMLElement>('statPlayback');
 const statDur = $<HTMLElement>('statDur');
 
 const backdropImg = $<HTMLImageElement>('backdropImg');
+const stage = $<HTMLElement>('stage');
 const art = $<HTMLElement>('art');
 const artImg = $<HTMLImageElement>('artImg');
 const stageIndex = $<HTMLElement>('stageIndex');
@@ -139,19 +140,31 @@ function setPill(el: HTMLElement, label: string, tone: StateTone, extra = ''): v
   el.className = `pill${extra} tone-${tone}`;
 }
 
-/** Accent per artwork URL, so switching back to a channel needs no new sampling. */
-const accentCache = new Map<string, string | null>();
+/** Accent and shape per artwork URL, so switching back to a channel needs no new sampling. */
+const artCache = new Map<string, { accent: string | null; square: boolean }>();
 
 /** Set the page accent; null means "no usable colour" and uses the amber fallback. */
 function setAccent(color: string | null): void {
   document.documentElement.style.setProperty('--accent', color || FALLBACK_ACCENT);
 }
 
-function applyAccentFromArtwork(): void {
+function setArtShape(square: boolean): void {
+  stage.dataset.shape = square ? 'square' : 'wide';
+}
+
+function applyArtworkAnalysis(): void {
   const key = artImg.currentSrc || artImg.src;
-  if (!key) return setAccent(null);
-  if (!accentCache.has(key)) accentCache.set(key, extractAccent(artImg));
-  setAccent(accentCache.get(key) ?? null);
+  if (!key) {
+    setArtShape(false);
+    return setAccent(null);
+  }
+  let info = artCache.get(key);
+  if (!info) {
+    info = { accent: extractAccent(artImg), square: isSquareArt(artImg) };
+    artCache.set(key, info);
+  }
+  setArtShape(info.square);
+  setAccent(info.accent);
 }
 
 function buildStaticMeters(): void {
@@ -276,6 +289,7 @@ function renderStage(changed: boolean): void {
       artImg.removeAttribute('src');
       backdropImg.removeAttribute('src');
       setAccent(null);
+      setArtShape(false);
     }
     if (changed && src && !prefersReducedMotion()) {
       art.animate(
@@ -731,12 +745,15 @@ function initializeEventListeners(): void {
     return false;
   };
   artImg.addEventListener('error', () => {
-    if (!useFallback()) setAccent(null);
+    if (!useFallback()) {
+      setAccent(null);
+      setArtShape(false);
+    }
   });
   artImg.addEventListener('load', () => {
     // A missing HD thumbnail comes back as a 120x90 grey placeholder rather than an error.
     if (artImg.naturalWidth <= 120 && useFallback()) return;
-    applyAccentFromArtwork();
+    applyArtworkAnalysis();
   });
 
   // Deck

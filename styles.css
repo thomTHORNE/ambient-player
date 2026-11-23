@@ -679,7 +679,12 @@ svg {
    ========================================================================== */
 
 .now {
-  --art-w: min(100%, 780px, calc((100dvh - 500px) * 1.778));
+  /* Artwork size. Phones and folds size it by width only; the fixed desktop
+     layout also fits it to the column's height. Square album art (detected in
+     src/accent.ts) gets a square frame with its own cap. */
+  --art-ratio: 1.778;
+  --art-cap: 780px;
+  --art-w: min(100%, var(--art-cap));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -721,6 +726,16 @@ svg {
 
 .art__img.is-letterboxed {
   transform: scale(1.34);
+}
+
+/* Album art published with bars at the sides: show just the square. */
+.now.now[data-shape="square"] {
+  --art-ratio: 1;
+  --art-cap: 520px;
+}
+
+.now[data-shape="square"] .art {
+  aspect-ratio: 1 / 1;
 }
 
 .art__img:not([src]),
@@ -1360,7 +1375,6 @@ svg {
   margin: 0 -6px;
   padding: 0 6px;
   overflow-y: auto;
-  overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
@@ -1746,7 +1760,7 @@ svg {
   }
 
   .now {
-    --art-w: min(100%, 820px);
+    --art-cap: 820px;
   }
 
   .side {
@@ -1769,7 +1783,8 @@ svg {
 
   .now {
     container-type: size;
-    --art-w: min(100%, 860px, calc((100cqh - 230px) * 1.778));
+    --art-cap: 860px;
+    --art-w: min(100%, var(--art-cap), calc((100cqh - 230px) * var(--art-ratio)));
   }
 
   .side {

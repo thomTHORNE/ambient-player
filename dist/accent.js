@@ -140,3 +140,59 @@ export function extractAccent(img) {
         return null;
     return toHex(rgb);
 }
+/**
+ * True when the thumbnail is square album art with flat bars at the sides
+ * (how YouTube publishes "Topic" music uploads), so the player can crop it
+ * to the square instead of showing the bars.
+ *
+ * The 16:9 picture is sampled first: a 4:3 fallback thumbnail carries extra
+ * letterbox bars top and bottom, which are skipped.
+ */
+export function isSquareArt(img) {
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (!img.complete || nw === 0 || nh === 0)
+        return false;
+    const W = 96;
+    const H = 54;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx)
+        return false;
+    const sh = Math.min(nh, (nw * 9) / 16);
+    const sy = (nh - sh) / 2;
+    let data;
+    try {
+        ctx.drawImage(img, 0, sy, nw, sh, 0, 0, W, H);
+        data = ctx.getImageData(0, 0, W, H).data;
+    }
+    catch {
+        return false;
+    }
+    // Square art in a 16:9 frame leaves bars of ~22% each side.
+    const stats = (x0, x1) => {
+        let n = 0;
+        const sum = [0, 0, 0];
+        const sq = [0, 0, 0];
+        for (let y = 2; y < H - 2; y++) {
+            for (let x = x0; x < x1; x++) {
+                const i = (y * W + x) * 4;
+                for (let c = 0; c < 3; c++) {
+                    sum[c] += data[i + c];
+                    sq[c] += data[i + c] * data[i + c];
+                }
+                n++;
+            }
+        }
+        const mean = sum.map((v) => v / n);
+        const std = sq.map((v, c) => Math.sqrt(Math.max(0, v / n - mean[c] * mean[c])));
+        return { mean, std: Math.max(...std) };
+    };
+    const left = stats(1, Math.floor(W * 0.19));
+    const right = stats(Math.ceil(W * 0.81), W - 1);
+    const centre = stats(Math.floor(W * 0.3), Math.ceil(W * 0.7));
+    const sidesMatch = left.mean.every((v, c) => Math.abs(v - right.mean[c]) < 14);
+    return left.std < 9 && right.std < 9 && sidesMatch && centre.std > Math.max(left.std, right.std) * 2 + 6;
+}

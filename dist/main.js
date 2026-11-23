@@ -10,7 +10,7 @@ import { waitForYouTubeAPI, createYouTubePlayerFactory, extractVideoId, isValidY
 import { saveOrUpdatePlaylist, deletePlaylist, getLastPlaylist, getAllPlaylists, } from './storage.js';
 import { encodePlaylistToUrl, decodePlaylistFromLocation, clearPlaylistHash, } from './shareLinks.js';
 import { channelRowHtml, patchChannelRow, setRowVolumeOpen, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, clockParts, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
-import { extractAccent, FALLBACK_ACCENT } from './accent.js';
+import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -46,6 +46,7 @@ const telLive = $('telLive');
 const statPlayback = $('statPlayback');
 const statDur = $('statDur');
 const backdropImg = $('backdropImg');
+const stage = $('stage');
 const art = $('art');
 const artImg = $('artImg');
 const stageIndex = $('stageIndex');
@@ -87,19 +88,28 @@ function setPill(el, label, tone, extra = '') {
     el.textContent = label;
     el.className = `pill${extra} tone-${tone}`;
 }
-/** Accent per artwork URL, so switching back to a channel needs no new sampling. */
-const accentCache = new Map();
+/** Accent and shape per artwork URL, so switching back to a channel needs no new sampling. */
+const artCache = new Map();
 /** Set the page accent; null means "no usable colour" and uses the amber fallback. */
 function setAccent(color) {
     document.documentElement.style.setProperty('--accent', color || FALLBACK_ACCENT);
 }
-function applyAccentFromArtwork() {
+function setArtShape(square) {
+    stage.dataset.shape = square ? 'square' : 'wide';
+}
+function applyArtworkAnalysis() {
     const key = artImg.currentSrc || artImg.src;
-    if (!key)
+    if (!key) {
+        setArtShape(false);
         return setAccent(null);
-    if (!accentCache.has(key))
-        accentCache.set(key, extractAccent(artImg));
-    setAccent(accentCache.get(key) ?? null);
+    }
+    let info = artCache.get(key);
+    if (!info) {
+        info = { accent: extractAccent(artImg), square: isSquareArt(artImg) };
+        artCache.set(key, info);
+    }
+    setArtShape(info.square);
+    setAccent(info.accent);
 }
 function buildStaticMeters() {
     volumeBars.innerHTML = Array.from({ length: VOLUME_BARS }, (_, i) => `<span style="--i:${i};--n:${VOLUME_BARS}"></span>`).join('');
@@ -214,6 +224,7 @@ function renderStage(changed) {
             artImg.removeAttribute('src');
             backdropImg.removeAttribute('src');
             setAccent(null);
+            setArtShape(false);
         }
         if (changed && src && !prefersReducedMotion()) {
             art.animate([{ opacity: 0.4, transform: 'scale(0.985)' }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' });
@@ -667,14 +678,16 @@ function initializeEventListeners() {
         return false;
     };
     artImg.addEventListener('error', () => {
-        if (!useFallback())
+        if (!useFallback()) {
             setAccent(null);
+            setArtShape(false);
+        }
     });
     artImg.addEventListener('load', () => {
         // A missing HD thumbnail comes back as a 120x90 grey placeholder rather than an error.
         if (artImg.naturalWidth <= 120 && useFallback())
             return;
-        applyAccentFromArtwork();
+        applyArtworkAnalysis();
     });
     // Deck
     playButton.addEventListener('click', () => focusedId && togglePlay(focusedId));

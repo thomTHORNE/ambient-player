@@ -991,13 +991,13 @@ svg {
 
 /* The deck picks its layout from its own width, not the window's, so the
    timeline never gets squeezed. Order everywhere: transport, timeline,
-   times, volume. Wide: transport over timeline | times | volume. */
+   volume, times. Wide: transport over timeline | volume | times. */
 .deck__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px 250px;
+  grid-template-columns: minmax(0, 1fr) 250px 180px;
   grid-template-areas:
-    "transport times output"
-    "timeline  times output";
+    "transport output times"
+    "timeline  output times";
   gap: 16px;
 }
 
@@ -1006,14 +1006,14 @@ svg {
 .transport { grid-area: transport; }
 .output { grid-area: output; }
 
-/* Medium: transport, then the timeline, then time cards beside volume. */
+/* Medium: transport, then the timeline, then volume beside the time cards. */
 @container deck (max-width: 860px) {
   .deck__grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
       "transport transport"
       "timeline  timeline"
-      "times     output";
+      "output    times";
   }
 }
 
@@ -1024,8 +1024,8 @@ svg {
     grid-template-areas:
       "transport"
       "timeline"
-      "times"
-      "output";
+      "output"
+      "times";
   }
 
   .deck__times {

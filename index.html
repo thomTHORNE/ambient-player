@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=a18650a358">
+  <link rel="stylesheet" href="styles.css?v=f9af1cdae2">
 </head>
 
 <body>
@@ -114,6 +114,21 @@
         </div>
       </div>
 
+        <section class="card output" aria-labelledby="outputTitle">
+          <h2 id="outputTitle" class="card__label">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+            Channel volume
+          </h2>
+          <div class="output__body">
+            <div>
+              <p class="output__value"><span id="volumeReadout">—</span></p>
+              <p id="volumeDb" class="output__db">—</p>
+            </div>
+            <div id="volumeBars" class="output__bars" aria-hidden="true"></div>
+          </div>
+          <label class="visually-hidden" for="volumeInput">Volume of this channel</label>
+          <input id="volumeInput" class="slider" type="range" min="0" max="100" step="1" value="0" style="--v:0%" disabled />
+        </section>
       <div class="deck__times">
         <div class="card time">
           <p class="card__label">
@@ -133,21 +148,6 @@
         </div>
       </div>
 
-        <section class="card output" aria-labelledby="outputTitle">
-          <h2 id="outputTitle" class="card__label">
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
-            Channel volume
-          </h2>
-          <div class="output__body">
-            <div>
-              <p class="output__value"><span id="volumeReadout">—</span></p>
-              <p id="volumeDb" class="output__db">—</p>
-            </div>
-            <div id="volumeBars" class="output__bars" aria-hidden="true"></div>
-          </div>
-          <label class="visually-hidden" for="volumeInput">Volume of this channel</label>
-          <input id="volumeInput" class="slider" type="range" min="0" max="100" step="1" value="0" style="--v:0%" disabled />
-        </section>
       </div>
     </section>
 

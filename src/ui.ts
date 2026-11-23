@@ -112,6 +112,14 @@ export function trackTitle(track: Track): string {
   return track.meta?.title || 'Untitled video';
 }
 
+/** Elapsed and remaining time, shown faintly under each channel. */
+function rowClock(track: Track): string {
+  const t = track.currentTime;
+  const d = track.duration || 0;
+  if (!d) return formatTime(t);
+  return `${formatTime(t)} <span class="ch__clock-sep">/</span> −${formatTime(Math.max(0, d - t))}`;
+}
+
 /**
  * Markup for one channel row. The row's own volume slider stays hidden behind
  * a toggle (volumeOpen) so scrolling the list cannot nudge it by accident.
@@ -138,6 +146,7 @@ export function channelRowHtml(track: Track, index: number, focused: boolean, vo
               <span class="ch__state tone-${tone}">${label}</span>
               <span class="ch__time">${pad2(index + 1)} · ${author}</span>
             </span>
+            <span class="ch__clock">${rowClock(track)}</span>
           </span>
         </button>
         <button class="vol-toggle${volumeOpen ? ' is-open' : ''}" type="button" data-action="vol-toggle" aria-expanded="${volumeOpen}" aria-controls="vol-${esc(track.id)}" aria-label="Volume for ${title}: ${vol} percent"${usable ? '' : ' disabled'}>
@@ -159,6 +168,12 @@ export function patchChannelRow(li: HTMLElement, track: Track): void {
   const playing = track.state === 'playing';
   li.classList.toggle('is-playing', playing);
   li.classList.toggle('is-paused', track.state === 'paused');
+
+  const clock = li.querySelector<HTMLElement>('.ch__clock');
+  if (clock) {
+    const html = rowClock(track);
+    if (clock.innerHTML !== html) clock.innerHTML = html;
+  }
 
   const state = li.querySelector<HTMLElement>('.ch__state');
   if (state) {

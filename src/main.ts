@@ -35,7 +35,6 @@ import {
   showError,
   copyToClipboard,
   swapText,
-  clockParts,
   formatHMS,
   formatDb,
   pad2,
@@ -105,9 +104,6 @@ const removeYes = $<HTMLButtonElement>('removeYes');
 const removeNo = $<HTMLButtonElement>('removeNo');
 let removeTimer: number | null = null;
 
-const clockEl = $<HTMLElement>('stageClock');
-const clockFields = Array.from(clockEl.querySelectorAll<HTMLElement>('[data-clock]'));
-const statRem = $<HTMLElement>('statRem');
 const scrub = $<HTMLElement>('scrub');
 const seekInput = $<HTMLInputElement>('seekInput');
 const scrubTime = $<HTMLElement>('scrubTime');
@@ -331,22 +327,14 @@ function renderStage(changed: boolean): void {
   renderTime();
 }
 
-/** Clock, timeline and remaining time for the focused channel. */
+/** Timeline for the focused channel. Elapsed / remaining per channel live in the list rows. */
 function renderTime(): void {
   const track = focusedTrack();
   const t = track ? track.currentTime : 0;
   const d = track?.duration || 0;
   const p = d > 0 ? Math.min(1, t / d) : 0;
 
-  const parts = clockParts(t);
-  clockFields.forEach((el, i) => {
-    if (el.textContent !== parts[i]) el.textContent = parts[i];
-  });
-  clockEl.setAttribute('aria-label', `Elapsed ${formatHMS(t)}`);
-  clockEl.classList.toggle('is-live', track?.state === 'playing');
-
   statDur.textContent = d ? formatHMS(d) : '—';
-  statRem.textContent = formatHMS(d ? Math.max(0, d - t) : 0);
   scrubTime.textContent = d ? `${formatHMS(t)} / ${formatHMS(d)}` : '— / —';
   scrubTicks.forEach((el) => {
     el.textContent = d ? formatHMS(d * Number(el.dataset.tick)) : '—';
@@ -438,6 +426,9 @@ function poll(): void {
       duration: duration > 0 ? duration : track.duration,
     });
     if (track.meta && !track.meta.author) fillAuthor(track.id);
+    const row = rowFor(track.id);
+    const updated = playlistManager.getTrack(track.id);
+    if (row && updated) patchChannelRow(row, updated);
   }
   renderTime();
   if (!anyPlaying) stopPolling();
@@ -804,6 +795,8 @@ function initializeEventListeners(): void {
     controller.pause();
     controller.seekTo(0);
     playlistManager.updateTrack(track.id, { currentTime: 0 });
+    const row = rowFor(track.id);
+    if (row) patchChannelRow(row, playlistManager.getTrack(track.id)!);
     renderTime();
   });
 
@@ -819,6 +812,8 @@ function initializeEventListeners(): void {
     const target = (Number(seekInput.value) / 1000) * track.duration;
     controller.seekTo(target);
     playlistManager.updateTrack(track.id, { currentTime: target });
+    const row = rowFor(track.id);
+    if (row) patchChannelRow(row, playlistManager.getTrack(track.id)!);
     renderTime();
   });
 

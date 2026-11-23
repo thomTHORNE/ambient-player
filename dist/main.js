@@ -9,7 +9,7 @@ import { PlaylistManager } from './playlist.js';
 import { waitForYouTubeAPI, createYouTubePlayerFactory, extractVideoId, isValidYouTubeUrl, } from './youtubePlayer.js';
 import { saveOrUpdatePlaylist, deletePlaylist, getLastPlaylist, getAllPlaylists, } from './storage.js';
 import { encodePlaylistToUrl, decodePlaylistFromLocation, clearPlaylistHash, } from './shareLinks.js';
-import { channelRowHtml, patchChannelRow, setRowVolumeOpen, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, clockParts, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
+import { channelRowHtml, patchChannelRow, setRowVolumeOpen, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
 // ---------------------------------------------------------------------------
 // State
@@ -61,9 +61,6 @@ const removeConfirm = $('removeConfirm');
 const removeYes = $('removeYes');
 const removeNo = $('removeNo');
 let removeTimer = null;
-const clockEl = $('stageClock');
-const clockFields = Array.from(clockEl.querySelectorAll('[data-clock]'));
-const statRem = $('statRem');
 const scrub = $('scrub');
 const seekInput = $('seekInput');
 const scrubTime = $('scrubTime');
@@ -260,21 +257,13 @@ function renderStage(changed) {
     renderVolume();
     renderTime();
 }
-/** Clock, timeline and remaining time for the focused channel. */
+/** Timeline for the focused channel. Elapsed / remaining per channel live in the list rows. */
 function renderTime() {
     const track = focusedTrack();
     const t = track ? track.currentTime : 0;
     const d = track?.duration || 0;
     const p = d > 0 ? Math.min(1, t / d) : 0;
-    const parts = clockParts(t);
-    clockFields.forEach((el, i) => {
-        if (el.textContent !== parts[i])
-            el.textContent = parts[i];
-    });
-    clockEl.setAttribute('aria-label', `Elapsed ${formatHMS(t)}`);
-    clockEl.classList.toggle('is-live', track?.state === 'playing');
     statDur.textContent = d ? formatHMS(d) : '—';
-    statRem.textContent = formatHMS(d ? Math.max(0, d - t) : 0);
     scrubTime.textContent = d ? `${formatHMS(t)} / ${formatHMS(d)}` : '— / —';
     scrubTicks.forEach((el) => {
         el.textContent = d ? formatHMS(d * Number(el.dataset.tick)) : '—';
@@ -366,6 +355,10 @@ function poll() {
         });
         if (track.meta && !track.meta.author)
             fillAuthor(track.id);
+        const row = rowFor(track.id);
+        const updated = playlistManager.getTrack(track.id);
+        if (row && updated)
+            patchChannelRow(row, updated);
     }
     renderTime();
     if (!anyPlaying)
@@ -741,6 +734,9 @@ function initializeEventListeners() {
         controller.pause();
         controller.seekTo(0);
         playlistManager.updateTrack(track.id, { currentTime: 0 });
+        const row = rowFor(track.id);
+        if (row)
+            patchChannelRow(row, playlistManager.getTrack(track.id));
         renderTime();
     });
     const endSeek = () => (seeking = false);
@@ -756,6 +752,9 @@ function initializeEventListeners() {
         const target = (Number(seekInput.value) / 1000) * track.duration;
         controller.seekTo(target);
         playlistManager.updateTrack(track.id, { currentTime: target });
+        const row = rowFor(track.id);
+        if (row)
+            patchChannelRow(row, playlistManager.getTrack(track.id));
         renderTime();
     });
     volumeInput.addEventListener('input', () => {

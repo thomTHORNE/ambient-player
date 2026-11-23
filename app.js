@@ -539,6 +539,14 @@ function trackTitle(track) {
         return 'Loading channel';
     return track.meta?.title || 'Untitled video';
 }
+/** Elapsed and remaining time, shown faintly under each channel. */
+function rowClock(track) {
+    const t = track.currentTime;
+    const d = track.duration || 0;
+    if (!d)
+        return formatTime(t);
+    return `${formatTime(t)} <span class="ch__clock-sep">/</span> −${formatTime(Math.max(0, d - t))}`;
+}
 /**
  * Markup for one channel row. The row's own volume slider stays hidden behind
  * a toggle (volumeOpen) so scrolling the list cannot nudge it by accident.
@@ -564,6 +572,7 @@ function channelRowHtml(track, index, focused, volumeOpen = false) {
               <span class="ch__state tone-${tone}">${label}</span>
               <span class="ch__time">${pad2(index + 1)} · ${author}</span>
             </span>
+            <span class="ch__clock">${rowClock(track)}</span>
           </span>
         </button>
         <button class="vol-toggle${volumeOpen ? ' is-open' : ''}" type="button" data-action="vol-toggle" aria-expanded="${volumeOpen}" aria-controls="vol-${esc(track.id)}" aria-label="Volume for ${title}: ${vol} percent"${usable ? '' : ' disabled'}>
@@ -584,6 +593,12 @@ function patchChannelRow(li, track) {
     const playing = track.state === 'playing';
     li.classList.toggle('is-playing', playing);
     li.classList.toggle('is-paused', track.state === 'paused');
+    const clock = li.querySelector('.ch__clock');
+    if (clock) {
+        const html = rowClock(track);
+        if (clock.innerHTML !== html)
+            clock.innerHTML = html;
+    }
     const state = li.querySelector('.ch__state');
     if (state) {
         const { label, tone } = stateInfo(track);
@@ -1001,9 +1016,6 @@ const removeConfirm = $('removeConfirm');
 const removeYes = $('removeYes');
 const removeNo = $('removeNo');
 let removeTimer = null;
-const clockEl = $('stageClock');
-const clockFields = Array.from(clockEl.querySelectorAll('[data-clock]'));
-const statRem = $('statRem');
 const scrub = $('scrub');
 const seekInput = $('seekInput');
 const scrubTime = $('scrubTime');
@@ -1200,21 +1212,13 @@ function renderStage(changed) {
     renderVolume();
     renderTime();
 }
-/** Clock, timeline and remaining time for the focused channel. */
+/** Timeline for the focused channel. Elapsed / remaining per channel live in the list rows. */
 function renderTime() {
     const track = focusedTrack();
     const t = track ? track.currentTime : 0;
     const d = track?.duration || 0;
     const p = d > 0 ? Math.min(1, t / d) : 0;
-    const parts = clockParts(t);
-    clockFields.forEach((el, i) => {
-        if (el.textContent !== parts[i])
-            el.textContent = parts[i];
-    });
-    clockEl.setAttribute('aria-label', `Elapsed ${formatHMS(t)}`);
-    clockEl.classList.toggle('is-live', track?.state === 'playing');
     statDur.textContent = d ? formatHMS(d) : '—';
-    statRem.textContent = formatHMS(d ? Math.max(0, d - t) : 0);
     scrubTime.textContent = d ? `${formatHMS(t)} / ${formatHMS(d)}` : '— / —';
     scrubTicks.forEach((el) => {
         el.textContent = d ? formatHMS(d * Number(el.dataset.tick)) : '—';
@@ -1306,6 +1310,10 @@ function poll() {
         });
         if (track.meta && !track.meta.author)
             fillAuthor(track.id);
+        const row = rowFor(track.id);
+        const updated = playlistManager.getTrack(track.id);
+        if (row && updated)
+            patchChannelRow(row, updated);
     }
     renderTime();
     if (!anyPlaying)
@@ -1681,6 +1689,9 @@ function initializeEventListeners() {
         controller.pause();
         controller.seekTo(0);
         playlistManager.updateTrack(track.id, { currentTime: 0 });
+        const row = rowFor(track.id);
+        if (row)
+            patchChannelRow(row, playlistManager.getTrack(track.id));
         renderTime();
     });
     const endSeek = () => (seeking = false);
@@ -1696,6 +1707,9 @@ function initializeEventListeners() {
         const target = (Number(seekInput.value) / 1000) * track.duration;
         controller.seekTo(target);
         playlistManager.updateTrack(track.id, { currentTime: target });
+        const row = rowFor(track.id);
+        if (row)
+            patchChannelRow(row, playlistManager.getTrack(track.id));
         renderTime();
     });
     volumeInput.addEventListener('input', () => {

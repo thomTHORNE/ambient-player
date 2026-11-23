@@ -10,8 +10,8 @@
   <link rel="icon" href="assets/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=cadeab4c54">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=c647b682e0">
 </head>
 
 <body>
@@ -139,25 +139,6 @@
           <label class="visually-hidden" for="volumeInput">Volume of this channel</label>
           <input id="volumeInput" class="slider" type="range" min="0" max="100" step="1" value="0" style="--v:0%" disabled />
         </section>
-      <div class="deck__times">
-        <div class="card time">
-          <p class="card__label">
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
-            Elapsed
-          </p>
-          <p id="stageClock" class="time__value" role="timer" aria-live="off">
-            <span data-clock>00</span><i>:</i><span data-clock>00</span><i>:</i><span data-clock>00</span>
-          </p>
-        </div>
-        <div class="card time">
-          <p class="card__label">
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5h4"/><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5 15 10.5"/></svg>
-            Remaining
-          </p>
-          <p id="statRem" class="time__value time__value--quiet">00:00:00</p>
-        </div>
-      </div>
-
       </div>
     </section>
 
@@ -237,7 +218,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=129cc2baa8"></script>
+  <script src="app.js?v=ce52e84691"></script>
 </body>
 
 </html>

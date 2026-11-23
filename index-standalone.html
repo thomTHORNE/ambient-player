@@ -190,7 +190,20 @@
               <p class="channel-empty">No channels yet. Paste a link above; each one plays alongside the others.</p>
             </section>
         </div>
-        <div class="slide slide--info" id="slideInfo" aria-label="Mix status and saved mixes">
+        <div class="slide slide--info" id="slideInfo" aria-label="Saved mixes and mix status">
+          <section class="panel mixes" aria-labelledby="mixesTitle">
+              <header class="panel__head">
+                <h2 id="mixesTitle" class="panel__title">Saved mixes</h2>
+              </header>
+              <div class="field-row">
+                <label class="field">
+                  <span class="visually-hidden">Mix name</span>
+                  <input id="playlistNameInput" type="text" autocomplete="off" placeholder="Name this mix" />
+                </label>
+                <button id="savePlaylistButton" class="btn" type="button">Save</button>
+              </div>
+              <ul id="savedPlaylistsList" class="mix-list"></ul>
+            </section>
           <section class="panel status" aria-labelledby="statusTitle">
               <h2 id="statusTitle" class="visually-hidden">Mix status</h2>
               <dl class="rows">
@@ -231,19 +244,6 @@
               <div class="status__actions">
                 <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
               </div>
-            </section>
-          <section class="panel mixes" aria-labelledby="mixesTitle">
-              <header class="panel__head">
-                <h2 id="mixesTitle" class="panel__title">Saved mixes</h2>
-              </header>
-              <div class="field-row">
-                <label class="field">
-                  <span class="visually-hidden">Mix name</span>
-                  <input id="playlistNameInput" type="text" autocomplete="off" placeholder="Name this mix" />
-                </label>
-                <button id="savePlaylistButton" class="btn" type="button">Save</button>
-              </div>
-              <ul id="savedPlaylistsList" class="mix-list"></ul>
             </section>
         </div>
       </div>

@@ -30,7 +30,6 @@ import {
   channelRowHtml,
   patchChannelRow,
   stripItemHtml,
-  patchStripItem,
   setRowDrawerOpen,
   setRowConfirm,
   renderSavedPlaylists,
@@ -48,7 +47,7 @@ import {
 } from './ui.js';
 import type { StateTone } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
-import { setupLayout, refreshLayout } from './layout.js';
+import { setupLayout } from './layout.js';
 import {
   fullscreenSupported,
   isFullscreen,
@@ -155,7 +154,10 @@ function renderStrip(): void {
   const hadFocus = mixStrip.contains(document.activeElement)
     ? (document.activeElement as HTMLElement).closest<HTMLElement>('[data-track-id]')?.dataset.trackId
     : undefined;
-  mixStrip.innerHTML = tracks.map((t, i) => stripItemHtml(t, i, t.id === focusedId)).join('');
+  // Only what's playing, each numbered by its position in the mix.
+  mixStrip.innerHTML = tracks
+    .map((t, i) => (t.state === 'playing' ? stripItemHtml(t, i, t.id === focusedId) : ''))
+    .join('');
   if (hadFocus) stripFor(hadFocus)?.querySelector<HTMLElement>('.strip__btn')?.focus();
 }
 
@@ -181,10 +183,7 @@ function setAccent(color: string | null): void {
 }
 
 function setArtShape(square: boolean): void {
-  const shape = square ? 'square' : 'wide';
-  if (stage.dataset.shape === shape) return;
-  stage.dataset.shape = shape;
-  refreshLayout();
+  stage.dataset.shape = square ? 'square' : 'wide';
 }
 
 function applyArtworkAnalysis(): void {
@@ -241,6 +240,9 @@ function updateListScroll(): void {
  */
 function rowScroller(row: HTMLElement): HTMLElement | null {
   for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
+    // Moving the main scroller would scroll the whole page (and collapse the
+    // artwork) whenever the channel changes; only inner panels may follow.
+    if (el.id === 'scroller') return null;
     const overflow = getComputedStyle(el).overflowY;
     if ((overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el;
   }
@@ -393,10 +395,7 @@ function renderStage(changed: boolean): void {
       setArtShape(false);
     }
     if (changed && src && !prefersReducedMotion()) {
-      art.animate(
-        [{ opacity: 0.4, transform: 'scale(0.985)' }, { opacity: 1, transform: 'none' }],
-        { duration: 420, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' }
-      );
+      artImg.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: 360, easing: 'ease-out' });
     }
   }
 
@@ -586,6 +585,7 @@ function createPlayerFor(trackId: TrackId, videoId: string, keep?: { volume: num
 function onTrackState(id: TrackId, state: TrackState): void {
   const before = playlistManager.getTrack(id);
   if (!before || before.state === 'error') return;
+  const prevState = before.state;
   playlistManager.updateTrack(id, { state });
   const controller = playlistManager.getController(id);
   if (controller) playlistManager.updateTrack(id, { currentTime: controller.getCurrentTime() });
@@ -593,8 +593,7 @@ function onTrackState(id: TrackId, state: TrackState): void {
 
   const row = rowFor(id);
   if (row) patchChannelRow(row, track);
-  const tile = stripFor(id);
-  if (tile) patchStripItem(tile, track, playlistManager.getTracks().indexOf(track));
+  if (prevState !== track.state) renderStrip();
   renderStatus();
   if (id === focusedId) renderStage(false);
 

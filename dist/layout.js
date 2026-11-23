@@ -58,8 +58,8 @@ export function goToSlide(index) {
         lSlides.scrollTo({ top: index * lSlides.clientHeight, behavior });
 }
 // ---------------------------------------------------------------------------
-// Portrait: the panels' box follows the panel in view, and is always tall
-// enough to scroll the stage all the way down to its minimum size.
+// Portrait: the panels' box takes exactly the height of the panel in view,
+// so scrolling stops when its bottom is reached.
 // ---------------------------------------------------------------------------
 function syncSlidesHeight() {
     if (!isPortrait()) {
@@ -67,29 +67,43 @@ function syncSlidesHeight() {
         return;
     }
     const panel = lSlideEls[activeSlide];
-    if (!panel)
-        return;
-    const stageMin = lStageWrap.offsetHeight - (lArt.offsetHeight - artMinH);
-    const fill = Math.max(0, lScroller.clientHeight - stageMin);
-    lSlides.style.height = `${Math.max(panel.scrollHeight, fill)}px`;
+    if (panel)
+        lSlides.style.height = `${panel.scrollHeight}px`;
 }
 // ---------------------------------------------------------------------------
 // Portrait: the collapsing stage
+//
+// The stage keeps one fixed height in the flow and is pinned with a negative
+// top of `range`, so the page below it never moves out of step. While
+// scrolling through that range only two things change: the artwork's height
+// (a small layout inside the stage) and a translate that keeps the shrinking
+// artwork at the top of the screen (composited). The frame size never depends
+// on the channel's thumbnail, so switching channels doesn't resize it.
 // ---------------------------------------------------------------------------
-/** Re-measure the artwork's full and minimum heights (after resize or a new shape). */
+let range = 0;
+/** Re-measure the stage (after a resize or rotation). */
 export function refreshLayout() {
+    lArt.style.height = '';
+    lStage.style.transform = '';
+    lStageWrap.style.height = '';
+    lStageWrap.style.top = '';
     if (!isPortrait()) {
-        lArt.style.height = '';
-        lScroller.style.removeProperty('--collapse');
-        artMaxH = artMinH = 0;
+        artMaxH = artMinH = range = 0;
         syncSlidesHeight();
         return;
     }
-    lArt.style.height = '';
-    const ratio = lStage.dataset.shape === 'square' ? 1 : 16 / 9;
+    const wrapStyle = getComputedStyle(lStageWrap);
+    const padY = parseFloat(wrapStyle.paddingTop) + parseFloat(wrapStyle.paddingBottom);
+    const gap = parseFloat(getComputedStyle(lStage).rowGap) || 0;
+    const meta = lStage.querySelector('.now__meta')?.offsetHeight ?? 0;
+    // The upper part may take at most half of the space under the brand.
+    const stageMax = lScroller.clientHeight * 0.5;
     const width = lArt.clientWidth;
-    artMaxH = Math.round(Math.min(width / ratio, window.innerHeight * 0.6));
-    artMinH = Math.round(Math.min(artMaxH, Math.max(84, window.innerHeight * 0.12)));
+    artMaxH = Math.round(Math.max(120, Math.min(width, stageMax - padY - gap - meta)));
+    artMinH = Math.round(Math.min(artMaxH, Math.max(72, window.innerHeight * 0.1)));
+    range = artMaxH - artMinH;
+    lStageWrap.style.height = `${artMaxH + meta + gap + padY}px`;
+    lStageWrap.style.top = `${-range}px`;
     applyCollapse();
     syncSlidesHeight();
 }
@@ -97,12 +111,9 @@ function applyCollapse() {
     collapseFrame = 0;
     if (!isPortrait() || !artMaxH)
         return;
-    const range = artMaxH - artMinH;
     const c = Math.max(0, Math.min(range, lScroller.scrollTop));
     lArt.style.height = `${artMaxH - c}px`;
-    // A spacer of the same size keeps the panels' place, so they follow the
-    // shrinking stage instead of jumping.
-    lScroller.style.setProperty('--collapse', `${c}px`);
+    lStage.style.transform = c ? `translate3d(0, ${c}px, 0)` : '';
     lStageWrap.classList.toggle('is-collapsed', c >= range - 1);
 }
 function onScrollerScroll() {

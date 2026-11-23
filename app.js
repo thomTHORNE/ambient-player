@@ -1166,8 +1166,8 @@ function goToSlide(index) {
         lSlides.scrollTo({ top: index * lSlides.clientHeight, behavior });
 }
 // ---------------------------------------------------------------------------
-// Portrait: the panels' box follows the panel in view, and is always tall
-// enough to scroll the stage all the way down to its minimum size.
+// Portrait: the panels' box takes exactly the height of the panel in view,
+// so scrolling stops when its bottom is reached.
 // ---------------------------------------------------------------------------
 function syncSlidesHeight() {
     if (!isPortrait()) {
@@ -1175,29 +1175,43 @@ function syncSlidesHeight() {
         return;
     }
     const panel = lSlideEls[activeSlide];
-    if (!panel)
-        return;
-    const stageMin = lStageWrap.offsetHeight - (lArt.offsetHeight - artMinH);
-    const fill = Math.max(0, lScroller.clientHeight - stageMin);
-    lSlides.style.height = `${Math.max(panel.scrollHeight, fill)}px`;
+    if (panel)
+        lSlides.style.height = `${panel.scrollHeight}px`;
 }
 // ---------------------------------------------------------------------------
 // Portrait: the collapsing stage
+//
+// The stage keeps one fixed height in the flow and is pinned with a negative
+// top of `range`, so the page below it never moves out of step. While
+// scrolling through that range only two things change: the artwork's height
+// (a small layout inside the stage) and a translate that keeps the shrinking
+// artwork at the top of the screen (composited). The frame size never depends
+// on the channel's thumbnail, so switching channels doesn't resize it.
 // ---------------------------------------------------------------------------
-/** Re-measure the artwork's full and minimum heights (after resize or a new shape). */
+let range = 0;
+/** Re-measure the stage (after a resize or rotation). */
 function refreshLayout() {
+    lArt.style.height = '';
+    lStage.style.transform = '';
+    lStageWrap.style.height = '';
+    lStageWrap.style.top = '';
     if (!isPortrait()) {
-        lArt.style.height = '';
-        lScroller.style.removeProperty('--collapse');
-        artMaxH = artMinH = 0;
+        artMaxH = artMinH = range = 0;
         syncSlidesHeight();
         return;
     }
-    lArt.style.height = '';
-    const ratio = lStage.dataset.shape === 'square' ? 1 : 16 / 9;
+    const wrapStyle = getComputedStyle(lStageWrap);
+    const padY = parseFloat(wrapStyle.paddingTop) + parseFloat(wrapStyle.paddingBottom);
+    const gap = parseFloat(getComputedStyle(lStage).rowGap) || 0;
+    const meta = lStage.querySelector('.now__meta')?.offsetHeight ?? 0;
+    // The upper part may take at most half of the space under the brand.
+    const stageMax = lScroller.clientHeight * 0.5;
     const width = lArt.clientWidth;
-    artMaxH = Math.round(Math.min(width / ratio, window.innerHeight * 0.6));
-    artMinH = Math.round(Math.min(artMaxH, Math.max(84, window.innerHeight * 0.12)));
+    artMaxH = Math.round(Math.max(120, Math.min(width, stageMax - padY - gap - meta)));
+    artMinH = Math.round(Math.min(artMaxH, Math.max(72, window.innerHeight * 0.1)));
+    range = artMaxH - artMinH;
+    lStageWrap.style.height = `${artMaxH + meta + gap + padY}px`;
+    lStageWrap.style.top = `${-range}px`;
     applyCollapse();
     syncSlidesHeight();
 }
@@ -1205,12 +1219,9 @@ function applyCollapse() {
     collapseFrame = 0;
     if (!isPortrait() || !artMaxH)
         return;
-    const range = artMaxH - artMinH;
     const c = Math.max(0, Math.min(range, lScroller.scrollTop));
     lArt.style.height = `${artMaxH - c}px`;
-    // A spacer of the same size keeps the panels' place, so they follow the
-    // shrinking stage instead of jumping.
-    lScroller.style.setProperty('--collapse', `${c}px`);
+    lStage.style.transform = c ? `translate3d(0, ${c}px, 0)` : '';
     lStageWrap.classList.toggle('is-collapsed', c >= range - 1);
 }
 function onScrollerScroll() {
@@ -1351,7 +1362,10 @@ function renderStrip() {
     const hadFocus = mixStrip.contains(document.activeElement)
         ? document.activeElement.closest('[data-track-id]')?.dataset.trackId
         : undefined;
-    mixStrip.innerHTML = tracks.map((t, i) => stripItemHtml(t, i, t.id === focusedId)).join('');
+    // Only what's playing, each numbered by its position in the mix.
+    mixStrip.innerHTML = tracks
+        .map((t, i) => (t.state === 'playing' ? stripItemHtml(t, i, t.id === focusedId) : ''))
+        .join('');
     if (hadFocus)
         stripFor(hadFocus)?.querySelector('.strip__btn')?.focus();
 }
@@ -1372,11 +1386,7 @@ function setAccent(color) {
     document.documentElement.style.setProperty('--accent', color || FALLBACK_ACCENT);
 }
 function setArtShape(square) {
-    const shape = square ? 'square' : 'wide';
-    if (stage.dataset.shape === shape)
-        return;
-    stage.dataset.shape = shape;
-    refreshLayout();
+    stage.dataset.shape = square ? 'square' : 'wide';
 }
 function applyArtworkAnalysis() {
     const key = artImg.currentSrc || artImg.src;
@@ -1423,6 +1433,10 @@ function updateListScroll() {
  */
 function rowScroller(row) {
     for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
+        // Moving the main scroller would scroll the whole page (and collapse the
+        // artwork) whenever the channel changes; only inner panels may follow.
+        if (el.id === 'scroller')
+            return null;
         const overflow = getComputedStyle(el).overflowY;
         if ((overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 1)
             return el;
@@ -1572,7 +1586,7 @@ function renderStage(changed) {
             setArtShape(false);
         }
         if (changed && src && !prefersReducedMotion()) {
-            art.animate([{ opacity: 0.4, transform: 'scale(0.985)' }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' });
+            artImg.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: 360, easing: 'ease-out' });
         }
     }
     // Controls
@@ -1752,6 +1766,7 @@ function onTrackState(id, state) {
     const before = playlistManager.getTrack(id);
     if (!before || before.state === 'error')
         return;
+    const prevState = before.state;
     playlistManager.updateTrack(id, { state });
     const controller = playlistManager.getController(id);
     if (controller)
@@ -1760,9 +1775,8 @@ function onTrackState(id, state) {
     const row = rowFor(id);
     if (row)
         patchChannelRow(row, track);
-    const tile = stripFor(id);
-    if (tile)
-        patchStripItem(tile, track, playlistManager.getTracks().indexOf(track));
+    if (prevState !== track.state)
+        renderStrip();
     renderStatus();
     if (id === focusedId)
         renderStage(false);

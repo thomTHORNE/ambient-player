@@ -306,10 +306,11 @@ body {
 .scroller {
   min-height: 0;
   margin: 0 calc(var(--gutter) * -1);
-  padding: 0 var(--gutter) calc(72px + env(safe-area-inset-bottom));
+  padding: 0 var(--gutter) calc(52px + env(safe-area-inset-bottom));
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  overflow-anchor: none;
   scrollbar-width: none;
 }
 
@@ -317,18 +318,27 @@ body {
   display: none;
 }
 
-/* The stage stays pinned at the top while it shrinks; panels scroll under it. */
+/* The stage stays pinned at the top while it shrinks; panels scroll under it.
+   src/layout.ts gives it a fixed height and a negative top, and only changes
+   the artwork's height and the stage's translate while scrolling. */
 .stage-wrap {
   position: sticky;
   top: 0;
   z-index: 5;
   margin: 0 calc(var(--gutter) * -1);
-  padding: 0 var(--gutter) 14px;
-  background: linear-gradient(180deg, rgba(8, 9, 10, 0.86), rgba(8, 9, 10, 0.72));
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+  padding: 14px var(--gutter) 14px;
+  background: linear-gradient(180deg, rgba(8, 9, 10, 0.2), rgba(8, 9, 10, 1));
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   border-bottom: 1px solid transparent;
+  overflow: hidden;
+  overflow: clip;
+  contain: layout style;
   transition: border-color 200ms var(--ease);
+}
+
+.stage-wrap .now {
+  will-change: transform;
 }
 
 .stage-wrap.is-collapsed {
@@ -341,7 +351,7 @@ body {
 .slides {
   display: flex;
   align-items: flex-start;
-  margin: calc(var(--collapse, 0px) + 8px) -6px 0;
+  margin: 8px -6px 0;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
@@ -369,13 +379,13 @@ body {
 .pager {
   position: fixed;
   left: 50%;
-  bottom: max(12px, env(safe-area-inset-bottom));
+  bottom: max(8px, env(safe-area-inset-bottom));
   z-index: 10;
   display: flex;
   gap: 2px;
   padding: 2px 6px;
   border: 1px solid var(--line);
-  background: rgba(8, 9, 10, 0.7);
+  background: rgb(8 9 10 / 50%);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   transform: translateX(-50%);
@@ -986,14 +996,6 @@ body {
   min-width: 0;
 }
 
-.now[data-shape="square"] {
-  --art-ratio: 1;
-}
-
-.now[data-shape="square"] .art {
-  aspect-ratio: 1 / 1;
-}
-
 .art {
   position: relative;
   flex: 1 1 auto;
@@ -1002,7 +1004,6 @@ body {
   overflow: hidden;
   border: 1px solid var(--line-strong);
   background: rgba(255, 255, 255, 0.03);
-  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.9);
   /* Viewfinder brackets inside the frame. */
   --bi: 8px;
   --bl: 22px;
@@ -1279,6 +1280,7 @@ body {
 }
 
 .now__title {
+  min-height: calc(2em * 1.15);
   font-size: 26px;
   font-weight: 600;
   line-height: 1.15;
@@ -2210,7 +2212,7 @@ body {
 .now,
 .slide > .panel,
 .deck__grid > * {
-  animation: rise-in 520ms var(--ease) both;
+  animation: rise-in 520ms var(--ease) backwards;
 }
 
 .now { animation-delay: 60ms; }
@@ -2226,11 +2228,11 @@ body {
    one screen each, and the pager runs down the right edge. */
 @media (orientation: landscape) {
   .app {
-    grid-template-columns: clamp(240px, 32vw, 440px) minmax(0, 1fr) 36px;
+    grid-template-columns: clamp(240px, 32vw, 440px) minmax(0, 1fr) auto;
     grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas:
-      "brand slides pager"
-      "stage slides pager";
+      "brand  brand  brand"
+      "stage  slides pager";
     column-gap: var(--gutter);
     padding-bottom: max(var(--gutter), env(safe-area-inset-bottom));
   }
@@ -2253,10 +2255,14 @@ body {
     scrollbar-width: none;
   }
 
-  /* Artwork fits the column and leaves room for the title under it. */
+  /* A fixed 4:3 frame (whatever the thumbnail's shape, so switching
+     channels never resizes it) that fits the column and leaves room for the
+     title under it. */
   .art {
     flex: 0 1 auto;
-    width: min(100%, calc((100dvh - 2 * var(--gutter) - 230px) * var(--art-ratio)));
+    aspect-ratio: 4 / 3;
+    --text-room: 240px;
+    width: min(100%, max(140px, calc((100dvh - 2 * var(--gutter) - var(--text-room)) * 4 / 3)));
   }
 
   .now__title {
@@ -2295,23 +2301,20 @@ body {
     scrollbar-color: var(--line-strong) transparent;
   }
 
-  /* Centred when there's room; top-aligned (never clipped) when there isn't. */
-  .slide--deck > .deck {
-    margin-block: auto;
-  }
-
   .pager {
     grid-area: pager;
     position: static;
     flex-direction: column;
     align-self: center;
     justify-self: center;
-    padding: 6px 2px;
+    /* Sit close to the panels. */
+    margin-left: calc(var(--gutter) * -1 + 6px);
+    padding: 4px 2px;
     transform: none;
   }
 
   .pager__bar {
-    width: 32px;
+    width: 12px;
     height: 40px;
   }
 
@@ -2324,6 +2327,22 @@ body {
   .pager__bar[aria-current="true"]::before {
     width: 3px;
     height: 32px;
+  }
+}
+
+/* Short horizontal screens (a phone on its side): tighter title, more room
+   for the artwork. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .art {
+    --text-room: 190px;
+  }
+
+  .now__title {
+    font-size: 16px;
+  }
+
+  .now__artist {
+    font-size: 12px;
   }
 }
 

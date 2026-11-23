@@ -9,9 +9,9 @@ import { PlaylistManager } from './playlist.js';
 import { waitForYouTubeAPI, createYouTubePlayerFactory, extractVideoId, isValidYouTubeUrl, } from './youtubePlayer.js';
 import { saveOrUpdatePlaylist, deletePlaylist, getLastPlaylist, getAllPlaylists, } from './storage.js';
 import { encodePlaylistToUrl, decodePlaylistFromLocation, clearPlaylistHash, } from './shareLinks.js';
-import { channelRowHtml, patchChannelRow, stripItemHtml, patchStripItem, setRowDrawerOpen, setRowConfirm, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
+import { channelRowHtml, patchChannelRow, stripItemHtml, setRowDrawerOpen, setRowConfirm, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
-import { setupLayout, refreshLayout } from './layout.js';
+import { setupLayout } from './layout.js';
 import { fullscreenSupported, isFullscreen, runningAsApp, runningAsFullscreenApp, enterFullscreen, exitFullscreen, onFullscreenChange, setKeepAwake, } from './screen.js';
 // ---------------------------------------------------------------------------
 // State
@@ -95,7 +95,10 @@ function renderStrip() {
     const hadFocus = mixStrip.contains(document.activeElement)
         ? document.activeElement.closest('[data-track-id]')?.dataset.trackId
         : undefined;
-    mixStrip.innerHTML = tracks.map((t, i) => stripItemHtml(t, i, t.id === focusedId)).join('');
+    // Only what's playing, each numbered by its position in the mix.
+    mixStrip.innerHTML = tracks
+        .map((t, i) => (t.state === 'playing' ? stripItemHtml(t, i, t.id === focusedId) : ''))
+        .join('');
     if (hadFocus)
         stripFor(hadFocus)?.querySelector('.strip__btn')?.focus();
 }
@@ -116,11 +119,7 @@ function setAccent(color) {
     document.documentElement.style.setProperty('--accent', color || FALLBACK_ACCENT);
 }
 function setArtShape(square) {
-    const shape = square ? 'square' : 'wide';
-    if (stage.dataset.shape === shape)
-        return;
-    stage.dataset.shape = shape;
-    refreshLayout();
+    stage.dataset.shape = square ? 'square' : 'wide';
 }
 function applyArtworkAnalysis() {
     const key = artImg.currentSrc || artImg.src;
@@ -167,6 +166,10 @@ function updateListScroll() {
  */
 function rowScroller(row) {
     for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
+        // Moving the main scroller would scroll the whole page (and collapse the
+        // artwork) whenever the channel changes; only inner panels may follow.
+        if (el.id === 'scroller')
+            return null;
         const overflow = getComputedStyle(el).overflowY;
         if ((overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 1)
             return el;
@@ -316,7 +319,7 @@ function renderStage(changed) {
             setArtShape(false);
         }
         if (changed && src && !prefersReducedMotion()) {
-            art.animate([{ opacity: 0.4, transform: 'scale(0.985)' }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' });
+            artImg.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: 360, easing: 'ease-out' });
         }
     }
     // Controls
@@ -496,6 +499,7 @@ function onTrackState(id, state) {
     const before = playlistManager.getTrack(id);
     if (!before || before.state === 'error')
         return;
+    const prevState = before.state;
     playlistManager.updateTrack(id, { state });
     const controller = playlistManager.getController(id);
     if (controller)
@@ -504,9 +508,8 @@ function onTrackState(id, state) {
     const row = rowFor(id);
     if (row)
         patchChannelRow(row, track);
-    const tile = stripFor(id);
-    if (tile)
-        patchStripItem(tile, track, playlistManager.getTracks().indexOf(track));
+    if (prevState !== track.state)
+        renderStrip();
     renderStatus();
     if (id === focusedId)
         renderStage(false);

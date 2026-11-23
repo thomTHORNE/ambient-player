@@ -9,6 +9,7 @@ export type TrackId = string;
 export interface YouTubeVideoMeta {
   id: string;
   title: string;
+  author?: string;
   thumbnailUrl: string;
   durationSeconds?: number;
 }

@@ -1,283 +1,271 @@
 /**
- * UI module for DOM operations and event handlers
+ * UI module: formatting, icons, channel row markup and dialogs.
+ * Every string that came from outside (video titles, channel names, mix names)
+ * passes through esc() before it reaches innerHTML.
  */
 
-import type { Track, PlaylistManager } from './playlist.js';
+import type { Track } from './playlist.js';
 import type { PersistedPlaylist } from './storage.js';
 
-/**
- * Format seconds to mm:ss
- */
+/** Escape text for safe use inside HTML markup and attributes. */
+export function esc(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function pad2(n: number): string {
+  return Math.floor(n).toString().padStart(2, '0');
+}
+
+/** Seconds to HH:MM:SS. */
+export function formatHMS(seconds: number): string {
+  return clockParts(seconds).join(':');
+}
+
+/** Short form for lists: M:SS under an hour, H:MM:SS above. */
 export function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return h > 0 ? `${h}:${pad2(m)}:${pad2(s)}` : `${m}:${pad2(s)}`;
 }
 
-/**
- * Create a track row element
- */
-export function createTrackElement(track: Track): HTMLElement {
-  const trackDiv = document.createElement('div');
-  trackDiv.className = 'track';
-  trackDiv.dataset.trackId = track.id;
+/** Seconds to the three clock fields: hours, minutes, seconds. */
+export function clockParts(seconds: number): [string, string, string] {
+  if (!isFinite(seconds) || seconds < 0) seconds = 0;
+  return [
+    pad2(seconds / 3600),
+    pad2((seconds % 3600) / 60),
+    pad2(seconds % 60),
+  ];
+}
 
-  if (track.state === 'loading') {
-    trackDiv.classList.add('loading');
-    trackDiv.innerHTML = `
-      <div class="track-main">
-        <div class="track-loading">Loading...</div>
+/** Volume 0..1 to a decibel readout. */
+export function formatDb(volume: number): string {
+  if (volume <= 0.001) return '−∞ dB';
+  const db = 20 * Math.log10(volume);
+  return `${db <= -0.05 ? '−' : ''}${Math.abs(db).toFixed(1)} dB`;
+}
+
+export function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/** Replace text with a short fade-up, used when the focused channel changes. */
+export function swapText(el: HTMLElement, text: string, delay = 0): void {
+  if (el.textContent === text) return;
+  el.textContent = text;
+  if (prefersReducedMotion()) return;
+  el.animate(
+    [
+      { opacity: 0, transform: 'translateY(6px)' },
+      { opacity: 1, transform: 'none' },
+    ],
+    { duration: 320, delay, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)', fill: 'backwards' }
+  );
+}
+
+/** Line icons on a 24px grid, 1.6px stroke, round joins. */
+const line = (d: string) =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+
+export const icons = {
+  play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6a.8.8 0 0 0 1.2.7l10.9-6.8a.8.8 0 0 0 0-1.4L9.2 4.5A.8.8 0 0 0 8 5.2z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor"/></svg>',
+  prev: line('<path d="M18 6v12l-9-6z"/><path d="M6 6v12"/>'),
+  next: line('<path d="M6 6v12l9-6z"/><path d="M18 6v12"/>'),
+  stop: line('<rect x="6" y="6" width="12" height="12" rx="2"/>'),
+  repeat: line('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
+  plus: line('<path d="M12 5v14M5 12h14"/>'),
+  trash: line('<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 12.5h9l1-12.5"/>'),
+  clock: line('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+  timer: line('<path d="M10 2.5h4"/><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5 15 10.5"/>'),
+  layers: line('<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>'),
+  live: line('<circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/>'),
+  activity: line('<path d="M21 12h-4l-3 8-4-16-3 8H3"/>'),
+  link: line('<path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5"/><path d="M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5"/>'),
+  volume: line('<path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  source: line('<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/>'),
+  bookmark: line('<path d="M18 20.5 12 16l-6 4.5V5.5A2 2 0 0 1 8 3.5h8a2 2 0 0 1 2 2z"/>'),
+  hourglass: line('<path d="M6.5 3h11M6.5 21h11"/><path d="M7.5 3c0 5 9 5 9 9s-9 4-9 9M16.5 3c0 5-9 5-9 9s9 4 9 9"/>'),
+};
+
+export type StateTone = 'live' | 'idle' | 'busy' | 'warn';
+
+export function stateInfo(track: Track): { label: string; tone: StateTone } {
+  switch (track.state) {
+    case 'playing': return { label: 'Playing', tone: 'live' };
+    case 'paused': return { label: 'On hold', tone: 'idle' };
+    case 'loading': return { label: 'Loading', tone: 'busy' };
+    case 'error': return { label: 'Unavailable', tone: 'warn' };
+  }
+}
+
+export function trackTitle(track: Track): string {
+  if (track.state === 'error') return track.error?.message || 'This video cannot play here';
+  if (track.state === 'loading' && !track.meta) return 'Loading channel';
+  return track.meta?.title || 'Untitled video';
+}
+
+/** Markup for one channel row. */
+export function channelRowHtml(track: Track, index: number, focused: boolean): string {
+  const title = esc(trackTitle(track));
+  const author = esc(track.meta?.author || 'YouTube');
+  const thumb = track.meta?.thumbnailUrl
+    ? `<img class="ch__thumb" src="${esc(track.meta.thumbnailUrl)}" alt="" loading="lazy" />`
+    : '<span class="ch__thumb ch__thumb--empty" aria-hidden="true"></span>';
+  const playing = track.state === 'playing';
+  const usable = track.state === 'playing' || track.state === 'paused';
+  const { label, tone } = stateInfo(track);
+  const vol = Math.round(track.volume * 100);
+
+  return `
+    <li class="ch is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
+      <div class="ch__main">
+        <button class="ch__focus" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Show ${title} in the player">
+          ${thumb}
+          <span class="ch__text">
+            <span class="ch__title">${title}</span>
+            <span class="ch__meta">
+              <span class="ch__state tone-${tone}">${label}</span>
+              <span class="ch__time">${pad2(index + 1)} · ${author}</span>
+            </span>
+          </span>
+        </button>
+        <button class="round-btn ch__toggle${playing ? ' is-on' : ''}" type="button" data-action="toggle" aria-label="${playing ? 'Pause' : 'Play'} ${title}"${usable ? '' : ' disabled'}>${playing ? icons.pause : icons.play}</button>
       </div>
-      <div class="track-player-container"></div>
-    `;
-  } else if (track.state === 'error') {
-    trackDiv.classList.add('error');
-    trackDiv.innerHTML = `
-      <div class="track-main">
-        <div class="track-title">Error loading video</div>
-        <div class="track-error-message">${track.error?.message || 'Unknown error'}</div>
-        <div class="track-controls">
-          <button class="track-delete" title="Delete">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-              <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div class="track-player-container"></div>
-    `;
-  } else {
-    const isPlaying = track.state === 'playing';
-    const currentTime = formatTime(track.currentTime);
-    const duration = formatTime(track.duration || 0);
-    const seekPercent = track.duration ? (track.currentTime / track.duration) * 100 : 0;
-
-    trackDiv.innerHTML = `
-      <img src="${track.meta?.thumbnailUrl || ''}" alt="Track thumbnail" />
-      <div class="track-main">
-        <div class="track-title">${track.meta?.title || 'Unknown Title'}</div>
-        <div class="track-controls">
-          <button class="track-play-pause ${isPlaying ? 'playing' : ''}" title="${isPlaying ? 'Pause' : 'Play'}">
-            ${isPlaying ? `
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5zm5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5z"/>
-              </svg>
-            ` : `
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
-              </svg>
-            `}
-          </button>
-          <button class="track-stop" title="Stop">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/>
-            </svg>
-          </button>
-          <button class="track-loop-toggle ${track.loop ? 'active' : ''}" title="Loop ${track.loop ? 'ON' : 'OFF'}">Loop ${track.loop ? 'ON' : 'OFF'}</button>
-          <button class="track-delete" title="Delete">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-              <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-            </svg>
-          </button>
-          <div class="track-volume-container">
-            <svg class="volume-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/>
-              <path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/>
-              <path d="M8.707 11.182A4.486 4.486 0 0 0 10.025 8a4.486 4.486 0 0 0-1.318-3.182L8 5.525A3.489 3.489 0 0 1 9.025 8 3.49 3.49 0 0 1 8 10.475l.707.707zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z"/>
-            </svg>
-            <span class="volume-display">${Math.round(track.volume * 100)}</span>
-            <input type="range" class="track-volume" min="0" max="1" step="0.01" value="${track.volume}" />
-          </div>
-            <button class="track-seek-toggle" title="Toggle seek bar">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M8 3.5L4 7h8l-4-3.5z"/>
-            </svg>
-          </button>
-          <div class="track-seek-container" style="display: none;">
-            <input type="range" class="track-seek" min="0" max="100" value="${seekPercent}" />
-            <span class="track-time">${currentTime} / ${duration}</span>
-          </div>
-          <div class="track-url-container" style="display: none;">
-            <input type="text" class="track-url-input" value="${track.url}" placeholder="YouTube URL" />
-            <button class="track-url-reload-btn" title="Reload track with new URL">Reload</button>
-          </div>
-        </div>
-      </div>
-      <div class="track-player-container"></div>
-    `;
-  }
-
-  return trackDiv;
+      <label class="ch__vol">
+        <span class="visually-hidden">Volume for ${title}</span>
+        <span class="ch__vol-icon" aria-hidden="true">${icons.volume}</span>
+        <input class="slider" type="range" min="0" max="100" step="1" value="${vol}" style="--v:${vol}%" data-action="volume"${usable ? '' : ' disabled'} />
+        <span class="ch__volnum" aria-hidden="true">${vol}</span>
+      </label>
+    </li>`;
 }
 
-/**
- * Update an existing track element
- */
-export function updateTrackElement(trackElement: HTMLElement, track: Track): void {
-  const playPauseBtn = trackElement.querySelector('.track-play-pause') as HTMLButtonElement;
-  const seekBar = trackElement.querySelector('.track-seek') as HTMLInputElement;
-  const timeDisplay = trackElement.querySelector('.track-time') as HTMLSpanElement;
-  const loopToggle = trackElement.querySelector('.track-loop-toggle') as HTMLButtonElement;
+/** Update the live parts of a row in place, so focus and slider drags survive. */
+export function patchChannelRow(li: HTMLElement, track: Track): void {
+  const playing = track.state === 'playing';
+  li.classList.toggle('is-playing', playing);
+  li.classList.toggle('is-paused', track.state === 'paused');
 
-  if (playPauseBtn) {
-    const isPlaying = track.state === 'playing';
-    playPauseBtn.innerHTML = isPlaying ? `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5zm5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5z"/>
-      </svg>
-    ` : `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
-      </svg>
-    `;
-    playPauseBtn.title = isPlaying ? 'Pause' : 'Play';
-    playPauseBtn.classList.toggle('playing', isPlaying);
+  const state = li.querySelector<HTMLElement>('.ch__state');
+  if (state) {
+    const { label, tone } = stateInfo(track);
+    state.textContent = label;
+    state.className = `ch__state tone-${tone}`;
   }
 
-  if (seekBar && track.duration) {
-    // Only update the seek bar if the user is not currently interacting with it
-    if (!seekBar.dataset.seeking) {
-      const seekPercent = (track.currentTime / track.duration) * 100;
-      seekBar.value = seekPercent.toString();
-    }
+  const toggle = li.querySelector<HTMLButtonElement>('.ch__toggle');
+  if (toggle && toggle.classList.contains('is-on') !== playing) {
+    toggle.classList.toggle('is-on', playing);
+    toggle.innerHTML = playing ? icons.pause : icons.play;
+    toggle.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} ${trackTitle(track)}`);
   }
 
-  if (timeDisplay) {
-    const currentTime = formatTime(track.currentTime);
-    const duration = formatTime(track.duration || 0);
-    timeDisplay.textContent = `${currentTime} / ${duration}`;
+  const vol = li.querySelector<HTMLInputElement>('input[data-action="volume"]');
+  const volNum = li.querySelector<HTMLElement>('.ch__volnum');
+  const v = Math.round(track.volume * 100);
+  if (vol) {
+    if (document.activeElement !== vol) vol.value = String(v);
+    vol.style.setProperty('--v', `${v}%`);
   }
-
-  if (loopToggle) {
-    loopToggle.textContent = `Loop ${track.loop ? 'ON' : 'OFF'}`;
-    loopToggle.classList.toggle('active', track.loop);
-  }
+  if (volNum) volNum.textContent = String(v);
 }
 
-/**
- * Render all tracks
- */
-export function renderTracks(
-  playlistManager: PlaylistManager,
-  playlistContainer: HTMLElement
-): void {
-  playlistContainer.innerHTML = '';
-  const tracks = playlistManager.getTracks();
-  
-  for (const track of tracks) {
-    const trackElement = createTrackElement(track);
-    playlistContainer.appendChild(trackElement);
-  }
-}
-
-/**
- * Update the global play/pause button
- */
-export function updateGlobalPlayPauseButton(
-  playlistManager: PlaylistManager,
-  button: HTMLButtonElement
-): void {
-  const hasPlaying = playlistManager.hasPlayingTracks();
-  button.textContent = hasPlaying ? 'Pause All' : 'Play All';
-}
-
-/**
- * Render saved playlists
- */
-export function renderSavedPlaylists(
-  playlists: PersistedPlaylist[],
-  container: HTMLElement
-): void {
-  container.innerHTML = '';
-
+/** Render the saved mixes list. */
+export function renderSavedPlaylists(playlists: PersistedPlaylist[], container: HTMLElement): void {
   if (playlists.length === 0) {
-    container.innerHTML = '<li style="color: var(--text-muted); padding: 0.5rem;">No saved playlists</li>';
+    container.innerHTML = '<li class="mix mix--empty">Saved mixes appear here.</li>';
     return;
   }
-
-  for (const playlist of playlists) {
-    const li = document.createElement('li');
-    li.className = 'saved-playlist-item';
-    li.innerHTML = `
-      <span class="saved-playlist-name">${playlist.name}</span>
-      <div class="saved-playlist-actions">
-        <button class="load-btn" data-playlist-name="${playlist.name}">Load</button>
-        <button class="delete-btn" data-playlist-name="${playlist.name}">Delete</button>
-      </div>
-    `;
-    container.appendChild(li);
-  }
+  container.innerHTML = playlists
+    .map((p) => {
+      const name = esc(p.name);
+      return `
+        <li class="mix">
+          <span class="mix__text">
+            <span class="mix__name">${name}</span>
+            <span class="mix__count">${p.urls.length} channel${p.urls.length === 1 ? '' : 's'}</span>
+          </span>
+          <button class="btn btn--quiet btn--small" type="button" data-mix-action="load" data-playlist-name="${name}" aria-label="Load mix ${name}">Load</button>
+          <button class="icon-btn" type="button" data-mix-action="delete" data-playlist-name="${name}" aria-label="Delete mix ${name}">${icons.trash}</button>
+        </li>`;
+    })
+    .join('');
 }
 
-/**
- * Show a modal dialog for replace/append choice
- */
-export function showReplaceAppendModal(
-  message: string
-): Promise<'replace' | 'append' | 'cancel'> {
+/** Ask whether a loaded mix replaces or joins the current channels. */
+export function showReplaceAppendModal(message: string): Promise<'replace' | 'append' | 'cancel'> {
   return new Promise((resolve) => {
+    const opener = document.activeElement as HTMLElement | null;
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
-
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.innerHTML = `
-      <h3>Load Playlist</h3>
-      <p>${message}</p>
-      <div class="modal-actions">
-        <button class="secondary cancel-btn">Cancel</button>
-        <button class="secondary append-btn">Append</button>
-        <button class="primary replace-btn">Replace</button>
-      </div>
-    `;
-
-    overlay.appendChild(modal);
+    overlay.innerHTML = `
+      <div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalBody">
+        <h2 id="modalTitle" class="modal__title">Load this mix?</h2>
+        <p id="modalBody" class="modal__body">${esc(message)}</p>
+        <div class="modal__actions">
+          <button class="btn btn--quiet" type="button" data-choice="cancel">Cancel</button>
+          <button class="btn" type="button" data-choice="append">Add to current</button>
+          <button class="btn btn--primary" type="button" data-choice="replace">Replace current</button>
+        </div>
+      </div>`;
     document.body.appendChild(overlay);
 
-    const cleanup = () => {
-      document.body.removeChild(overlay);
+    const finish = (choice: 'replace' | 'append' | 'cancel') => {
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      opener?.focus();
+      resolve(choice);
     };
-
-    modal.querySelector('.replace-btn')?.addEventListener('click', () => {
-      cleanup();
-      resolve('replace');
-    });
-
-    modal.querySelector('.append-btn')?.addEventListener('click', () => {
-      cleanup();
-      resolve('append');
-    });
-
-    modal.querySelector('.cancel-btn')?.addEventListener('click', () => {
-      cleanup();
-      resolve('cancel');
-    });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        finish('cancel');
+      } else if (e.key === 'Tab') {
+        const buttons = Array.from(overlay.querySelectorAll<HTMLButtonElement>('button'));
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
 
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) {
-        cleanup();
-        resolve('cancel');
-      }
+      const target = e.target as HTMLElement;
+      if (target === overlay) return finish('cancel');
+      const choice = target.closest<HTMLElement>('[data-choice]')?.dataset.choice;
+      if (choice === 'replace' || choice === 'append' || choice === 'cancel') finish(choice);
     });
+
+    overlay.querySelector<HTMLButtonElement>('[data-choice="replace"]')?.focus();
   });
 }
 
-/**
- * Show an error message
- */
+let errorTimer: number | null = null;
+
+/** Show a message in the status line for five seconds. */
 export function showError(element: HTMLElement, message: string): void {
   element.textContent = message;
-  setTimeout(() => {
+  if (errorTimer !== null) clearTimeout(errorTimer);
+  errorTimer = window.setTimeout(() => {
     element.textContent = '';
+    errorTimer = null;
   }, 5000);
 }
 
-/**
- * Copy text to clipboard
- */
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
@@ -286,4 +274,3 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     return false;
   }
 }
-

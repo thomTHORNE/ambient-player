@@ -1,59 +1,235 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-empty="true" data-live="false">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Audio Playlist - Modern Player</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Ambient Player — multi-channel YouTube audio mixer</title>
+  <meta name="description" content="Mix several YouTube streams as audio, each with its own volume and repeat, and save or share the mix.">
+  <meta name="theme-color" content="#0B0F10">
+  <link rel="icon" href="assets/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
-<body class="dark">
-  <main class="app">
-    <header class="app-header">
-      <h1>YouTube Audio Playlist</h1>
-      
-      <div class="input-group">
-        <input 
-          id="urlInput" 
-          type="text" 
-          placeholder="Paste full YouTube URL" 
-          aria-label="YouTube URL input"
-        />
-        <button id="addButton">Add to playlist</button>
-      </div>
-      
-      <p id="inputError" class="error-message" aria-live="polite"></p>
-      
-      <div class="global-controls">
-        <button id="globalPlayPause">Play All</button>
-        <button id="shareButton">Share Playlist</button>
+
+<body>
+  <a class="skip-link" href="#stage">Skip to the player</a>
+
+  <!-- The focused channel's artwork, blurred and dimmed, as the backdrop. -->
+  <div class="backdrop" aria-hidden="true">
+    <img id="backdropImg" class="backdrop__img" alt="" />
+  </div>
+
+  <div class="app">
+    <!-- ============ Brand ============ -->
+    <header class="brand">
+      <span class="brand__tile" aria-hidden="true">
+        <svg viewBox="0 0 84.6 84.6">
+          <path d="M4.3 28.7C21 18.4 37.7 7.3 54.3 3.8m20.8 15.1c-24.3-8.1-48.7 7.8-73 21.1m80.1-2.8C56.6 21.8 30.9 35.8 5.3 48.3c-.9.4-1.7.8-2.6 1.3m78.7 2.2c-24.4-15.7-48.9-5-73.3 5.4l-2.7 1.2m70.9 5.4c-21.3-12-42.6-5.4-63.8 2.1-.7.3-1.5.5-2.2.8m56.9 7.2c-15.7-6.3-31.4-3.8-47.2.4-.5.1-1 .3-1.6.4M42.3 2C20 2 2 20 2 42.3s18 40.3 40.3 40.3c22.2 0 40.3-18 40.3-40.3S64.5 2 42.3 2z" />
+        </svg>
+      </span>
+      <div class="brand__text">
+        <h1 class="brand__title">Ambient Player</h1>
+        <p class="brand__sub"><span id="statusCode" class="brand__code">Unsaved mix</span><span id="statusLine">No channels</span></p>
       </div>
     </header>
 
-    <section class="playlists-section">
-      <h2>Saved Playlists</h2>
-      <div class="playlist-save">
-        <input 
-          id="playlistNameInput" 
-          type="text" 
-          placeholder="Playlist name" 
-          aria-label="Playlist name input"
-        />
-        <button id="savePlaylistButton">Save / Update playlist</button>
+    <!-- ============ Now playing ============ -->
+    <main id="stage" class="now" tabindex="-1" aria-labelledby="stageTitle">
+      <figure class="art" id="art" data-state="empty">
+        <img id="artImg" class="art__img" alt="" />
+        <div class="art__empty">
+          <span class="art__empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>
+          </span>
+          <span>Add a YouTube link to start the mix</span>
+        </div>
+      </figure>
+
+      <div class="now__meta">
+        <p class="now__eyebrow"><span id="stageIndex">No channel selected</span><span id="stageState" class="pill tone-idle">Standby</span></p>
+        <h2 id="stageTitle" class="now__title">Nothing playing yet</h2>
+        <p id="stageArtist" class="now__artist">Each YouTube link becomes a channel with its own volume.</p>
+        <div class="now__tools">
+          <details id="retask" class="retask">
+            <summary>Change link</summary>
+            <div class="field-row">
+              <label class="field">
+                <span class="field__label">New YouTube link</span>
+                <input id="retaskInput" type="url" inputmode="url" autocomplete="off" spellcheck="false" disabled />
+              </label>
+              <button id="retaskButton" class="btn" type="button" disabled>Load link</button>
+            </div>
+          </details>
+          <button id="removeButton" class="text-btn" type="button" disabled>Remove channel</button>
+        </div>
       </div>
-      <ul id="savedPlaylistsList" class="saved-playlists"></ul>
+    </main>
+
+    <!-- ============ Status + output (right) ============ -->
+    <aside class="side side--right" aria-label="Status">
+      <section class="panel status" aria-labelledby="statusTitle">
+        <h2 id="statusTitle" class="visually-hidden">Mix status</h2>
+        <dl class="rows">
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-4l-3 8-4-16-3 8H3"/></svg>Playback</dt>
+            <dd><span id="statPlayback" class="pill tone-idle">Standby</span></dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>Channels</dt>
+            <dd id="telChannels">0</dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/></svg>Playing now</dt>
+            <dd id="telLive">0</dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11M6.5 21h11"/><path d="M7.5 3c0 5 9 5 9 9s-9 4-9 9M16.5 3c0 5-9 5-9 9s9 4 9 9"/></svg>Duration</dt>
+            <dd id="statDur">—</dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>Repeat</dt>
+            <dd><button id="loopSwitch" class="pill pill--btn tone-idle" type="button" aria-pressed="false" aria-label="Repeat this channel" disabled>Off</button></dd>
+          </div>
+          <div class="row">
+            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>Source</dt>
+            <dd>YouTube</dd>
+          </div>
+        </dl>
+        <div class="status__actions">
+          <button id="globalPlayPause" class="btn" type="button" disabled>Play all</button>
+          <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
+        </div>
+      </section>
+
+      <section class="panel output" aria-labelledby="outputTitle">
+        <h2 id="outputTitle" class="card__label">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+          Channel volume
+        </h2>
+        <div class="output__body">
+          <div>
+            <p class="output__value"><span id="volumeReadout">—</span></p>
+            <p id="volumeDb" class="output__db">—</p>
+          </div>
+          <div id="volumeBars" class="output__bars" aria-hidden="true"></div>
+        </div>
+        <label class="visually-hidden" for="volumeInput">Volume of this channel</label>
+        <input id="volumeInput" class="slider" type="range" min="0" max="100" step="1" value="0" style="--v:0%" disabled />
+      </section>
+    </aside>
+
+    <!-- ============ Deck (bottom) ============ -->
+    <section class="deck" aria-label="Playback">
+      <div class="deck__times">
+        <div class="card time">
+          <p class="card__label">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+            Elapsed
+          </p>
+          <p id="stageClock" class="time__value" role="timer" aria-live="off">
+            <span data-clock>00</span><i>:</i><span data-clock>00</span><i>:</i><span data-clock>00</span>
+          </p>
+        </div>
+        <div class="card time">
+          <p class="card__label">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5h4"/><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5 15 10.5"/></svg>
+            Remaining
+          </p>
+          <p id="statRem" class="time__value time__value--quiet">00:00:00</p>
+        </div>
+      </div>
+
+      <div id="scrub" class="card timeline" style="--p:0">
+        <div class="timeline__head">
+          <p class="card__label">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-4l-3 8-4-16-3 8H3"/></svg>
+            Timeline
+          </p>
+          <p id="scrubTime" class="timeline__time">— / —</p>
+        </div>
+        <div class="timeline__track">
+          <div class="timeline__rail" aria-hidden="true">
+            <span class="timeline__fill"></span>
+            <span class="timeline__knob"></span>
+          </div>
+          <label class="visually-hidden" for="seekInput">Seek in this channel</label>
+          <input id="seekInput" class="timeline__input" type="range" min="0" max="1000" step="1" value="0" disabled />
+        </div>
+        <div class="timeline__ticks" aria-hidden="true">
+          <span data-tick="0">—</span>
+          <span data-tick="0.25">—</span>
+          <span data-tick="0.5">—</span>
+          <span data-tick="0.75">—</span>
+          <span data-tick="1">—</span>
+        </div>
+      </div>
+
+      <div class="transport" role="group" aria-label="Transport">
+        <button id="prevButton" class="tile-btn" type="button" title="Previous channel ( [ )" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6v12l-9-6z"/><path d="M6 6v12"/></svg>
+          <span>Previous</span>
+        </button>
+        <button id="playButton" class="tile-btn tile-btn--primary" type="button" title="Play or pause (Space)" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6a.8.8 0 0 0 1.2.7l10.9-6.8a.8.8 0 0 0 0-1.4L9.2 4.5A.8.8 0 0 0 8 5.2z" fill="currentColor"/></svg>
+          <span id="playLabel">Play</span>
+        </button>
+        <button id="nextButton" class="tile-btn" type="button" title="Next channel ( ] )" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6v12l9-6z"/><path d="M18 6v12"/></svg>
+          <span>Next</span>
+        </button>
+        <button id="resetButton" class="tile-btn" type="button" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          <span>Stop</span>
+        </button>
+      </div>
     </section>
 
-    <section id="playlist" class="playlist"></section>
-  </main>
+    <!-- ============ Channels + mixes (left) ============ -->
+    <aside class="side side--left" aria-label="Mix">
+      <section class="panel channels" aria-labelledby="channelsTitle">
+        <header class="panel__head">
+          <h2 id="channelsTitle" class="panel__title">Channels</h2>
+          <span id="channelCount" class="panel__count">0</span>
+        </header>
+        <div class="add">
+          <label class="visually-hidden" for="urlInput">YouTube link</label>
+          <span class="add__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5"/><path d="M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5"/></svg>
+          </span>
+          <input id="urlInput" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Paste a YouTube link" />
+          <button id="addButton" class="add__btn" type="button" aria-label="Add channel">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <p id="inputError" class="status-msg" role="status" aria-live="polite"></p>
+        <ol id="playlist" class="channel-list"></ol>
+        <p class="channel-empty">No channels yet. Paste a link above; each one plays alongside the others.</p>
+      </section>
 
-  <!-- YouTube IFrame API -->
+      <section class="panel mixes" aria-labelledby="mixesTitle">
+        <header class="panel__head">
+          <h2 id="mixesTitle" class="panel__title">Saved mixes</h2>
+        </header>
+        <div class="field-row">
+          <label class="field">
+            <span class="visually-hidden">Mix name</span>
+            <input id="playlistNameInput" type="text" autocomplete="off" placeholder="Name this mix" />
+          </label>
+          <button id="savePlaylistButton" class="btn" type="button">Save</button>
+        </div>
+        <ul id="savedPlaylistsList" class="mix-list"></ul>
+      </section>
+    </aside>
+  </div>
+
+  <!-- Hidden YouTube players, one per channel -->
+  <div id="playerBay" class="player-bay" aria-hidden="true"></div>
+
   <script src="https://www.youtube.com/iframe_api"></script>
-  
-  <!-- Bundled application code (no modules, works without server) -->
   <script src="app.js"></script>
 </body>
-</html>
 
+</html>

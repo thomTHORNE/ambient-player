@@ -1,351 +1,416 @@
 /**
- * Main entry point for the YouTube Audio Playlist application
+ * Main entry point.
+ *
+ * The app mixes several YouTube streams at once. One channel at a time is
+ * "focused": it fills the centre of the screen and the deck controls it.
+ * Every channel stays playable from the channel list.
  */
 import { PlaylistManager } from './playlist.js';
 import { waitForYouTubeAPI, createYouTubePlayerFactory, extractVideoId, isValidYouTubeUrl, } from './youtubePlayer.js';
 import { saveOrUpdatePlaylist, deletePlaylist, getLastPlaylist, getAllPlaylists, } from './storage.js';
 import { encodePlaylistToUrl, decodePlaylistFromLocation, clearPlaylistHash, } from './shareLinks.js';
-import { createTrackElement, updateTrackElement, updateGlobalPlayPauseButton, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, formatTime, } from './ui.js';
-// Global state
+import { channelRowHtml, patchChannelRow, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, clockParts, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
 const playlistManager = new PlaylistManager();
 let playerFactory;
-let updateInterval = null;
-// DOM elements
-const urlInput = document.getElementById('urlInput');
-const addButton = document.getElementById('addButton');
-const inputError = document.getElementById('inputError');
-const globalPlayPauseButton = document.getElementById('globalPlayPause');
-const shareButton = document.getElementById('shareButton');
-const playlistNameInput = document.getElementById('playlistNameInput');
-const savePlaylistButton = document.getElementById('savePlaylistButton');
-const savedPlaylistsList = document.getElementById('savedPlaylistsList');
-const playlistContainer = document.getElementById('playlist');
-/**
- * Add a track from a URL
- */
-async function addTrackFromUrl(url) {
-    // Validate URL
-    if (!isValidYouTubeUrl(url)) {
-        showError(inputError, 'No video found for the provided URL.');
-        return;
-    }
-    const videoId = extractVideoId(url);
-    if (!videoId) {
-        showError(inputError, 'No video found for the provided URL.');
-        return;
-    }
-    // Clear input and error
-    urlInput.value = '';
-    inputError.textContent = '';
-    // Create track
-    const track = playlistManager.addTrack(url, videoId);
-    // Render track
-    const trackElement = createTrackElement(track);
-    playlistContainer.appendChild(trackElement);
-    // Get player container
-    const playerContainer = trackElement.querySelector('.track-player-container');
-    // Create player
-    const controller = playerFactory.createPlayer(track.id, playerContainer, videoId, (trackId, meta) => {
-        // On metadata loaded
-        playlistManager.updateTrack(trackId, {
-            meta,
-            state: 'paused',
-            duration: meta.durationSeconds
-        });
-        const updatedTrack = playlistManager.getTrack(trackId);
-        if (updatedTrack) {
-            const element = document.querySelector(`[data-track-id="${trackId}"]`);
-            if (element) {
-                // Remove loading class
-                element.classList.remove('loading');
-                // Get the track-main container
-                const trackMain = element.querySelector('.track-main');
-                if (trackMain) {
-                    // Replace the loading message with full track UI
-                    trackMain.innerHTML = `
-              <div class="track-title">${meta.title}</div>
-              <div class="track-controls">
-                <button class="track-play-pause" title="Play">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
-                  </svg>
-                </button>
-                <button class="track-stop" title="Stop">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/>
-                  </svg>
-                </button>
-                <button class="track-loop-toggle" title="Loop OFF">Loop OFF</button>
-                <button class="track-delete" title="Delete">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                    <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-                  </svg>
-                </button>
-                <div class="track-volume-container">
-                  <svg class="volume-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/>
-                    <path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/>
-                    <path d="M8.707 11.182A4.486 4.486 0 0 0 10.025 8a4.486 4.486 0 0 0-1.318-3.182L8 5.525A3.489 3.489 0 0 1 9.025 8 3.49 3.49 0 0 1 8 10.475l.707.707zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z"/>
-                  </svg>
-                  <span class="volume-display">${Math.round(updatedTrack.volume * 100)}</span>
-                  <input type="range" class="track-volume" min="0" max="1" step="0.01" value="${updatedTrack.volume}" />
-                </div>
-                 <button class="track-seek-toggle" title="Toggle seek bar">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 3.5L4 7h8l-4-3.5z"/>
-                  </svg>
-                </button>
-                <div class="track-seek-container" style="display: none;">
-                  <input type="range" class="track-seek" min="0" max="100" value="0" />
-                  <span class="track-time">0:00 / ${formatTime(meta.durationSeconds || 0)}</span>
-                </div>
-                <div class="track-url-container" style="display: none;">
-                  <input type="text" class="track-url-input" value="${updatedTrack.url}" placeholder="YouTube URL" />
-                  <button class="track-url-reload-btn" title="Reload track with new URL">Reload</button>
-                </div>
-              </div>
-            `;
-                }
-                // Add thumbnail image if it doesn't exist
-                if (!element.querySelector('img')) {
-                    const img = document.createElement('img');
-                    img.src = meta.thumbnailUrl;
-                    img.alt = 'Track thumbnail';
-                    element.insertBefore(img, element.firstChild);
-                }
-                attachTrackEventListeners(element, trackId);
-            }
-        }
-    }, (trackId, state) => {
-        // On state change
-        playlistManager.updateTrack(trackId, { state });
-        updateGlobalPlayPauseButton(playlistManager, globalPlayPauseButton);
-        // Update the UI immediately for this track
-        const trackElement = document.querySelector(`[data-track-id="${trackId}"]`);
-        if (trackElement) {
-            const updatedTrack = playlistManager.getTrack(trackId);
-            if (updatedTrack) {
-                updateTrackElement(trackElement, updatedTrack);
-            }
-        }
-        // Start update interval when playing
-        if (state === 'playing') {
-            startUpdateInterval();
-        }
-        // Handle loop on ended
-        if (state === 'paused') {
-            const track = playlistManager.getTrack(trackId);
-            const controller = playlistManager.getController(trackId);
-            if (track && controller && track.loop) {
-                const currentTime = controller.getCurrentTime();
-                const duration = controller.getDuration();
-                // If at the end (within 1 second of duration), loop
-                // Use a larger threshold to catch the ended state reliably
-                if (duration > 0 && currentTime >= duration - 1) {
-                    // Small delay to ensure YouTube player is ready
-                    setTimeout(() => {
-                        controller.seekTo(0);
-                        controller.play();
-                    }, 100);
-                }
-            }
-        }
-    }, (trackId, error) => {
-        // On error
-        playlistManager.updateTrack(trackId, { state: 'error', error });
-        const updatedTrack = playlistManager.getTrack(trackId);
-        if (updatedTrack) {
-            const element = document.querySelector(`[data-track-id="${trackId}"]`);
-            if (element) {
-                // Update the element to show error state without replacing it
-                element.classList.remove('loading');
-                element.classList.add('error');
-                // Get the track-main container
-                const trackMain = element.querySelector('.track-main');
-                if (trackMain) {
-                    trackMain.innerHTML = `
-              <div class="track-title">Error loading video</div>
-              <div class="track-error-message">${error.message}</div>
-              <div class="track-controls">
-                <button class="track-delete">Delete</button>
-              </div>
-            `;
-                }
-                attachTrackEventListeners(element, trackId);
-            }
-        }
-    });
-    playlistManager.setController(track.id, controller);
-    attachTrackEventListeners(trackElement, track.id);
-    // Start update interval if not running
-    startUpdateInterval();
+let pollTimer = null;
+let focusedId = null;
+let mixName = null;
+let seeking = false;
+const VOLUME_BARS = 14;
+// ---------------------------------------------------------------------------
+// DOM
+// ---------------------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const urlInput = $('urlInput');
+const addButton = $('addButton');
+const inputError = $('inputError');
+const globalPlayPauseButton = $('globalPlayPause');
+const loopSwitch = $('loopSwitch');
+const shareButton = $('shareButton');
+const playlistNameInput = $('playlistNameInput');
+const savePlaylistButton = $('savePlaylistButton');
+const savedPlaylistsList = $('savedPlaylistsList');
+const channelList = $('playlist');
+const channelCount = $('channelCount');
+const playerBay = $('playerBay');
+const statusCode = $('statusCode');
+const statusLine = $('statusLine');
+const telChannels = $('telChannels');
+const telLive = $('telLive');
+const statPlayback = $('statPlayback');
+const statDur = $('statDur');
+const backdropImg = $('backdropImg');
+const art = $('art');
+const artImg = $('artImg');
+const stageIndex = $('stageIndex');
+const stageState = $('stageState');
+const stageArtist = $('stageArtist');
+const stageTitle = $('stageTitle');
+const retaskInput = $('retaskInput');
+const retaskButton = $('retaskButton');
+const retaskBox = $('retask');
+const removeButton = $('removeButton');
+const clockEl = $('stageClock');
+const clockFields = Array.from(clockEl.querySelectorAll('[data-clock]'));
+const statRem = $('statRem');
+const scrub = $('scrub');
+const seekInput = $('seekInput');
+const scrubTime = $('scrubTime');
+const scrubTicks = Array.from(document.querySelectorAll('[data-tick]'));
+const prevButton = $('prevButton');
+const playButton = $('playButton');
+const nextButton = $('nextButton');
+const resetButton = $('resetButton');
+const volumeInput = $('volumeInput');
+const volumeBars = $('volumeBars');
+const volumeReadout = $('volumeReadout');
+const volumeDb = $('volumeDb');
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function focusedTrack() {
+    return focusedId ? playlistManager.getTrack(focusedId) : undefined;
 }
-/**
- * Attach event listeners to a track element
- */
-function attachTrackEventListeners(trackElement, trackId) {
-    const playPauseBtn = trackElement.querySelector('.track-play-pause');
-    const stopBtn = trackElement.querySelector('.track-stop');
-    const seekToggleBtn = trackElement.querySelector('.track-seek-toggle');
-    const seekContainer = trackElement.querySelector('.track-seek-container');
-    const seekBar = trackElement.querySelector('.track-seek');
-    const volumeSlider = trackElement.querySelector('.track-volume');
-    const loopToggle = trackElement.querySelector('.track-loop-toggle');
-    const deleteBtn = trackElement.querySelector('.track-delete');
-    const controller = playlistManager.getController(trackId);
-    if (!controller)
+function rowFor(id) {
+    return channelList.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
+}
+function liveCount() {
+    return playlistManager.getTracks().filter((t) => t.state === 'playing').length;
+}
+function setPill(el, label, tone, extra = '') {
+    el.textContent = label;
+    el.className = `pill${extra} tone-${tone}`;
+}
+function buildStaticMeters() {
+    volumeBars.innerHTML = Array.from({ length: VOLUME_BARS }, (_, i) => `<span style="--i:${i};--n:${VOLUME_BARS}"></span>`).join('');
+}
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function renderChannels() {
+    const tracks = playlistManager.getTracks();
+    channelList.innerHTML = tracks.map((t, i) => channelRowHtml(t, i, t.id === focusedId)).join('');
+    channelCount.textContent = String(tracks.length);
+    document.documentElement.dataset.empty = String(tracks.length === 0);
+}
+function renderRow(id) {
+    const tracks = playlistManager.getTracks();
+    const index = tracks.findIndex((t) => t.id === id);
+    const row = rowFor(id);
+    if (index < 0 || !row)
         return;
-    // Play/Pause
-    playPauseBtn?.addEventListener('click', () => {
-        const track = playlistManager.getTrack(trackId);
-        if (!track)
-            return;
-        if (track.state === 'playing') {
-            controller.pause();
+    const hadFocus = row.contains(document.activeElement);
+    row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId);
+    if (hadFocus)
+        rowFor(id)?.querySelector('.ch__focus')?.focus();
+}
+function renderStatus() {
+    const tracks = playlistManager.getTracks();
+    const live = liveCount();
+    telChannels.textContent = String(tracks.length);
+    telLive.textContent = String(live);
+    document.documentElement.dataset.live = String(live > 0);
+    statusCode.textContent = mixName || 'Unsaved mix';
+    statusLine.textContent =
+        tracks.length === 0
+            ? 'No channels'
+            : live > 0
+                ? `${live} of ${tracks.length} playing`
+                : `${tracks.length} channel${tracks.length === 1 ? '' : 's'} on hold`;
+    if (tracks.length === 0)
+        setPill(statPlayback, 'Standby', 'idle');
+    else if (live > 0)
+        setPill(statPlayback, 'Playing', 'live');
+    else
+        setPill(statPlayback, 'On hold', 'idle');
+    globalPlayPauseButton.textContent = live > 0 ? 'Pause all' : 'Play all';
+    globalPlayPauseButton.disabled = tracks.length === 0;
+    shareButton.disabled = tracks.length === 0;
+}
+/** Fill the centre from the focused channel. changed=true fades the new channel in. */
+function renderStage(changed) {
+    const track = focusedTrack();
+    const tracks = playlistManager.getTracks();
+    const index = track ? tracks.indexOf(track) : -1;
+    const usable = !!track && (track.state === 'playing' || track.state === 'paused');
+    art.dataset.state = track ? track.state : 'empty';
+    stageIndex.textContent = track ? `Channel ${pad2(index + 1)} of ${pad2(tracks.length)}` : 'No channel selected';
+    if (track) {
+        const { label, tone } = stateInfo(track);
+        setPill(stageState, label, tone);
+    }
+    else {
+        setPill(stageState, 'Standby', 'idle');
+    }
+    const title = track ? trackTitle(track) : 'Nothing playing yet';
+    const artist = track
+        ? track.meta?.author || (track.state === 'error' ? 'Check the link or try another video' : 'YouTube')
+        : 'Each YouTube link becomes a channel with its own volume.';
+    if (changed) {
+        swapText(stageTitle, title);
+        swapText(stageArtist, artist, 60);
+    }
+    else {
+        stageTitle.textContent = title;
+        stageArtist.textContent = artist;
+    }
+    // Artwork: maxresdefault is true 16:9; hqdefault always exists but carries letterbox bars.
+    const src = track?.meta ? `https://img.youtube.com/vi/${track.meta.id}/maxresdefault.jpg` : '';
+    if (artImg.dataset.src !== src) {
+        artImg.dataset.src = src;
+        artImg.dataset.fallback = track?.meta?.thumbnailUrl || '';
+        artImg.classList.remove('is-letterboxed');
+        backdropImg.classList.remove('is-letterboxed');
+        if (src) {
+            artImg.src = src;
+            backdropImg.src = src;
         }
         else {
-            controller.play();
+            artImg.removeAttribute('src');
+            backdropImg.removeAttribute('src');
         }
-    });
-    // Stop
-    stopBtn?.addEventListener('click', () => {
-        const track = playlistManager.getTrack(trackId);
-        if (!track)
-            return;
-        controller.pause();
-        controller.seekTo(0);
-        playlistManager.updateTrack(trackId, { currentTime: 0 });
-        // Update the UI immediately
-        const updatedTrack = playlistManager.getTrack(trackId);
-        if (updatedTrack) {
-            updateTrackElement(trackElement, updatedTrack);
+        if (changed && src && !prefersReducedMotion()) {
+            art.animate([{ opacity: 0.4, transform: 'scale(0.985)' }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' });
         }
+    }
+    // Controls
+    playButton.disabled = !usable;
+    resetButton.disabled = !usable;
+    prevButton.disabled = tracks.length < 2;
+    nextButton.disabled = tracks.length < 2;
+    seekInput.disabled = !usable || !track?.duration;
+    volumeInput.disabled = !track || !usable;
+    retaskInput.disabled = !track;
+    retaskButton.disabled = !track;
+    removeButton.disabled = !track;
+    if (track && document.activeElement !== retaskInput)
+        retaskInput.value = track.url;
+    if (!track)
+        retaskBox.open = false;
+    const playing = track?.state === 'playing';
+    playButton.querySelector('svg').outerHTML = playing ? icons.pause : icons.play;
+    playButton.querySelector('span').textContent = playing ? 'Pause' : 'Play';
+    playButton.classList.toggle('is-on', !!playing);
+    playButton.setAttribute('aria-label', playing ? 'Pause this channel' : 'Play this channel');
+    const loopOn = !!track?.loop;
+    loopSwitch.disabled = !track;
+    loopSwitch.setAttribute('aria-pressed', String(loopOn));
+    setPill(loopSwitch, track ? (loopOn ? 'On' : 'Off') : '—', loopOn ? 'live' : 'idle', ' pill--btn');
+    renderVolume();
+    renderTime();
+}
+/** Clock, timeline and remaining time for the focused channel. */
+function renderTime() {
+    const track = focusedTrack();
+    const t = track ? track.currentTime : 0;
+    const d = track?.duration || 0;
+    const p = d > 0 ? Math.min(1, t / d) : 0;
+    const parts = clockParts(t);
+    clockFields.forEach((el, i) => {
+        if (el.textContent !== parts[i])
+            el.textContent = parts[i];
     });
-    // Seek bar toggle
-    seekToggleBtn?.addEventListener('click', () => {
-        if (seekContainer) {
-            const isHidden = seekContainer.style.display === 'none';
-            seekContainer.style.display = isHidden ? 'flex' : 'none';
-            // Also toggle URL container visibility
-            const urlContainer = trackElement.querySelector('.track-url-container');
-            if (urlContainer) {
-                urlContainer.style.display = isHidden ? 'flex' : 'none';
-            }
-            // Rotate the arrow icon
-            const svg = seekToggleBtn.querySelector('svg');
-            if (svg) {
-                svg.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
-            }
-        }
+    clockEl.setAttribute('aria-label', `Elapsed ${formatHMS(t)}`);
+    clockEl.classList.toggle('is-live', track?.state === 'playing');
+    statDur.textContent = d ? formatHMS(d) : '—';
+    statRem.textContent = formatHMS(d ? Math.max(0, d - t) : 0);
+    scrubTime.textContent = d ? `${formatHMS(t)} / ${formatHMS(d)}` : '— / —';
+    scrubTicks.forEach((el) => {
+        el.textContent = d ? formatHMS(d * Number(el.dataset.tick)) : '—';
     });
-    // Seek
-    // Track when user starts interacting with the seek bar
-    seekBar?.addEventListener('mousedown', () => {
-        if (seekBar)
-            seekBar.dataset.seeking = 'true';
-    });
-    seekBar?.addEventListener('touchstart', () => {
-        if (seekBar)
-            seekBar.dataset.seeking = 'true';
-    });
-    // Track when user stops interacting with the seek bar
-    seekBar?.addEventListener('mouseup', () => {
-        if (seekBar)
-            delete seekBar.dataset.seeking;
-    });
-    seekBar?.addEventListener('touchend', () => {
-        if (seekBar)
-            delete seekBar.dataset.seeking;
-    });
-    // Also remove on mouse leave to handle edge cases
-    seekBar?.addEventListener('mouseleave', () => {
-        if (seekBar)
-            delete seekBar.dataset.seeking;
-    });
-    // Handle seeking
-    seekBar?.addEventListener('input', () => {
-        const track = playlistManager.getTrack(trackId);
-        if (!track || !track.duration)
-            return;
-        const percent = parseFloat(seekBar.value);
-        const targetTime = (percent / 100) * track.duration;
-        controller.seekTo(targetTime);
-        playlistManager.updateTrack(trackId, { currentTime: targetTime });
-    });
-    // Volume
-    volumeSlider?.addEventListener('input', () => {
-        const volume = parseFloat(volumeSlider.value);
-        controller.setVolume(volume);
-        playlistManager.updateTrack(trackId, { volume });
-        // Update volume display
-        const volumeDisplay = trackElement.querySelector('.volume-display');
-        if (volumeDisplay) {
-            volumeDisplay.textContent = Math.round(volume * 100).toString();
-        }
-    });
-    // Loop toggle
-    loopToggle?.addEventListener('click', () => {
-        const track = playlistManager.getTrack(trackId);
-        if (!track)
-            return;
-        const newLoop = !track.loop;
-        playlistManager.updateTrack(trackId, { loop: newLoop });
-        loopToggle.textContent = `Loop ${newLoop ? 'ON' : 'OFF'}`;
-        loopToggle.classList.toggle('active', newLoop);
-    });
-    // Delete
-    deleteBtn?.addEventListener('click', () => {
-        playlistManager.removeTrack(trackId);
-        trackElement.remove();
-        updateGlobalPlayPauseButton(playlistManager, globalPlayPauseButton);
-        // Stop update interval if no tracks
-        if (playlistManager.getTracks().length === 0) {
-            stopUpdateInterval();
-        }
-    });
-    // URL Reload
-    const urlReloadBtn = trackElement.querySelector('.track-url-reload-btn');
-    urlReloadBtn?.addEventListener('click', () => {
-        const urlInput = trackElement.querySelector('.track-url-input');
-        if (!urlInput)
-            return;
-        const newUrl = urlInput.value.trim();
-        if (!newUrl)
-            return;
-        // Validate URL
-        if (!isValidYouTubeUrl(newUrl)) {
-            alert('Invalid YouTube URL. Please enter a valid YouTube video URL.');
-            return;
-        }
-        const newVideoId = extractVideoId(newUrl);
-        if (!newVideoId) {
-            alert('Could not extract video ID from URL.');
-            return;
-        }
-        reloadTrack(trackId, newUrl, newVideoId);
+    scrub.style.setProperty('--p', p.toFixed(5));
+    scrub.classList.toggle('is-live', track?.state === 'playing');
+    if (!seeking)
+        seekInput.value = String(Math.round(p * 1000));
+    seekInput.setAttribute('aria-valuetext', `${formatHMS(t)} of ${d ? formatHMS(d) : 'unknown'}`);
+}
+function renderVolume() {
+    const track = focusedTrack();
+    const v = track ? track.volume : 0;
+    const pct = Math.round(v * 100);
+    if (document.activeElement !== volumeInput)
+        volumeInput.value = String(pct);
+    volumeInput.style.setProperty('--v', `${pct}%`);
+    volumeInput.setAttribute('aria-valuetext', `${pct} percent`);
+    volumeReadout.textContent = track ? `${pct} %` : '—';
+    volumeDb.textContent = track ? formatDb(v) : 'No channel';
+    const lit = Math.round(v * VOLUME_BARS);
+    Array.from(volumeBars.children).forEach((bar, i) => {
+        bar.classList.toggle('is-on', i < lit);
     });
 }
-/**
- * Reload a track with a new URL
- */
-function reloadTrack(trackId, newUrl, newVideoId) {
-    const track = playlistManager.getTrack(trackId);
-    if (!track)
+function renderAll(changed = false) {
+    renderChannels();
+    renderStatus();
+    renderStage(changed);
+}
+function setFocus(id) {
+    if (id === focusedId)
         return;
-    const trackElement = document.querySelector(`[data-track-id="${trackId}"]`);
-    if (!trackElement)
-        return;
-    // Store current state
-    const currentVolume = track.volume;
-    const currentLoop = track.loop;
-    // Destroy old controller
-    const oldController = playlistManager.getController(trackId);
-    if (oldController) {
-        oldController.destroy();
+    const old = focusedId ? rowFor(focusedId) : null;
+    focusedId = id;
+    if (old) {
+        old.classList.remove('is-focus');
+        old.querySelector('.ch__focus')?.setAttribute('aria-current', 'false');
     }
-    // Update track to loading state
-    playlistManager.updateTrack(trackId, {
+    const row = id ? rowFor(id) : null;
+    if (row) {
+        row.classList.add('is-focus');
+        row.querySelector('.ch__focus')?.setAttribute('aria-current', 'true');
+    }
+    renderStage(true);
+}
+function stepFocus(dir) {
+    const tracks = playlistManager.getTracks();
+    if (tracks.length === 0)
+        return;
+    const i = tracks.findIndex((t) => t.id === focusedId);
+    setFocus(tracks[(i + dir + tracks.length) % tracks.length].id);
+}
+// ---------------------------------------------------------------------------
+// Playback loop
+// ---------------------------------------------------------------------------
+function poll() {
+    let anyPlaying = false;
+    for (const track of playlistManager.getTracks()) {
+        if (track.state !== 'playing')
+            continue;
+        anyPlaying = true;
+        const controller = playlistManager.getController(track.id);
+        if (!controller)
+            continue;
+        const duration = controller.getDuration();
+        playlistManager.updateTrack(track.id, {
+            currentTime: controller.getCurrentTime(),
+            duration: duration > 0 ? duration : track.duration,
+        });
+        if (track.meta && !track.meta.author)
+            fillAuthor(track.id);
+    }
+    renderTime();
+    if (!anyPlaying)
+        stopPolling();
+}
+/** YouTube reports the channel name only after playback starts: fill it in when it arrives. */
+function fillAuthor(id) {
+    const track = playlistManager.getTrack(id);
+    const author = playlistManager.getController(id)?.getAuthor();
+    if (!track?.meta || !author)
+        return;
+    playlistManager.updateTrack(id, { meta: { ...track.meta, author } });
+    renderRow(id);
+    if (id === focusedId)
+        swapText(stageArtist, author);
+}
+function startPolling() {
+    if (pollTimer === null)
+        pollTimer = window.setInterval(poll, 250);
+}
+function stopPolling() {
+    if (pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+}
+// ---------------------------------------------------------------------------
+// Channels
+// ---------------------------------------------------------------------------
+function createPlayerFor(trackId, videoId, keep) {
+    playerBay.querySelector(`[data-slot="${CSS.escape(trackId)}"]`)?.remove();
+    const slot = document.createElement('div');
+    slot.dataset.slot = trackId;
+    const inner = document.createElement('div');
+    slot.appendChild(inner);
+    playerBay.appendChild(slot);
+    const controller = playerFactory.createPlayer(trackId, inner, videoId, (id, meta) => {
+        playlistManager.updateTrack(id, {
+            meta,
+            state: 'paused',
+            duration: meta.durationSeconds,
+            ...(keep ? { volume: keep.volume, loop: keep.loop } : {}),
+        });
+        const track = playlistManager.getTrack(id);
+        if (track)
+            playlistManager.getController(id)?.setVolume(track.volume);
+        renderRow(id);
+        renderStatus();
+        if (id === focusedId)
+            renderStage(true);
+    }, (id, state) => onTrackState(id, state), (id, error) => {
+        playlistManager.updateTrack(id, { state: 'error', error });
+        renderRow(id);
+        renderStatus();
+        if (id === focusedId)
+            renderStage(true);
+    });
+    playlistManager.setController(trackId, controller);
+}
+function onTrackState(id, state) {
+    const before = playlistManager.getTrack(id);
+    if (!before || before.state === 'error')
+        return;
+    playlistManager.updateTrack(id, { state });
+    const controller = playlistManager.getController(id);
+    if (controller)
+        playlistManager.updateTrack(id, { currentTime: controller.getCurrentTime() });
+    const track = playlistManager.getTrack(id);
+    const row = rowFor(id);
+    if (row)
+        patchChannelRow(row, track);
+    renderStatus();
+    if (id === focusedId)
+        renderStage(false);
+    if (state === 'playing')
+        startPolling();
+    // The player reports the end of a video as a pause: restart it when repeat is on.
+    if (state === 'paused' && track.loop && controller) {
+        const duration = controller.getDuration();
+        if (duration > 0 && controller.getCurrentTime() >= duration - 1) {
+            setTimeout(() => {
+                controller.seekTo(0);
+                controller.play();
+            }, 100);
+        }
+    }
+}
+function addTrackFromUrl(url) {
+    const videoId = isValidYouTubeUrl(url) ? extractVideoId(url) : null;
+    if (!videoId) {
+        showError(inputError, 'That link has no YouTube video in it. Use a youtube.com/watch or youtu.be link.');
+        return false;
+    }
+    const track = playlistManager.addTrack(url, videoId);
+    createPlayerFor(track.id, videoId);
+    if (!focusedId)
+        focusedId = track.id;
+    return true;
+}
+function removeTrack(id) {
+    const index = playlistManager.getTracks().findIndex((t) => t.id === id);
+    playlistManager.removeTrack(id);
+    playerBay.querySelector(`[data-slot="${CSS.escape(id)}"]`)?.remove();
+    if (focusedId === id) {
+        const rest = playlistManager.getTracks();
+        focusedId = rest.length ? rest[Math.min(index, rest.length - 1)].id : null;
+        renderAll(true);
+    }
+    else {
+        renderAll(false);
+    }
+}
+function reloadTrack(id, newUrl) {
+    const track = playlistManager.getTrack(id);
+    const newVideoId = isValidYouTubeUrl(newUrl) ? extractVideoId(newUrl) : null;
+    if (!track || !newVideoId) {
+        showError(inputError, 'That link has no YouTube video in it. The channel was not changed.');
+        return;
+    }
+    const keep = { volume: track.volume, loop: track.loop };
+    playlistManager.getController(id)?.destroy();
+    playlistManager.updateTrack(id, {
         url: newUrl,
         videoId: newVideoId,
         state: 'loading',
@@ -354,377 +419,267 @@ function reloadTrack(trackId, newUrl, newVideoId) {
         duration: undefined,
         error: undefined,
     });
-    // Update UI to loading state
-    trackElement.classList.add('loading');
-    trackElement.classList.remove('error');
-    const trackMain = trackElement.querySelector('.track-main');
-    if (trackMain) {
-        trackMain.innerHTML = '<div class="track-loading">Loading...</div>';
-    }
-    // Remove old thumbnail
-    const oldImg = trackElement.querySelector('img');
-    if (oldImg) {
-        oldImg.remove();
-    }
-    // Get player container
-    const playerContainer = trackElement.querySelector('.track-player-container');
-    if (!playerContainer)
+    createPlayerFor(id, newVideoId, keep);
+    renderRow(id);
+    renderStatus();
+    if (id === focusedId)
+        renderStage(true);
+}
+function togglePlay(id) {
+    const track = playlistManager.getTrack(id);
+    const controller = playlistManager.getController(id);
+    if (!track || !controller)
         return;
-    // Clear player container
-    playerContainer.innerHTML = '';
-    // Create new player
-    const controller = playerFactory.createPlayer(trackId, playerContainer, newVideoId, (trackId, meta) => {
-        // On metadata loaded
-        playlistManager.updateTrack(trackId, {
-            meta,
-            state: 'paused',
-            duration: meta.durationSeconds,
-            volume: currentVolume,
-            loop: currentLoop,
-        });
-        const updatedTrack = playlistManager.getTrack(trackId);
-        if (updatedTrack) {
-            const element = document.querySelector(`[data-track-id="${trackId}"]`);
-            if (element) {
-                // Remove loading class
-                element.classList.remove('loading');
-                // Get the track-main container
-                const trackMain = element.querySelector('.track-main');
-                if (trackMain) {
-                    // Replace the loading message with full track UI
-                    trackMain.innerHTML = `
-              <div class="track-title">${meta.title}</div>
-              <div class="track-controls">
-                <button class="track-play-pause" title="Play">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M11.596 8.697l-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
-                  </svg>
-                </button>
-                <button class="track-stop" title="Stop">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/>
-                  </svg>
-                </button>
-                <button class="track-loop-toggle ${currentLoop ? 'active' : ''}" title="Loop ${currentLoop ? 'ON' : 'OFF'}">Loop ${currentLoop ? 'ON' : 'OFF'}</button>
-                <button class="track-delete" title="Delete">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                    <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-                  </svg>
-                </button>
-                <div class="track-volume-container">
-                  <svg class="volume-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/>
-                    <path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/>
-                    <path d="M8.707 11.182A4.486 4.486 0 0 0 10.025 8a4.486 4.486 0 0 0-1.318-3.182L8 5.525A3.489 3.489 0 0 1 9.025 8 3.49 3.49 0 0 1 8 10.475l.707.707zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z"/>
-                  </svg>
-                  <span class="volume-display">${Math.round(updatedTrack.volume * 100)}</span>
-                  <input type="range" class="track-volume" min="0" max="1" step="0.01" value="${updatedTrack.volume}" />
-                </div>
-                 <button class="track-seek-toggle" title="Toggle seek bar">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 3.5L4 7h8l-4-3.5z"/>
-                  </svg>
-                </button>
-                <div class="track-seek-container" style="display: none;">
-                  <input type="range" class="track-seek" min="0" max="100" value="0" />
-                  <span class="track-time">0:00 / ${formatTime(meta.durationSeconds || 0)}</span>
-                </div>
-                <div class="track-url-container" style="display: none;">
-                  <input type="text" class="track-url-input" value="${updatedTrack.url}" placeholder="YouTube URL" />
-                  <button class="track-url-reload-btn" title="Reload track with new URL">Reload</button>
-                </div>
-              </div>
-            `;
-                }
-                // Add thumbnail image if it doesn't exist
-                if (!element.querySelector('img')) {
-                    const img = document.createElement('img');
-                    img.src = meta.thumbnailUrl;
-                    img.alt = 'Track thumbnail';
-                    element.insertBefore(img, element.firstChild);
-                }
-                // Set volume on new controller
-                controller.setVolume(currentVolume);
-                attachTrackEventListeners(element, trackId);
-            }
-        }
-    }, (trackId, state) => {
-        // On state change
-        playlistManager.updateTrack(trackId, { state });
-        updateGlobalPlayPauseButton(playlistManager, globalPlayPauseButton);
-        // Update the UI immediately for this track
-        const trackElement = document.querySelector(`[data-track-id="${trackId}"]`);
-        if (trackElement) {
-            const updatedTrack = playlistManager.getTrack(trackId);
-            if (updatedTrack) {
-                updateTrackElement(trackElement, updatedTrack);
-            }
-        }
-        // Start update interval when playing
-        if (state === 'playing') {
-            startUpdateInterval();
-        }
-        // Handle loop on ended
-        if (state === 'paused') {
-            const track = playlistManager.getTrack(trackId);
-            const controller = playlistManager.getController(trackId);
-            if (track && controller && track.loop) {
-                const currentTime = controller.getCurrentTime();
-                const duration = controller.getDuration();
-                // If at the end (within 1 second of duration), loop
-                // Use a larger threshold to catch the ended state reliably
-                if (duration > 0 && currentTime >= duration - 1) {
-                    // Small delay to ensure YouTube player is ready
-                    setTimeout(() => {
-                        controller.seekTo(0);
-                        controller.play();
-                    }, 100);
-                }
-            }
-        }
-    }, (trackId, error) => {
-        // On error
-        playlistManager.updateTrack(trackId, { state: 'error', error });
-        const updatedTrack = playlistManager.getTrack(trackId);
-        if (updatedTrack) {
-            const element = document.querySelector(`[data-track-id="${trackId}"]`);
-            if (element) {
-                // Update the element to show error state without replacing it
-                element.classList.remove('loading');
-                element.classList.add('error');
-                // Get the track-main container
-                const trackMain = element.querySelector('.track-main');
-                if (trackMain) {
-                    trackMain.innerHTML = `
-              <div class="track-title">Error loading video</div>
-              <div class="track-error-message">${error.message}</div>
-              <div class="track-controls">
-                <button class="track-delete">Delete</button>
-              </div>
-            `;
-                }
-                attachTrackEventListeners(element, trackId);
-            }
-        }
-    });
-    playlistManager.setController(trackId, controller);
-}
-/**
- * Start the update interval for track progress
- */
-function startUpdateInterval() {
-    if (updateInterval !== null)
-        return;
-    updateInterval = window.setInterval(() => {
-        const tracks = playlistManager.getTracks();
-        let hasPlaying = false;
-        for (const track of tracks) {
-            if (track.state === 'playing') {
-                hasPlaying = true;
-                const controller = playlistManager.getController(track.id);
-                if (controller) {
-                    const currentTime = controller.getCurrentTime();
-                    const duration = controller.getDuration();
-                    playlistManager.updateTrack(track.id, {
-                        currentTime,
-                        duration: duration > 0 ? duration : track.duration,
-                    });
-                    const trackElement = document.querySelector(`[data-track-id="${track.id}"]`);
-                    if (trackElement) {
-                        const updatedTrack = playlistManager.getTrack(track.id);
-                        if (updatedTrack) {
-                            updateTrackElement(trackElement, updatedTrack);
-                        }
-                    }
-                }
-            }
-        }
-        // Stop interval if nothing is playing
-        if (!hasPlaying) {
-            stopUpdateInterval();
-        }
-    }, 250);
-}
-/**
- * Stop the update interval
- */
-function stopUpdateInterval() {
-    if (updateInterval !== null) {
-        clearInterval(updateInterval);
-        updateInterval = null;
+    if (track.state === 'playing')
+        controller.pause();
+    else if (track.state === 'paused') {
+        controller.play();
+        startPolling();
     }
 }
-/**
- * Load tracks from URLs
- */
-async function loadTracksFromUrls(urls, mode) {
+function setVolume(id, volume) {
+    playlistManager.getController(id)?.setVolume(volume);
+    playlistManager.updateTrack(id, { volume });
+    const row = rowFor(id);
+    const track = playlistManager.getTrack(id);
+    if (row && track)
+        patchChannelRow(row, track);
+    if (id === focusedId)
+        renderVolume();
+}
+function loadTracksFromUrls(urls, mode) {
     if (mode === 'replace') {
-        // Clear existing tracks
-        const tracks = playlistManager.getTracks();
-        for (const track of tracks) {
-            playlistManager.removeTrack(track.id);
-        }
-        playlistContainer.innerHTML = '';
+        playlistManager.clearTracks();
+        playerBay.innerHTML = '';
+        focusedId = null;
     }
-    // Add new tracks
-    for (const url of urls) {
-        await addTrackFromUrl(url);
-    }
+    for (const url of urls)
+        addTrackFromUrl(url);
+    renderAll(true);
 }
-/**
- * Handle loading a playlist (with replace/append prompt if needed)
- */
-async function handleLoadPlaylist(urls) {
-    const currentTracks = playlistManager.getTracks();
-    if (currentTracks.length === 0) {
-        await loadTracksFromUrls(urls, 'replace');
+async function handleLoadPlaylist(urls, name) {
+    const open = playlistManager.getTracks().length;
+    if (open === 0) {
+        mixName = name;
+        loadTracksFromUrls(urls, 'replace');
+        return;
     }
-    else {
-        const choice = await showReplaceAppendModal('You have tracks in the current playlist. Do you want to replace them or append the new tracks?');
-        if (choice === 'cancel')
-            return;
-        await loadTracksFromUrls(urls, choice);
-    }
+    const choice = await showReplaceAppendModal(`This mix has ${urls.length} channel${urls.length === 1 ? '' : 's'}. Replace the ${open} you have open, or add them to the current mix?`);
+    if (choice === 'cancel')
+        return;
+    if (choice === 'replace')
+        mixName = name;
+    loadTracksFromUrls(urls, choice);
 }
-/**
- * Initialize event listeners
- */
+function flash(button, text) {
+    const original = button.textContent;
+    button.textContent = text;
+    setTimeout(() => (button.textContent = original), 1800);
+}
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
 function initializeEventListeners() {
-    // Add track button
-    addButton.addEventListener('click', () => {
+    const submitUrl = () => {
         const url = urlInput.value.trim();
-        if (url) {
-            addTrackFromUrl(url);
+        if (!url) {
+            showError(inputError, 'Paste a YouTube link first.');
+            urlInput.focus();
+            return;
         }
-    });
-    // Enter key in URL input
-    urlInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            const url = urlInput.value.trim();
-            if (url) {
-                addTrackFromUrl(url);
-            }
+        const wasEmpty = playlistManager.getTracks().length === 0;
+        if (addTrackFromUrl(url)) {
+            urlInput.value = '';
+            inputError.textContent = '';
+            renderAll(wasEmpty);
         }
+    };
+    addButton.addEventListener('click', submitUrl);
+    urlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')
+            submitUrl();
     });
-    // Global play/pause
     globalPlayPauseButton.addEventListener('click', () => {
         const tracks = playlistManager.getTracks();
-        const hasPlaying = playlistManager.hasPlayingTracks();
-        if (hasPlaying) {
-            // Pause all
-            for (const track of tracks) {
-                if (track.state === 'playing') {
-                    const controller = playlistManager.getController(track.id);
-                    controller?.pause();
-                }
-            }
+        if (playlistManager.hasPlayingTracks()) {
+            tracks.forEach((t) => t.state === 'playing' && playlistManager.getController(t.id)?.pause());
         }
         else {
-            // Play all
-            for (const track of tracks) {
-                if (track.state !== 'error') {
-                    const controller = playlistManager.getController(track.id);
-                    controller?.play();
-                }
-            }
-            startUpdateInterval();
+            tracks.forEach((t) => t.state === 'paused' && playlistManager.getController(t.id)?.play());
+            startPolling();
         }
     });
-    // Share button
+    loopSwitch.addEventListener('click', () => {
+        const track = focusedTrack();
+        if (!track)
+            return;
+        playlistManager.updateTrack(track.id, { loop: !track.loop });
+        renderStage(false);
+    });
     shareButton.addEventListener('click', async () => {
         const urls = playlistManager.getTrackUrls();
-        if (urls.length === 0) {
-            showError(inputError, 'No tracks to share.');
-            return;
-        }
-        const shareUrl = encodePlaylistToUrl(urls);
-        const success = await copyToClipboard(shareUrl);
-        if (success) {
-            const originalText = shareButton.textContent;
-            shareButton.textContent = 'Copied!';
-            setTimeout(() => {
-                shareButton.textContent = originalText;
-            }, 2000);
-        }
-        else {
-            showError(inputError, 'Failed to copy to clipboard.');
-        }
+        if (urls.length === 0)
+            return showError(inputError, 'Add a channel before sharing the mix.');
+        const ok = await copyToClipboard(encodePlaylistToUrl(urls));
+        if (ok)
+            flash(shareButton, 'Link copied');
+        else
+            showError(inputError, 'The browser blocked the clipboard, so the link was not copied.');
     });
-    // Save/update playlist
     savePlaylistButton.addEventListener('click', () => {
         const name = playlistNameInput.value.trim();
         if (!name) {
-            showError(inputError, 'Please enter a playlist name.');
+            showError(inputError, 'Name the mix before saving it.');
+            playlistNameInput.focus();
             return;
         }
         const urls = playlistManager.getTrackUrls();
-        if (urls.length === 0) {
-            showError(inputError, 'No tracks to save.');
-            return;
-        }
+        if (urls.length === 0)
+            return showError(inputError, 'Add a channel before saving a mix.');
         saveOrUpdatePlaylist(name, urls);
+        mixName = name;
         playlistNameInput.value = '';
-        // Refresh saved playlists list
-        const playlists = getAllPlaylists();
-        renderSavedPlaylists(playlists, savedPlaylistsList);
-        // Show success message
-        const originalText = savePlaylistButton.textContent;
-        savePlaylistButton.textContent = 'Saved!';
-        setTimeout(() => {
-            savePlaylistButton.textContent = originalText;
-        }, 2000);
+        renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+        renderStatus();
+        flash(savePlaylistButton, 'Saved');
     });
-    // Saved playlists list (event delegation)
+    playlistNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')
+            savePlaylistButton.click();
+    });
     savedPlaylistsList.addEventListener('click', async (e) => {
-        const target = e.target;
-        if (target.classList.contains('load-btn')) {
-            const playlistName = target.dataset.playlistName;
-            if (!playlistName)
-                return;
-            const playlists = getAllPlaylists();
-            const playlist = playlists.find(p => p.name === playlistName);
-            if (playlist) {
-                await handleLoadPlaylist(playlist.urls);
-            }
+        const button = e.target.closest('[data-mix-action]');
+        const name = button?.dataset.playlistName;
+        if (!button || !name)
+            return;
+        const playlist = getAllPlaylists().find((p) => p.name === name);
+        if (button.dataset.mixAction === 'load' && playlist) {
+            await handleLoadPlaylist(playlist.urls, playlist.name);
         }
-        else if (target.classList.contains('delete-btn')) {
-            const playlistName = target.dataset.playlistName;
-            if (!playlistName)
-                return;
-            if (confirm(`Delete playlist "${playlistName}"?`)) {
-                deletePlaylist(playlistName);
-                const playlists = getAllPlaylists();
-                renderSavedPlaylists(playlists, savedPlaylistsList);
-            }
+        else if (button.dataset.mixAction === 'delete' && confirm(`Delete the mix "${name}"? This cannot be undone.`)) {
+            deletePlaylist(name);
+            if (mixName === name)
+                mixName = null;
+            renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+            renderStatus();
+        }
+    });
+    // Channel list: one delegated listener for every row.
+    channelList.addEventListener('click', (e) => {
+        const el = e.target.closest('[data-action]');
+        const id = el?.closest('[data-track-id]')?.dataset.trackId;
+        if (!el || !id)
+            return;
+        if (el.dataset.action === 'focus')
+            setFocus(id);
+        else if (el.dataset.action === 'toggle')
+            togglePlay(id);
+    });
+    channelList.addEventListener('input', (e) => {
+        const input = e.target;
+        const id = input.closest('[data-track-id]')?.dataset.trackId;
+        if (id && input.dataset.action === 'volume')
+            setVolume(id, Number(input.value) / 100);
+    });
+    // Now playing
+    removeButton.addEventListener('click', () => focusedId && removeTrack(focusedId));
+    retaskButton.addEventListener('click', () => {
+        const url = retaskInput.value.trim();
+        if (focusedId && url)
+            reloadTrack(focusedId, url);
+    });
+    retaskInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')
+            retaskButton.click();
+    });
+    const useFallback = () => {
+        const fallback = artImg.dataset.fallback;
+        if (fallback && !artImg.classList.contains('is-letterboxed')) {
+            artImg.classList.add('is-letterboxed');
+            backdropImg.classList.add('is-letterboxed');
+            artImg.src = fallback;
+            backdropImg.src = fallback;
+        }
+    };
+    artImg.addEventListener('error', useFallback);
+    // A missing HD thumbnail comes back as a 120x90 grey placeholder rather than an error.
+    artImg.addEventListener('load', () => {
+        if (artImg.naturalWidth <= 120)
+            useFallback();
+    });
+    // Deck
+    playButton.addEventListener('click', () => focusedId && togglePlay(focusedId));
+    prevButton.addEventListener('click', () => stepFocus(-1));
+    nextButton.addEventListener('click', () => stepFocus(1));
+    resetButton.addEventListener('click', () => {
+        const track = focusedTrack();
+        const controller = track && playlistManager.getController(track.id);
+        if (!track || !controller)
+            return;
+        controller.pause();
+        controller.seekTo(0);
+        playlistManager.updateTrack(track.id, { currentTime: 0 });
+        renderTime();
+    });
+    const endSeek = () => (seeking = false);
+    seekInput.addEventListener('pointerdown', () => (seeking = true));
+    seekInput.addEventListener('pointerup', endSeek);
+    seekInput.addEventListener('pointercancel', endSeek);
+    seekInput.addEventListener('change', endSeek);
+    seekInput.addEventListener('input', () => {
+        const track = focusedTrack();
+        const controller = track && playlistManager.getController(track.id);
+        if (!track || !controller || !track.duration)
+            return;
+        const target = (Number(seekInput.value) / 1000) * track.duration;
+        controller.seekTo(target);
+        playlistManager.updateTrack(track.id, { currentTime: target });
+        renderTime();
+    });
+    volumeInput.addEventListener('input', () => {
+        if (focusedId)
+            setVolume(focusedId, Number(volumeInput.value) / 100);
+    });
+    // Keyboard: Space plays the focused channel, [ and ] step between channels.
+    document.addEventListener('keydown', (e) => {
+        const target = e.target;
+        if (e.metaKey || e.ctrlKey || e.altKey)
+            return;
+        if (target.closest('input, textarea, select, button, summary, [contenteditable], .modal-overlay'))
+            return;
+        if (e.key === ' ' && focusedId) {
+            e.preventDefault();
+            togglePlay(focusedId);
+        }
+        else if (e.key === '[') {
+            stepFocus(-1);
+        }
+        else if (e.key === ']') {
+            stepFocus(1);
         }
     });
 }
-/**
- * Initialize the application
- */
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
 async function initialize() {
-    // Wait for YouTube API
+    buildStaticMeters();
+    renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+    renderAll(false);
     await waitForYouTubeAPI();
-    // Create player factory
     playerFactory = createYouTubePlayerFactory();
-    // Initialize event listeners
     initializeEventListeners();
-    // Render saved playlists
-    const playlists = getAllPlaylists();
-    renderSavedPlaylists(playlists, savedPlaylistsList);
-    // Check for shared playlist in URL
+    document.documentElement.dataset.ready = 'true';
     const sharedUrls = decodePlaylistFromLocation();
     if (sharedUrls && sharedUrls.length > 0) {
         clearPlaylistHash();
-        await handleLoadPlaylist(sharedUrls);
+        await handleLoadPlaylist(sharedUrls, null);
         return;
     }
-    // Load last used playlist
     const lastPlaylist = getLastPlaylist();
     if (lastPlaylist && lastPlaylist.urls.length > 0) {
-        await loadTracksFromUrls(lastPlaylist.urls, 'replace');
+        mixName = lastPlaylist.name;
+        loadTracksFromUrls(lastPlaylist.urls, 'replace');
     }
 }
-// Start the application
 initialize().catch(console.error);

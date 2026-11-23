@@ -84,6 +84,8 @@ export interface YouTubePlayerController {
   setVolume(volume: number): void;
   getCurrentTime(): number;
   getDuration(): number;
+  /** Channel name. YouTube often leaves it empty until playback has started. */
+  getAuthor(): string;
   destroy(): void;
 }
 
@@ -167,6 +169,16 @@ export function createYouTubePlayerFactory(): YouTubePlayerFactory {
           }
           return 0;
         },
+        getAuthor(): string {
+          if (isReady && player) {
+            try {
+              return player.getVideoData().author || '';
+            } catch {
+              return '';
+            }
+          }
+          return '';
+        },
         destroy() {
           if (timeoutId !== null) {
             clearTimeout(timeoutId);
@@ -216,6 +228,7 @@ export function createYouTubePlayerFactory(): YouTubePlayerFactory {
                 const meta: YouTubeVideoMeta = {
                   id: videoData.video_id,
                   title: videoData.title || 'Unknown Title',
+                  author: videoData.author || undefined,
                   thumbnailUrl: `https://img.youtube.com/vi/${videoData.video_id}/hqdefault.jpg`,
                   durationSeconds: duration > 0 ? duration : undefined,
                 };

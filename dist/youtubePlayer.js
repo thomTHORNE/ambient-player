@@ -58,6 +58,17 @@ export function createYouTubePlayerFactory() {
                     }
                     return 0;
                 },
+                getAuthor() {
+                    if (isReady && player) {
+                        try {
+                            return player.getVideoData().author || '';
+                        }
+                        catch {
+                            return '';
+                        }
+                    }
+                    return '';
+                },
                 destroy() {
                     if (timeoutId !== null) {
                         clearTimeout(timeoutId);
@@ -103,6 +114,7 @@ export function createYouTubePlayerFactory() {
                                 const meta = {
                                     id: videoData.video_id,
                                     title: videoData.title || 'Unknown Title',
+                                    author: videoData.author || undefined,
                                     thumbnailUrl: `https://img.youtube.com/vi/${videoData.video_id}/hqdefault.jpg`,
                                     durationSeconds: duration > 0 ? duration : undefined,
                                 };

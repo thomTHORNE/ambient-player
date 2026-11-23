@@ -303,6 +303,15 @@ body {
 .brand { grid-area: brand; }
 .scroller { grid-area: scroller; }
 
+/* Fullscreen on a phone held upright: the page reaches the top edge, where a
+   punch-hole camera sits in the middle. Not every browser reports that cutout
+   (env(safe-area-inset-top) stays 0), so keep a status bar's height clear. */
+@media (orientation: portrait) and (pointer: coarse) {
+  html[data-fullscreen="true"] .app {
+    padding-top: max(36px, env(safe-area-inset-top));
+  }
+}
+
 /* Desktop UI scale (src/scale.ts): the shell is zoomed and sized back up so it
    still fills the window. Touch devices scale the viewport instead. */
 html.is-zoomed .app {
@@ -381,6 +390,42 @@ html.is-zoomed .app {
    scrolls the panels instead of changing its value. */
 input[type="range"] {
   touch-action: pan-y;
+}
+
+/* One panel per swipe, as on horizontal screens: each panel fills the space
+   under the collapsed stage and snaps to its top; a long one scrolls freely
+   until its end. The first swipe shrinks the artwork (the deck's two stops:
+   artwork at full size, then collapsed). src/layout.ts measures the sizes. */
+@media (orientation: portrait) {
+  .scroller {
+    padding-bottom: 0;
+    scroll-snap-type: y mandatory;
+    scroll-padding-top: var(--pinned-h, 0px);
+    /* Sub-pixel layout can leave the last panel a fraction short of the
+       scroll end; without this its very bottom would snap back. */
+    scroll-padding-bottom: 1px;
+  }
+
+  /* Start and end: a panel taller than the screen also stops at its end. */
+  .slide {
+    min-height: var(--page-h, auto);
+    scroll-snap-align: start end;
+    scroll-snap-stop: always;
+  }
+
+  .slide--deck {
+    scroll-margin-top: var(--deck-snap, 0px);
+  }
+
+  .slide--deck > .deck {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    scroll-margin-top: 6px;
+  }
+
+  .slide:last-child {
+    padding-bottom: max(var(--gutter), env(safe-area-inset-bottom));
+  }
 }
 
 /* ---------- Pager: one bar per panel, down the right edge ---------- */
@@ -488,6 +533,12 @@ input[type="range"] {
   width: 16px;
   height: 16px;
   color: var(--text-3);
+}
+
+.panel__tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .panel__count {
@@ -1220,6 +1271,28 @@ input[type="range"] {
   left: -4px;
   width: 2px;
   background: var(--accent);
+}
+
+/* Vertical screens: the artwork takes the full width and the numbered strip
+   runs down its right edge, inside the viewfinder brackets. */
+@media (orientation: portrait) {
+  .now__visual {
+    position: relative;
+  }
+
+  .strip {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    bottom: 14px;
+    z-index: 4;
+  }
+
+  .strip__btn {
+    background: rgba(8, 9, 10, 0.62);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
 }
 
 .art__img:not([src]),
@@ -2104,7 +2177,7 @@ input[type="range"] {
 
 .status__actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
   margin-top: 14px;
 }

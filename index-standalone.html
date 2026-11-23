@@ -34,7 +34,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=3aae189956">
+  <link rel="stylesheet" href="styles.css?v=4b3032104c">
 </head>
 
 <body>
@@ -170,7 +170,10 @@
           <section class="panel channels" aria-labelledby="channelsTitle">
               <header class="panel__head">
                 <h2 id="channelsTitle" class="panel__title">Channels</h2>
-                <span id="channelCount" class="panel__count">0</span>
+                <div class="panel__tools">
+                  <button id="globalPlayPause" class="btn btn--small" type="button" disabled>Play all</button>
+                  <span id="channelCount" class="panel__count">0</span>
+                </div>
               </header>
               <div class="add">
                 <label class="visually-hidden" for="urlInput">YouTube link</label>
@@ -226,7 +229,6 @@
         </dl>
         <p id="layoutReadout" class="status__readout">Layout —</p>
               <div class="status__actions">
-                <button id="globalPlayPause" class="btn" type="button" disabled>Play all</button>
                 <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
               </div>
             </section>
@@ -259,7 +261,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=de9c3740e2"></script>
+  <script src="app.js?v=bf66125f8f"></script>
 </body>
 
 </html>

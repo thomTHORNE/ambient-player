@@ -1121,7 +1121,8 @@ document.addEventListener('visibilitychange', () => {
  * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
  * pinned to the top of the scroller and shrinks as you scroll, from its full
  * size down to a minimum height; after that the panels (deck, channels,
- * status + mixes) scroll up under it, one after another.
+ * status + mixes) scroll up under it and snap one at a time, like the
+ * horizontal layout's pages.
  *
  * Horizontal screens (landscape): the stage stays still on the left and the
  * panels swipe vertically on the right, one screen each.
@@ -1248,6 +1249,7 @@ function refreshLayout() {
     lStage.style.transform = '';
     lStageWrap.style.height = '';
     lStageWrap.style.top = '';
+    ['--deck-snap', '--pinned-h', '--page-h'].forEach((name) => lScroller.style.removeProperty(name));
     if (!isPortrait()) {
         artMaxH = artMinH = range = 0;
         return;
@@ -1262,8 +1264,15 @@ function refreshLayout() {
     artMaxH = Math.round(Math.max(120, Math.min(width, stageMax - padY - gap - meta)));
     artMinH = Math.round(Math.min(artMaxH, Math.max(72, window.innerHeight * 0.1)));
     range = artMaxH - artMinH;
-    lStageWrap.style.height = `${artMaxH + meta + gap + padY}px`;
+    const stageH = artMaxH + meta + gap + padY;
+    lStageWrap.style.height = `${stageH}px`;
     lStageWrap.style.top = `${-range}px`;
+    // Snapping (styles.css): each panel fills the space under the collapsed
+    // stage; the deck also stops with the artwork at full size (scrollTop 0).
+    const slidesGap = parseFloat(getComputedStyle(lSlides).marginTop) || 0;
+    lScroller.style.setProperty('--deck-snap', `${range + slidesGap}px`);
+    lScroller.style.setProperty('--pinned-h', `${stageH - range}px`);
+    lScroller.style.setProperty('--page-h', `${lScroller.clientHeight - (stageH - range)}px`);
     applyCollapse();
 }
 function applyCollapse() {
@@ -1311,6 +1320,21 @@ function setupLayout() {
             goToSlideInstant(activeSlide);
     };
     window.addEventListener('resize', () => relayout(false));
+    // The space under the brand can change without a window resize (the
+    // brand's status line wrapping, fonts loading), and the stage's text with
+    // the channel; the snap sizes follow.
+    let measured = '';
+    const remeasure = new ResizeObserver(() => {
+        const key = `${lScroller.clientWidth}x${lScroller.clientHeight}:${lStage.querySelector('.now__meta')?.offsetHeight}`;
+        if (key !== measured) {
+            measured = key;
+            refreshLayout();
+        }
+    });
+    remeasure.observe(lScroller);
+    const metaEl = lStage.querySelector('.now__meta');
+    if (metaEl)
+        remeasure.observe(metaEl);
     portraitQuery.addEventListener('change', () => relayout(true));
     mergeQuery.addEventListener('change', () => relayout(false));
     refreshLayout();
@@ -1658,8 +1682,15 @@ function updateFullscreenButton() {
  * header button re-enters it.
  */
 function setupScreenTakeover() {
+    // Without browser bars the page reaches the very top of the screen, where
+    // a camera cutout can sit (styles.css keeps the brand clear of it).
+    const markFullscreen = () => {
+        document.documentElement.dataset.fullscreen = String(isFullscreen() || runningAsFullscreenApp());
+    };
+    markFullscreen();
     updateFullscreenButton();
     onFullscreenChange(() => {
+        markFullscreen();
         updateFullscreenButton();
         updateKeepAwake();
     });

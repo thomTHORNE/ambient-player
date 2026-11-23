@@ -332,8 +332,15 @@ function updateFullscreenButton(): void {
  * header button re-enters it.
  */
 function setupScreenTakeover(): void {
+  // Without browser bars the page reaches the very top of the screen, where
+  // a camera cutout can sit (styles.css keeps the brand clear of it).
+  const markFullscreen = () => {
+    document.documentElement.dataset.fullscreen = String(isFullscreen() || runningAsFullscreenApp());
+  };
+  markFullscreen();
   updateFullscreenButton();
   onFullscreenChange(() => {
+    markFullscreen();
     updateFullscreenButton();
     updateKeepAwake();
   });

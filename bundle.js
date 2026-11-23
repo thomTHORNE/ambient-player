@@ -3,6 +3,7 @@
  * This allows the app to run without a server (no CORS issues)
  */
 
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -46,5 +47,24 @@ bundledCode += '})();';
 fs.writeFileSync(outputFile, bundledCode);
 
 console.log(`✓ Bundled to ${outputFile}`);
-console.log('✓ You can now open index.html directly in your browser!');
+
+// Cache-busting: GitHub Pages lets browsers cache files for 10 minutes, so a
+// fresh index.html can end up next to a stale styles.css or script. Stamp each
+// asset URL with a hash of its contents so every change gets a new URL.
+const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 10);
+const cssVersion = hash('./styles.css');
+const jsVersion = hash(outputFile);
+
+for (const page of ['./index.html', './index-standalone.html']) {
+  let html = fs.readFileSync(page, 'utf8');
+  html = html.replace(/href="styles\.css(\?v=[^"]*)?"/, `href="styles.css?v=${cssVersion}"`);
+  // Both pages load the single bundle: one file, so no module import can go stale.
+  html = html.replace(
+    /<script( type="module")? src="(dist\/main\.js|app\.js)(\?v=[^"]*)?"><\/script>/,
+    `<script src="app.js?v=${jsVersion}"></script>`
+  );
+  fs.writeFileSync(page, html);
+}
+
+console.log(`✓ Stamped index pages: styles.css?v=${cssVersion}, app.js?v=${jsVersion}`);
 

@@ -2009,9 +2009,23 @@ svg {
     --gap: 14px;
   }
 
-  .app {
-    height: 100dvh;
+  /* App shell: pinned to the screen edges, so it always matches the visible
+     area even while a mobile browser's toolbars slide in and out. The page
+     underneath has no height of its own and so can never scroll; "clip"
+     also stops focus from nudging the app's content. */
+  html,
+  body {
     overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .app {
+    position: fixed;
+    inset: 0;
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
+    overflow: clip;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: auto auto minmax(0, 1fr);
     grid-template-areas:

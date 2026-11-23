@@ -114,6 +114,28 @@ function renderChannels() {
         .join('');
     channelCount.textContent = String(tracks.length);
     document.documentElement.dataset.empty = String(tracks.length === 0);
+    updateListScroll();
+}
+/** Mark whether the channel list overflows, and whether it is scrolled to the end. */
+function updateListScroll() {
+    const panel = channelList.closest('.channels');
+    if (!panel)
+        return;
+    const scrollable = channelList.scrollHeight > channelList.clientHeight + 1;
+    panel.classList.toggle('is-scrollable', scrollable);
+    panel.classList.toggle('is-at-end', channelList.scrollTop + channelList.clientHeight >= channelList.scrollHeight - 2);
+}
+/** Scroll the list (not the page) just enough to show a row. */
+function keepRowVisible(row) {
+    const list = channelList.getBoundingClientRect();
+    const r = row.getBoundingClientRect();
+    const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
+    if (r.top < list.top) {
+        channelList.scrollBy({ top: r.top - list.top - 4, behavior });
+    }
+    else if (r.bottom > list.bottom) {
+        channelList.scrollBy({ top: r.bottom - list.bottom + 4, behavior });
+    }
 }
 function renderRow(id) {
     const tracks = playlistManager.getTracks();
@@ -125,6 +147,7 @@ function renderRow(id) {
     row.outerHTML = channelRowHtml(tracks[index], index, id === focusedId, openVolumes.has(id));
     if (hadFocus)
         rowFor(id)?.querySelector('.ch__focus')?.focus();
+    updateListScroll();
 }
 function renderStatus() {
     const tracks = playlistManager.getTracks();
@@ -280,6 +303,7 @@ function setFocus(id) {
     if (row) {
         row.classList.add('is-focus');
         row.querySelector('.ch__focus')?.setAttribute('aria-current', 'true');
+        keepRowVisible(row);
     }
     renderStage(true);
 }
@@ -603,10 +627,16 @@ function initializeEventListeners() {
             else
                 openVolumes.delete(id);
             const row = rowFor(id);
-            if (row)
+            if (row) {
                 setRowVolumeOpen(row, open);
+                if (open)
+                    keepRowVisible(row);
+            }
+            updateListScroll();
         }
     });
+    channelList.addEventListener('scroll', updateListScroll, { passive: true });
+    window.addEventListener('resize', updateListScroll);
     channelList.addEventListener('input', (e) => {
         const input = e.target;
         const id = input.closest('[data-track-id]')?.dataset.trackId;

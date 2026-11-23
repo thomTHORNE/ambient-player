@@ -1350,10 +1350,38 @@ svg {
   transform: scale(0.94);
 }
 
+/* Long mixes scroll inside the panel; the add field stays put above. */
 .channel-list {
   display: grid;
   gap: 6px;
   align-content: start;
+  max-height: min(60dvh, 560px);
+  margin: 0 -6px;
+  padding: 0 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.channel-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.channel-list::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--line-strong);
+}
+
+/* A soft fade at the bottom edge while there is more list to scroll. */
+.channels.is-scrollable .channel-list {
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent);
+}
+
+.channels.is-scrollable.is-at-end .channel-list {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .channel-empty {

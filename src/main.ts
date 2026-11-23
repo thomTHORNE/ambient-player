@@ -45,6 +45,16 @@ import {
 } from './ui.js';
 import type { StateTone } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
+import {
+  fullscreenSupported,
+  isFullscreen,
+  runningAsApp,
+  runningAsFullscreenApp,
+  enterFullscreen,
+  exitFullscreen,
+  onFullscreenChange,
+  setKeepAwake,
+} from './screen.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -80,6 +90,7 @@ const channelList = $<HTMLOListElement>('playlist');
 const channelCount = $<HTMLElement>('channelCount');
 const playerBay = $<HTMLElement>('playerBay');
 
+const fullscreenButton = $<HTMLButtonElement>('fullscreenButton');
 const statusCode = $<HTMLElement>('statusCode');
 const statusLine = $<HTMLElement>('statusLine');
 const telChannels = $<HTMLElement>('telChannels');
@@ -241,9 +252,59 @@ function renderStatus(): void {
   else if (live > 0) setPill(statPlayback, 'Playing', 'live');
   else setPill(statPlayback, 'On hold', 'idle');
 
+  updateKeepAwake();
+
   globalPlayPauseButton.textContent = live > 0 ? 'Pause all' : 'Play all';
   globalPlayPauseButton.disabled = tracks.length === 0;
   shareButton.disabled = tracks.length === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Screen takeover
+// ---------------------------------------------------------------------------
+
+/** Keep the screen on while something plays in fullscreen or in the installed app. */
+function updateKeepAwake(): void {
+  void setKeepAwake(liveCount() > 0 && (isFullscreen() || runningAsApp()));
+}
+
+function updateFullscreenButton(): void {
+  const on = isFullscreen();
+  fullscreenButton.setAttribute('aria-pressed', String(on));
+  fullscreenButton.setAttribute('aria-label', on ? 'Exit fullscreen' : 'Enter fullscreen');
+  fullscreenButton.title = on ? 'Exit fullscreen' : 'Fullscreen';
+  document.documentElement.dataset.fullscreen = String(on || runningAsFullscreenApp());
+}
+
+/**
+ * Fullscreen needs a user gesture, so the page takes over on the first tap or
+ * click of a visit. If the user leaves fullscreen it is not forced back; the
+ * header button re-enters it.
+ */
+function setupScreenTakeover(): void {
+  updateFullscreenButton();
+  onFullscreenChange(() => {
+    updateFullscreenButton();
+    updateKeepAwake();
+  });
+
+  // The installed app already runs without browser UI; where the browser
+  // can't do fullscreen (iPhone Safari), there is nothing to offer.
+  if (!fullscreenSupported() || runningAsFullscreenApp()) return;
+  fullscreenButton.hidden = false;
+
+  fullscreenButton.addEventListener('click', () => {
+    if (isFullscreen()) void exitFullscreen();
+    else void enterFullscreen();
+  });
+
+  const takeover = (e: Event) => {
+    document.removeEventListener('click', takeover, true);
+    if ((e.target as HTMLElement).closest('#fullscreenButton')) return;
+    if (!isFullscreen()) void enterFullscreen();
+  };
+  // Capture phase: the tap still reaches whatever it was aimed at.
+  document.addEventListener('click', takeover, true);
 }
 
 /** Fill the centre from the focused channel. changed=true fades the new channel in. */
@@ -842,6 +903,7 @@ function initializeEventListeners(): void {
 // ---------------------------------------------------------------------------
 
 async function initialize(): Promise<void> {
+  setupScreenTakeover();
   buildStaticMeters();
   renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
   renderAll(false);

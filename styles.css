@@ -260,7 +260,12 @@ svg {
   align-content: start;
   gap: var(--gap) var(--gutter);
   min-height: 100dvh;
-  padding: var(--gutter);
+  /* In fullscreen or the installed app, keep clear of notches and camera cutouts. */
+  padding:
+    max(var(--gutter), env(safe-area-inset-top))
+    max(var(--gutter), env(safe-area-inset-right))
+    max(var(--gutter), env(safe-area-inset-bottom))
+    max(var(--gutter), env(safe-area-inset-left));
 }
 
 .brand { grid-area: brand; }
@@ -744,7 +749,34 @@ svg {
 }
 
 .brand__text {
+  flex: 1;
   min-width: 0;
+}
+
+/* Fullscreen toggle, at the far end of the header. */
+.brand__fs {
+  width: 40px;
+  height: 40px;
+  margin-left: auto;
+}
+
+.brand__fs svg {
+  width: 18px;
+  height: 18px;
+}
+
+.brand__fs .fs-exit,
+.brand__fs[aria-pressed="true"] .fs-enter {
+  display: none;
+}
+
+.brand__fs[aria-pressed="true"] .fs-exit {
+  display: block;
+}
+
+.brand__fs[aria-pressed="true"] {
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 /* Title set on a dark plate with a corner dot, like a mission header. */

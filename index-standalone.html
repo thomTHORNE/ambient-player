@@ -6,12 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Ambient Player — multi-channel YouTube audio mixer</title>
   <meta name="description" content="Mix several YouTube streams as audio, each with its own volume and repeat, and save or share the mix.">
-  <meta name="theme-color" content="#0B0F10">
+  <meta name="theme-color" content="#08090A">
   <link rel="icon" href="assets/favicon.png">
+  <!-- Installable as a fullscreen app (Add to Home screen / Install app). -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Ambient">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=c647b682e0">
+  <link rel="stylesheet" href="styles.css?v=cdb3253762">
 </head>
 
 <body>
@@ -34,6 +41,10 @@
         <h1 class="brand__title">Ambient Player</h1>
         <p class="brand__sub"><span id="statusCode" class="brand__code">Unsaved mix</span><span id="statusLine">No channels</span></p>
       </div>
+      <button id="fullscreenButton" class="icon-btn brand__fs" type="button" aria-pressed="false" aria-label="Enter fullscreen" title="Fullscreen" hidden>
+        <svg class="fs-enter" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        <svg class="fs-exit" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+      </button>
     </header>
 
     <!-- ============ 1. Now playing ============ -->
@@ -218,7 +229,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=ce52e84691"></script>
+  <script src="app.js?v=95789c8c14"></script>
 </body>
 
 </html>

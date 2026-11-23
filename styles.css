@@ -210,7 +210,7 @@ svg {
   transform: scale(var(--bd-scale));
   transform-origin: 50% 50%;
   will-change: transform;
-  animation: backdrop-drift 90s ease-in-out infinite alternate;
+  animation: backdrop-drift 15s ease-in-out infinite alternate;
   transition: opacity 600ms var(--ease);
 }
 
@@ -1009,9 +1009,14 @@ svg {
 
 .now__tools {
   display: flex;
-  flex-wrap: wrap;
   align-items: flex-start;
-  gap: 0 24px;
+  gap: 0 20px;
+}
+
+/* Change link opens downwards in place; Remove keeps its spot at the end. */
+.now__tools .retask {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .retask summary {
@@ -1051,11 +1056,6 @@ svg {
   color: var(--text);
 }
 
-.retask[open] {
-  flex-basis: 100%;
-  order: 2;
-}
-
 .retask .field-row {
   padding: 4px 0 8px;
 }
@@ -1063,8 +1063,16 @@ svg {
 /* Removing sits apart from the harmless actions, at the far end of the row. */
 .remove {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
+  justify-content: flex-end;
+  /* Never squeezed by an open Change link; its confirmation may wrap. */
+  max-width: calc(100% - 150px);
   margin-left: auto;
+}
+
+.remove .text-btn {
+  white-space: nowrap;
 }
 
 .remove__confirm {
@@ -1916,11 +1924,32 @@ svg {
 }
 
 .modal__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "append replace"
+    "cancel cancel";
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
+}
+
+.modal__actions .btn {
+  width: 100%;
+  min-height: 44px;
+}
+
+.modal__actions [data-choice="append"] { grid-area: append; }
+.modal__actions [data-choice="replace"] { grid-area: replace; }
+.modal__actions [data-choice="cancel"] { grid-area: cancel; }
+
+@media (max-width: 440px) {
+  .modal__actions {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "replace"
+      "append"
+      "cancel";
+  }
 }
 
 @keyframes fade-in {
@@ -1985,20 +2014,39 @@ svg {
     --gap: 14px;
   }
 
+  /* Left: player, then status and saved mixes. Right: deck, then channels.
+     The side column dissolves so its three panels can be placed apart. */
   .app {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto 1fr;
     grid-template-areas:
-      "brand brand"
-      "now   deck"
-      "side  side";
+      "brand  brand"
+      "now    deck"
+      "now    channels"
+      "status channels"
+      "mixes  channels";
     align-items: start;
   }
 
+  .side {
+    display: contents;
+  }
+
+  /* Fixed artwork size: big enough to recognise, small enough that the
+     title, tools and the panels below stay in view. */
   .now {
-    --art-cap: 100%;
-    /* Leave room for the title and tools under the artwork. */
+    --art-cap: 440px;
     --art-w: max(min(220px, 100%), min(100%, var(--art-cap), calc((100dvh - 330px) * var(--art-ratio))));
+    align-items: flex-start;
     gap: 14px;
+  }
+
+  .now.now[data-shape="square"] {
+    --art-cap: 320px;
+  }
+
+  .now__meta {
+    width: 100%;
   }
 
   .now__title {
@@ -2018,12 +2066,6 @@ svg {
     margin-top: 4px;
   }
 
-  .side {
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-    grid-template-areas:
-      "channels status"
-      "channels mixes";
-  }
 }
 
 /* Wide, tall screens fill the window like an app; the side column scrolls by itself. */

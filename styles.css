@@ -2241,8 +2241,14 @@ body {
     display: contents;
   }
 
+  .stage-wrap .now {
+    transform: none !important;
+  }
+
   .stage-wrap {
     grid-area: stage;
+    height: auto !important;
+    top: auto !important;
     position: static;
     min-height: 0;
     margin: 0;
@@ -2257,9 +2263,11 @@ body {
 
   /* A fixed 4:3 frame (whatever the thumbnail's shape, so switching
      channels never resizes it) that fits the column and leaves room for the
-     title under it. */
+     title under it. The portrait collapse's inline sizes never apply here,
+     even straight after a rotation. */
   .art {
     flex: 0 1 auto;
+    height: auto !important;
     aspect-ratio: 4 / 3;
     --text-room: 240px;
     width: min(100%, max(140px, calc((100dvh - 2 * var(--gutter) - var(--text-room)) * 4 / 3)));
@@ -2328,6 +2336,39 @@ body {
     width: 3px;
     height: 32px;
   }
+}
+
+/* Horizontal screens: square album art (published with bars at the sides)
+   zooms to fill the 4:3 frame, still centred, so no bars show. */
+@media (orientation: landscape) {
+  .now[data-shape="square"] .art__img {
+    transform: scale(1.334);
+  }
+
+  .now[data-shape="square"] .art__img.is-letterboxed {
+    transform: scale(1.78);
+  }
+}
+
+/* Large horizontal screens (a Fold's inner display at 4:3, laptops, desktops):
+   a wider stage column with a bigger artwork, and the deck and channel list
+   share the first panel (src/layout.ts moves the list there), so there are
+   two panels: playback with channels, then status with saved mixes.
+   Keep the query in sync with mergeQuery in src/layout.ts. */
+@media (orientation: landscape) and (min-width: 960px) and (min-height: 680px) {
+  .app {
+    grid-template-columns: clamp(300px, 42vw, 600px) minmax(0, 1fr) auto;
+  }
+
+  .now__title {
+    font-size: 22px;
+  }
+}
+
+/* The channels panel hides only once src/layout.ts has moved its list onto
+   the first panel (it sets data-merged), so the list can never vanish. */
+html[data-merged="true"] .slide--channels {
+  display: none;
 }
 
 /* Short horizontal screens (a phone on its side): tighter title, more room

@@ -16,6 +16,9 @@
 import { prefersReducedMotion } from './ui.js';
 
 const portraitQuery = window.matchMedia('(orientation: portrait)');
+/** Large horizontal screens (a Fold's inner display at 4:3 and up) have room
+ *  for the deck and the channel list on one panel. Keep in sync with styles.css. */
+const mergeQuery = window.matchMedia('(orientation: landscape) and (min-width: 960px) and (min-height: 680px)');
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -27,7 +30,11 @@ const lSlides = byId<HTMLElement>('slides');
 const lPager = byId<HTMLElement>('pager');
 const lSlideEls = Array.from(lSlides.querySelectorAll<HTMLElement>('.slide'));
 const lBars = Array.from(lPager.querySelectorAll<HTMLButtonElement>('.pager__bar'));
+const lDeckSlide = byId<HTMLElement>('slideDeck');
+const lChannelsSlide = byId<HTMLElement>('slideChannels');
+const lChannelsPanel = lChannelsSlide.querySelector<HTMLElement>('.panel.channels')!;
 
+/** Index into lSlideEls of the panel in view. */
 let activeSlide = 0;
 let artMaxH = 0;
 let artMinH = 0;
@@ -38,31 +45,54 @@ function isPortrait(): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Merged panel on large horizontal screens
+// ---------------------------------------------------------------------------
+
+/** Put the channel list on the deck's panel (large screens) or its own (others). */
+function applyMerge(): void {
+  const merged = mergeQuery.matches;
+  document.documentElement.dataset.merged = String(merged);
+  const home = merged ? lDeckSlide : lChannelsSlide;
+  if (lChannelsPanel.parentElement !== home) home.appendChild(lChannelsPanel);
+  // The channels bar leads to the merged panel, like the deck's.
+  lBars.forEach((bar) => {
+    bar.hidden = merged && bar.dataset.slide === '1';
+  });
+  if (merged && activeSlide === 1) activeSlide = 0;
+}
+
+/** The panels that currently take a page each (the merged one is hidden). */
+function visibleSlides(): HTMLElement[] {
+  return lSlideEls.filter((slide) => getComputedStyle(slide).display !== 'none');
+}
+
+// ---------------------------------------------------------------------------
 // Pager
 // ---------------------------------------------------------------------------
 
 function setActive(index: number): void {
   if (index === activeSlide) return;
   activeSlide = index;
-  lBars.forEach((bar, i) => bar.setAttribute('aria-current', String(i === index)));
+  lBars.forEach((bar) => bar.setAttribute('aria-current', String(Number(bar.dataset.slide) === index)));
   lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
   syncSlidesHeight();
 }
 
+/** The panel in view, as an index into lSlideEls. */
 function currentIndex(): number {
-  if (isPortrait()) {
-    const w = lSlides.clientWidth || 1;
-    return Math.max(0, Math.min(lSlideEls.length - 1, Math.round(lSlides.scrollLeft / w)));
-  }
-  const h = lSlides.clientHeight || 1;
-  return Math.max(0, Math.min(lSlideEls.length - 1, Math.round(lSlides.scrollTop / h)));
+  const pages = visibleSlides();
+  const size = isPortrait() ? lSlides.clientWidth || 1 : lSlides.clientHeight || 1;
+  const pos = isPortrait() ? lSlides.scrollLeft : lSlides.scrollTop;
+  const page = Math.max(0, Math.min(pages.length - 1, Math.round(pos / size)));
+  return lSlideEls.indexOf(pages[page]);
 }
 
 /** Show a panel: 0 deck, 1 channels, 2 status and saved mixes. */
 export function goToSlide(index: number): void {
+  const page = Math.max(0, visibleSlides().indexOf(lSlideEls[index]));
   const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
-  if (isPortrait()) lSlides.scrollTo({ left: index * lSlides.clientWidth, behavior });
-  else lSlides.scrollTo({ top: index * lSlides.clientHeight, behavior });
+  if (isPortrait()) lSlides.scrollTo({ left: page * lSlides.clientWidth, behavior });
+  else lSlides.scrollTo({ top: page * lSlides.clientHeight, behavior });
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +167,8 @@ function onScrollerScroll(): void {
 // ---------------------------------------------------------------------------
 
 export function setupLayout(): void {
-  lBars.forEach((bar, i) => bar.addEventListener('click', () => goToSlide(i)));
+  applyMerge();
+  lBars.forEach((bar) => bar.addEventListener('click', () => goToSlide(Number(bar.dataset.slide))));
   lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === 0));
 
   let slideFrame = 0;
@@ -160,17 +191,20 @@ export function setupLayout(): void {
   lSlideEls.forEach((slide) => observer.observe(slide));
 
   const relayout = () => {
+    applyMerge();
     refreshLayout();
     goToSlideInstant(activeSlide);
   };
   window.addEventListener('resize', relayout);
   portraitQuery.addEventListener('change', relayout);
+  mergeQuery.addEventListener('change', relayout);
 
   refreshLayout();
 }
 
 /** After a resize or rotation, keep the same panel in view without animating. */
 function goToSlideInstant(index: number): void {
-  if (isPortrait()) lSlides.scrollLeft = index * lSlides.clientWidth;
-  else lSlides.scrollTop = index * lSlides.clientHeight;
+  const page = Math.max(0, visibleSlides().indexOf(lSlideEls[index]));
+  if (isPortrait()) lSlides.scrollLeft = page * lSlides.clientWidth;
+  else lSlides.scrollTop = page * lSlides.clientHeight;
 }

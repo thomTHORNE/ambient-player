@@ -3,14 +3,15 @@
  *
  * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
  * pinned to the top of the scroller and shrinks as you scroll, from its full
- * size down to a minimum height; after that the panels scroll under it. The
- * panels (deck, channels, status + mixes) sit side by side and swipe
- * horizontally; their box takes the height of the panel in view.
+ * size down to a minimum height; after that the panels (deck, channels,
+ * status + mixes) scroll up under it, one after another.
  *
  * Horizontal screens (landscape): the stage stays still on the left and the
  * panels swipe vertically on the right, one screen each.
  *
- * In both, the pager bars show which panel is in view and jump on tap.
+ * Both move between panels with a vertical swipe (a sideways swipe too
+ * easily caught the timeline or volume sliders). The pager bars show which
+ * panel is in view and jump on tap.
  */
 
 import { prefersReducedMotion } from './ui.js';
@@ -75,38 +76,49 @@ function setActive(index: number): void {
   activeSlide = index;
   lBars.forEach((bar) => bar.setAttribute('aria-current', String(Number(bar.dataset.slide) === index)));
   lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
-  syncSlidesHeight();
 }
 
 /** The panel in view, as an index into lSlideEls. */
 function currentIndex(): number {
   const pages = visibleSlides();
-  const size = isPortrait() ? lSlides.clientWidth || 1 : lSlides.clientHeight || 1;
-  const pos = isPortrait() ? lSlides.scrollLeft : lSlides.scrollTop;
-  const page = Math.max(0, Math.min(pages.length - 1, Math.round(pos / size)));
+  if (!pages.length) return 0;
+  if (isPortrait()) {
+    // Scrolled to the very end: the last panel, even if it's too short to
+    // reach the top.
+    const atEnd = lScroller.scrollTop > 0 && lScroller.scrollTop + lScroller.clientHeight >= lScroller.scrollHeight - 4;
+    if (atEnd) return lSlideEls.indexOf(pages[pages.length - 1]);
+    // Otherwise the last panel whose top has passed a line a third of the
+    // way down the space under the stage.
+    const stageBottom = lStageWrap.getBoundingClientRect().bottom;
+    const line = stageBottom + (lScroller.getBoundingClientRect().bottom - stageBottom) / 3;
+    let found = pages[0];
+    for (const page of pages) if (page.getBoundingClientRect().top <= line) found = page;
+    return lSlideEls.indexOf(found);
+  }
+  const size = lSlides.clientHeight || 1;
+  const page = Math.max(0, Math.min(pages.length - 1, Math.round(lSlides.scrollTop / size)));
   return lSlideEls.indexOf(pages[page]);
+}
+
+/** Portrait: the scroller position that puts a panel just under the collapsed stage. */
+function portraitTop(index: number): number {
+  const pages = visibleSlides();
+  const slide = lSlideEls[index];
+  if (!slide || pages.indexOf(slide) <= 0) return 0;
+  const top = slide.getBoundingClientRect().top - lScroller.getBoundingClientRect().top + lScroller.scrollTop;
+  const pinned = lStageWrap.offsetHeight - range;
+  return Math.max(0, Math.round(top - pinned));
 }
 
 /** Show a panel: 0 deck, 1 channels, 2 status and saved mixes. */
 export function goToSlide(index: number): void {
-  const page = Math.max(0, visibleSlides().indexOf(lSlideEls[index]));
   const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
-  if (isPortrait()) lSlides.scrollTo({ left: page * lSlides.clientWidth, behavior });
-  else lSlides.scrollTo({ top: page * lSlides.clientHeight, behavior });
-}
-
-// ---------------------------------------------------------------------------
-// Portrait: the panels' box takes exactly the height of the panel in view,
-// so scrolling stops when its bottom is reached.
-// ---------------------------------------------------------------------------
-
-function syncSlidesHeight(): void {
-  if (!isPortrait()) {
-    lSlides.style.height = '';
+  if (isPortrait()) {
+    lScroller.scrollTo({ top: portraitTop(index), behavior });
     return;
   }
-  const panel = lSlideEls[activeSlide];
-  if (panel) lSlides.style.height = `${panel.scrollHeight}px`;
+  const page = Math.max(0, visibleSlides().indexOf(lSlideEls[index]));
+  lSlides.scrollTo({ top: page * lSlides.clientHeight, behavior });
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +142,6 @@ export function refreshLayout(): void {
   lStageWrap.style.top = '';
   if (!isPortrait()) {
     artMaxH = artMinH = range = 0;
-    syncSlidesHeight();
     return;
   }
   const wrapStyle = getComputedStyle(lStageWrap);
@@ -146,7 +157,6 @@ export function refreshLayout(): void {
   lStageWrap.style.height = `${artMaxH + meta + gap + padY}px`;
   lStageWrap.style.top = `${-range}px`;
   applyCollapse();
-  syncSlidesHeight();
 }
 
 function applyCollapse(): void {
@@ -159,7 +169,11 @@ function applyCollapse(): void {
 }
 
 function onScrollerScroll(): void {
-  if (!collapseFrame) collapseFrame = requestAnimationFrame(applyCollapse);
+  if (collapseFrame) return;
+  collapseFrame = requestAnimationFrame(() => {
+    applyCollapse();
+    if (isPortrait()) setActive(currentIndex());
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +192,7 @@ export function setupLayout(): void {
       if (slideFrame) return;
       slideFrame = requestAnimationFrame(() => {
         slideFrame = 0;
-        setActive(currentIndex());
+        if (!isPortrait()) setActive(currentIndex());
       });
     },
     { passive: true }
@@ -186,25 +200,26 @@ export function setupLayout(): void {
 
   lScroller.addEventListener('scroll', onScrollerScroll, { passive: true });
 
-  // Panels change height as channels load, drawers open and so on.
-  const observer = new ResizeObserver(() => syncSlidesHeight());
-  lSlideEls.forEach((slide) => observer.observe(slide));
-
-  const relayout = () => {
+  // A plain resize keeps the page where it is on vertical screens (moving it
+  // would scroll on its own); horizontal panels re-align to their page.
+  const relayout = (rotated: boolean) => {
     applyMerge();
     refreshLayout();
-    goToSlideInstant(activeSlide);
+    if (rotated || !isPortrait()) goToSlideInstant(activeSlide);
   };
-  window.addEventListener('resize', relayout);
-  portraitQuery.addEventListener('change', relayout);
-  mergeQuery.addEventListener('change', relayout);
+  window.addEventListener('resize', () => relayout(false));
+  portraitQuery.addEventListener('change', () => relayout(true));
+  mergeQuery.addEventListener('change', () => relayout(false));
 
   refreshLayout();
 }
 
 /** After a resize or rotation, keep the same panel in view without animating. */
 function goToSlideInstant(index: number): void {
+  if (isPortrait()) {
+    lScroller.scrollTop = portraitTop(index);
+    return;
+  }
   const page = Math.max(0, visibleSlides().indexOf(lSlideEls[index]));
-  if (isPortrait()) lSlides.scrollLeft = page * lSlides.clientWidth;
-  else lSlides.scrollTop = page * lSlides.clientHeight;
+  lSlides.scrollTop = page * lSlides.clientHeight;
 }

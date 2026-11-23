@@ -34,7 +34,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=5321b655eb">
+  <link rel="stylesheet" href="styles.css?v=3aae189956">
 </head>
 
 <body>
@@ -95,6 +95,8 @@
             <h2 id="stageTitle" class="now__title">Nothing playing yet</h2>
             <p id="stageArtist" class="now__artist">Each YouTube link becomes a channel with its own volume.</p>
           </div>
+          <!-- Large horizontal screens: what's playing, as thumbnails, under the title. -->
+          <ol id="thumbStrip" class="thumbs" aria-label="Playing channels"></ol>
         </main>
       </div>
 
@@ -257,7 +259,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=19fe2668e0"></script>
+  <script src="app.js?v=de9c3740e2"></script>
 </body>
 
 </html>

@@ -173,13 +173,22 @@ export function stripItemHtml(track, index, focused) {
       <button class="strip__btn" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Channel ${n}: ${title}, ${label}" title="${n} · ${title}">${n}</button>
     </li>`;
 }
-/** Update a strip number in place. */
-export function patchStripItem(li, track, index) {
-    li.classList.toggle('is-playing', track.state === 'playing');
-    li.classList.toggle('is-paused', track.state === 'paused');
-    const btn = li.querySelector('.strip__btn');
-    if (btn)
-        btn.setAttribute('aria-label', `Channel ${pad2(index + 1)}: ${trackTitle(track)}, ${stateInfo(track).label}`);
+/** One thumbnail in the large-screen strip: jumps to that channel (no play
+ *  button, so the main display stays the place to play and pause). */
+export function thumbItemHtml(track, index, focused) {
+    const title = esc(trackTitle(track));
+    const { label, tone } = stateInfo(track);
+    const n = pad2(index + 1);
+    const thumb = track.meta?.thumbnailUrl
+        ? `<img src="${esc(track.meta.thumbnailUrl)}" alt="" loading="lazy" decoding="async" />`
+        : '';
+    return `
+    <li class="thumbs__item is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
+      <button class="thumbs__btn" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Channel ${n}: ${title}, ${label}" title="${n} · ${title}">
+        <span class="thumbs__img">${thumb}<span class="thumbs__num">${n}</span></span>
+        <span class="thumbs__state tone-${tone}">${label}</span>
+      </button>
+    </li>`;
 }
 /** Update the live parts of a row in place, so focus and slider drags survive. */
 export function patchChannelRow(li, track) {

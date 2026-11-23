@@ -615,13 +615,22 @@ function stripItemHtml(track, index, focused) {
       <button class="strip__btn" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Channel ${n}: ${title}, ${label}" title="${n} · ${title}">${n}</button>
     </li>`;
 }
-/** Update a strip number in place. */
-function patchStripItem(li, track, index) {
-    li.classList.toggle('is-playing', track.state === 'playing');
-    li.classList.toggle('is-paused', track.state === 'paused');
-    const btn = li.querySelector('.strip__btn');
-    if (btn)
-        btn.setAttribute('aria-label', `Channel ${pad2(index + 1)}: ${trackTitle(track)}, ${stateInfo(track).label}`);
+/** One thumbnail in the large-screen strip: jumps to that channel (no play
+ *  button, so the main display stays the place to play and pause). */
+function thumbItemHtml(track, index, focused) {
+    const title = esc(trackTitle(track));
+    const { label, tone } = stateInfo(track);
+    const n = pad2(index + 1);
+    const thumb = track.meta?.thumbnailUrl
+        ? `<img src="${esc(track.meta.thumbnailUrl)}" alt="" loading="lazy" decoding="async" />`
+        : '';
+    return `
+    <li class="thumbs__item is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
+      <button class="thumbs__btn" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Channel ${n}: ${title}, ${label}" title="${n} · ${title}">
+        <span class="thumbs__img">${thumb}<span class="thumbs__num">${n}</span></span>
+        <span class="thumbs__state tone-${tone}">${label}</span>
+      </button>
+    </li>`;
 }
 /** Update the live parts of a row in place, so focus and slider drags survive. */
 function patchChannelRow(li, track) {
@@ -1111,14 +1120,15 @@ document.addEventListener('visibilitychange', () => {
  *
  * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
  * pinned to the top of the scroller and shrinks as you scroll, from its full
- * size down to a minimum height; after that the panels scroll under it. The
- * panels (deck, channels, status + mixes) sit side by side and swipe
- * horizontally; their box takes the height of the panel in view.
+ * size down to a minimum height; after that the panels (deck, channels,
+ * status + mixes) scroll up under it, one after another.
  *
  * Horizontal screens (landscape): the stage stays still on the left and the
  * panels swipe vertically on the right, one screen each.
  *
- * In both, the pager bars show which panel is in view and jump on tap.
+ * Both move between panels with a vertical swipe (a sideways swipe too
+ * easily caught the timeline or volume sliders). The pager bars show which
+ * panel is in view and jump on tap.
  */
 
 const portraitQuery = window.matchMedia('(orientation: portrait)');
@@ -1175,37 +1185,51 @@ function setActive(index) {
     activeSlide = index;
     lBars.forEach((bar) => bar.setAttribute('aria-current', String(Number(bar.dataset.slide) === index)));
     lSlideEls.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
-    syncSlidesHeight();
 }
 /** The panel in view, as an index into lSlideEls. */
 function currentIndex() {
     const pages = visibleSlides();
-    const size = isPortrait() ? lSlides.clientWidth || 1 : lSlides.clientHeight || 1;
-    const pos = isPortrait() ? lSlides.scrollLeft : lSlides.scrollTop;
-    const page = Math.max(0, Math.min(pages.length - 1, Math.round(pos / size)));
+    if (!pages.length)
+        return 0;
+    if (isPortrait()) {
+        // Scrolled to the very end: the last panel, even if it's too short to
+        // reach the top.
+        const atEnd = lScroller.scrollTop > 0 && lScroller.scrollTop + lScroller.clientHeight >= lScroller.scrollHeight - 4;
+        if (atEnd)
+            return lSlideEls.indexOf(pages[pages.length - 1]);
+        // Otherwise the last panel whose top has passed a line a third of the
+        // way down the space under the stage.
+        const stageBottom = lStageWrap.getBoundingClientRect().bottom;
+        const line = stageBottom + (lScroller.getBoundingClientRect().bottom - stageBottom) / 3;
+        let found = pages[0];
+        for (const page of pages)
+            if (page.getBoundingClientRect().top <= line)
+                found = page;
+        return lSlideEls.indexOf(found);
+    }
+    const size = lSlides.clientHeight || 1;
+    const page = Math.max(0, Math.min(pages.length - 1, Math.round(lSlides.scrollTop / size)));
     return lSlideEls.indexOf(pages[page]);
+}
+/** Portrait: the scroller position that puts a panel just under the collapsed stage. */
+function portraitTop(index) {
+    const pages = visibleSlides();
+    const slide = lSlideEls[index];
+    if (!slide || pages.indexOf(slide) <= 0)
+        return 0;
+    const top = slide.getBoundingClientRect().top - lScroller.getBoundingClientRect().top + lScroller.scrollTop;
+    const pinned = lStageWrap.offsetHeight - range;
+    return Math.max(0, Math.round(top - pinned));
 }
 /** Show a panel: 0 deck, 1 channels, 2 status and saved mixes. */
 function goToSlide(index) {
-    const page = Math.max(0, visibleSlides().indexOf(lSlideEls[index]));
     const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
-    if (isPortrait())
-        lSlides.scrollTo({ left: page * lSlides.clientWidth, behavior });
-    else
-        lSlides.scrollTo({ top: page * lSlides.clientHeight, behavior });
-}
-// ---------------------------------------------------------------------------
-// Portrait: the panels' box takes exactly the height of the panel in view,
-// so scrolling stops when its bottom is reached.
-// ---------------------------------------------------------------------------
-function syncSlidesHeight() {
-    if (!isPortrait()) {
-        lSlides.style.height = '';
+    if (isPortrait()) {
+        lScroller.scrollTo({ top: portraitTop(index), behavior });
         return;
     }
-    const panel = lSlideEls[activeSlide];
-    if (panel)
-        lSlides.style.height = `${panel.scrollHeight}px`;
+    const page = Math.max(0, visibleSlides().indexOf(lSlideEls[index]));
+    lSlides.scrollTo({ top: page * lSlides.clientHeight, behavior });
 }
 // ---------------------------------------------------------------------------
 // Portrait: the collapsing stage
@@ -1226,7 +1250,6 @@ function refreshLayout() {
     lStageWrap.style.top = '';
     if (!isPortrait()) {
         artMaxH = artMinH = range = 0;
-        syncSlidesHeight();
         return;
     }
     const wrapStyle = getComputedStyle(lStageWrap);
@@ -1242,7 +1265,6 @@ function refreshLayout() {
     lStageWrap.style.height = `${artMaxH + meta + gap + padY}px`;
     lStageWrap.style.top = `${-range}px`;
     applyCollapse();
-    syncSlidesHeight();
 }
 function applyCollapse() {
     collapseFrame = 0;
@@ -1254,8 +1276,13 @@ function applyCollapse() {
     lStageWrap.classList.toggle('is-collapsed', c >= range - 1);
 }
 function onScrollerScroll() {
-    if (!collapseFrame)
-        collapseFrame = requestAnimationFrame(applyCollapse);
+    if (collapseFrame)
+        return;
+    collapseFrame = requestAnimationFrame(() => {
+        applyCollapse();
+        if (isPortrait())
+            setActive(currentIndex());
+    });
 }
 // ---------------------------------------------------------------------------
 // Boot
@@ -1270,30 +1297,32 @@ function setupLayout() {
             return;
         slideFrame = requestAnimationFrame(() => {
             slideFrame = 0;
-            setActive(currentIndex());
+            if (!isPortrait())
+                setActive(currentIndex());
         });
     }, { passive: true });
     lScroller.addEventListener('scroll', onScrollerScroll, { passive: true });
-    // Panels change height as channels load, drawers open and so on.
-    const observer = new ResizeObserver(() => syncSlidesHeight());
-    lSlideEls.forEach((slide) => observer.observe(slide));
-    const relayout = () => {
+    // A plain resize keeps the page where it is on vertical screens (moving it
+    // would scroll on its own); horizontal panels re-align to their page.
+    const relayout = (rotated) => {
         applyMerge();
         refreshLayout();
-        goToSlideInstant(activeSlide);
+        if (rotated || !isPortrait())
+            goToSlideInstant(activeSlide);
     };
-    window.addEventListener('resize', relayout);
-    portraitQuery.addEventListener('change', relayout);
-    mergeQuery.addEventListener('change', relayout);
+    window.addEventListener('resize', () => relayout(false));
+    portraitQuery.addEventListener('change', () => relayout(true));
+    mergeQuery.addEventListener('change', () => relayout(false));
     refreshLayout();
 }
 /** After a resize or rotation, keep the same panel in view without animating. */
 function goToSlideInstant(index) {
+    if (isPortrait()) {
+        lScroller.scrollTop = portraitTop(index);
+        return;
+    }
     const page = Math.max(0, visibleSlides().indexOf(lSlideEls[index]));
-    if (isPortrait())
-        lSlides.scrollLeft = page * lSlides.clientWidth;
-    else
-        lSlides.scrollTop = page * lSlides.clientHeight;
+    lSlides.scrollTop = page * lSlides.clientHeight;
 }
 
 
@@ -1429,6 +1458,7 @@ const art = $('art');
 const artImg = $('artImg');
 const artPlay = $('artPlay');
 const mixStrip = $('mixStrip');
+const thumbStrip = $('thumbStrip');
 const stageIndex = $('stageIndex');
 const stageState = $('stageState');
 const stageArtist = $('stageArtist');
@@ -1451,31 +1481,36 @@ const volumeDb = $('volumeDb');
 function focusedTrack() {
     return focusedId ? playlistManager.getTrack(focusedId) : undefined;
 }
-function stripFor(id) {
-    return mixStrip.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
-}
-/** Scroll the strip sideways (never the page) just enough to show a tile. */
-function keepTileVisible(tile) {
-    const view = mixStrip.getBoundingClientRect();
+/** The numbered strip beside the artwork and, on large horizontal screens,
+ *  the thumbnail strip under the title (CSS shows one of them). */
+const strips = [mixStrip, thumbStrip];
+/** Scroll a strip (never the page) just enough to show a tile. */
+function keepTileVisible(strip, tile) {
+    if (strip.scrollHeight <= strip.clientHeight + 1)
+        return;
+    const view = strip.getBoundingClientRect();
     const r = tile.getBoundingClientRect();
     const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
-    if (r.left < view.left)
-        mixStrip.scrollBy({ left: r.left - view.left - 6, behavior });
-    else if (r.right > view.right)
-        mixStrip.scrollBy({ left: r.right - view.right + 6, behavior });
+    if (r.top < view.top)
+        strip.scrollBy({ top: r.top - view.top - 6, behavior });
+    else if (r.bottom > view.bottom)
+        strip.scrollBy({ top: r.bottom - view.bottom + 6, behavior });
 }
-/** The mix strip under the title: rebuilt with the list, patched in place on state changes. */
+/** Both strips: only what's playing, each numbered by its position in the mix. */
 function renderStrip() {
     const tracks = playlistManager.getTracks();
-    const hadFocus = mixStrip.contains(document.activeElement)
-        ? document.activeElement.closest('[data-track-id]')?.dataset.trackId
-        : undefined;
-    // Only what's playing, each numbered by its position in the mix.
+    const active = document.activeElement;
+    const hadFocus = strips.find((strip) => strip.contains(active));
+    const focusId = hadFocus && active?.closest('[data-track-id]')?.dataset.trackId;
     mixStrip.innerHTML = tracks
         .map((t, i) => (t.state === 'playing' ? stripItemHtml(t, i, t.id === focusedId) : ''))
         .join('');
-    if (hadFocus)
-        stripFor(hadFocus)?.querySelector('.strip__btn')?.focus();
+    thumbStrip.innerHTML = tracks
+        .map((t, i) => (t.state === 'playing' ? thumbItemHtml(t, i, t.id === focusedId) : ''))
+        .join('');
+    if (hadFocus && focusId) {
+        hadFocus.querySelector(`[data-track-id="${CSS.escape(focusId)}"] button`)?.focus();
+    }
 }
 function rowFor(id) {
     return channelList.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
@@ -1811,13 +1846,13 @@ function setFocus(id) {
         row.querySelector('.ch__focus')?.setAttribute('aria-current', 'true');
         keepRowVisible(row);
     }
-    mixStrip.querySelectorAll('.strip__item').forEach((tile) => {
+    strips.forEach((strip) => strip.querySelectorAll('[data-track-id]').forEach((tile) => {
         const on = tile.dataset.trackId === id;
         tile.classList.toggle('is-focus', on);
-        tile.querySelector('.strip__btn')?.setAttribute('aria-current', String(on));
+        tile.querySelector('button')?.setAttribute('aria-current', String(on));
         if (on)
-            keepTileVisible(tile);
-    });
+            keepTileVisible(strip, tile);
+    }));
     renderStage(true);
 }
 function stepFocus(dir) {
@@ -2230,16 +2265,12 @@ function initializeEventListeners() {
     });
     // Main display: tap the artwork to play or pause; the strip focuses or toggles channels.
     artPlay.addEventListener('click', () => focusedId && togglePlay(focusedId));
-    mixStrip.addEventListener('click', (e) => {
+    strips.forEach((strip) => strip.addEventListener('click', (e) => {
         const el = e.target.closest('[data-action]');
         const id = el?.closest('[data-track-id]')?.dataset.trackId;
-        if (!el || !id)
-            return;
-        if (el.dataset.action === 'focus')
+        if (el?.dataset.action === 'focus' && id)
             setFocus(id);
-        else if (el.dataset.action === 'toggle')
-            togglePlay(id);
-    });
+    }));
     // Deck
     playButton.addEventListener('click', () => focusedId && togglePlay(focusedId));
     prevButton.addEventListener('click', () => stepFocus(-1));

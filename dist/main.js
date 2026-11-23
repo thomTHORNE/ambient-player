@@ -9,7 +9,7 @@ import { PlaylistManager } from './playlist.js';
 import { waitForYouTubeAPI, createYouTubePlayerFactory, extractVideoId, isValidYouTubeUrl, } from './youtubePlayer.js';
 import { saveOrUpdatePlaylist, deletePlaylist, getLastPlaylist, getAllPlaylists, } from './storage.js';
 import { encodePlaylistToUrl, decodePlaylistFromLocation, clearPlaylistHash, } from './shareLinks.js';
-import { channelRowHtml, patchChannelRow, stripItemHtml, setRowDrawerOpen, setRowConfirm, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
+import { channelRowHtml, patchChannelRow, stripItemHtml, thumbItemHtml, setRowDrawerOpen, setRowConfirm, renderSavedPlaylists, showReplaceAppendModal, showError, copyToClipboard, swapText, formatHMS, formatDb, pad2, icons, prefersReducedMotion, stateInfo, trackTitle, } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
 import { setupLayout } from './layout.js';
 import { storedScale, applyScale, appZoom, SCALE_MIN, SCALE_MAX, SCALE_STEP } from './scale.js';
@@ -55,6 +55,7 @@ const art = $('art');
 const artImg = $('artImg');
 const artPlay = $('artPlay');
 const mixStrip = $('mixStrip');
+const thumbStrip = $('thumbStrip');
 const stageIndex = $('stageIndex');
 const stageState = $('stageState');
 const stageArtist = $('stageArtist');
@@ -77,31 +78,36 @@ const volumeDb = $('volumeDb');
 function focusedTrack() {
     return focusedId ? playlistManager.getTrack(focusedId) : undefined;
 }
-function stripFor(id) {
-    return mixStrip.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
-}
-/** Scroll the strip sideways (never the page) just enough to show a tile. */
-function keepTileVisible(tile) {
-    const view = mixStrip.getBoundingClientRect();
+/** The numbered strip beside the artwork and, on large horizontal screens,
+ *  the thumbnail strip under the title (CSS shows one of them). */
+const strips = [mixStrip, thumbStrip];
+/** Scroll a strip (never the page) just enough to show a tile. */
+function keepTileVisible(strip, tile) {
+    if (strip.scrollHeight <= strip.clientHeight + 1)
+        return;
+    const view = strip.getBoundingClientRect();
     const r = tile.getBoundingClientRect();
     const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
-    if (r.left < view.left)
-        mixStrip.scrollBy({ left: r.left - view.left - 6, behavior });
-    else if (r.right > view.right)
-        mixStrip.scrollBy({ left: r.right - view.right + 6, behavior });
+    if (r.top < view.top)
+        strip.scrollBy({ top: r.top - view.top - 6, behavior });
+    else if (r.bottom > view.bottom)
+        strip.scrollBy({ top: r.bottom - view.bottom + 6, behavior });
 }
-/** The mix strip under the title: rebuilt with the list, patched in place on state changes. */
+/** Both strips: only what's playing, each numbered by its position in the mix. */
 function renderStrip() {
     const tracks = playlistManager.getTracks();
-    const hadFocus = mixStrip.contains(document.activeElement)
-        ? document.activeElement.closest('[data-track-id]')?.dataset.trackId
-        : undefined;
-    // Only what's playing, each numbered by its position in the mix.
+    const active = document.activeElement;
+    const hadFocus = strips.find((strip) => strip.contains(active));
+    const focusId = hadFocus && active?.closest('[data-track-id]')?.dataset.trackId;
     mixStrip.innerHTML = tracks
         .map((t, i) => (t.state === 'playing' ? stripItemHtml(t, i, t.id === focusedId) : ''))
         .join('');
-    if (hadFocus)
-        stripFor(hadFocus)?.querySelector('.strip__btn')?.focus();
+    thumbStrip.innerHTML = tracks
+        .map((t, i) => (t.state === 'playing' ? thumbItemHtml(t, i, t.id === focusedId) : ''))
+        .join('');
+    if (hadFocus && focusId) {
+        hadFocus.querySelector(`[data-track-id="${CSS.escape(focusId)}"] button`)?.focus();
+    }
 }
 function rowFor(id) {
     return channelList.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
@@ -437,13 +443,13 @@ function setFocus(id) {
         row.querySelector('.ch__focus')?.setAttribute('aria-current', 'true');
         keepRowVisible(row);
     }
-    mixStrip.querySelectorAll('.strip__item').forEach((tile) => {
+    strips.forEach((strip) => strip.querySelectorAll('[data-track-id]').forEach((tile) => {
         const on = tile.dataset.trackId === id;
         tile.classList.toggle('is-focus', on);
-        tile.querySelector('.strip__btn')?.setAttribute('aria-current', String(on));
+        tile.querySelector('button')?.setAttribute('aria-current', String(on));
         if (on)
-            keepTileVisible(tile);
-    });
+            keepTileVisible(strip, tile);
+    }));
     renderStage(true);
 }
 function stepFocus(dir) {
@@ -856,16 +862,12 @@ function initializeEventListeners() {
     });
     // Main display: tap the artwork to play or pause; the strip focuses or toggles channels.
     artPlay.addEventListener('click', () => focusedId && togglePlay(focusedId));
-    mixStrip.addEventListener('click', (e) => {
+    strips.forEach((strip) => strip.addEventListener('click', (e) => {
         const el = e.target.closest('[data-action]');
         const id = el?.closest('[data-track-id]')?.dataset.trackId;
-        if (!el || !id)
-            return;
-        if (el.dataset.action === 'focus')
+        if (el?.dataset.action === 'focus' && id)
             setFocus(id);
-        else if (el.dataset.action === 'toggle')
-            togglePlay(id);
-    });
+    }));
     // Deck
     playButton.addEventListener('click', () => focusedId && togglePlay(focusedId));
     prevButton.addEventListener('click', () => stepFocus(-1));

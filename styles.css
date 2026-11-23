@@ -264,10 +264,12 @@ svg {
    Layout: an app shell pinned to the screen on every size.
    - Vertical screens: the stage (artwork, numbered strip, title) sits at the
      top of the scroller and collapses as you scroll (src/layout.ts); the
-     panels below swipe horizontally: deck, channels, status + mixes.
+     panels follow one under another: deck, channels, status + mixes.
    - Horizontal screens: the stage is a narrow column on the left and the
      panels swipe vertically on the right.
-   The pager bars show the panel in view and jump on tap.
+   Both move between panels vertically, so a swipe never catches a slider.
+   The pager bars run down the right edge, show the panel in view and jump
+   on tap.
    ========================================================================== */
 
 html,
@@ -311,12 +313,12 @@ html.is-zoomed .app {
   height: calc(100dvh / var(--ui-zoom));
 }
 
-/* ---------- Vertical: one scroller, collapsing stage, sideways panels ---------- */
+/* ---------- Vertical: one scroller, collapsing stage, panels underneath ---------- */
 
 .scroller {
   min-height: 0;
   margin: 0 calc(var(--gutter) * -1);
-  padding: 0 var(--gutter) calc(52px + env(safe-area-inset-bottom));
+  padding: 0 var(--gutter) max(var(--gutter), env(safe-area-inset-bottom));
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -355,18 +357,11 @@ html.is-zoomed .app {
   border-bottom-color: var(--line);
 }
 
-/* Panels: side by side, one screen wide each, snapping. Their box takes the
-   height of the panel in view (src/layout.ts). A spacer the size of the
-   stage's collapse keeps them from jumping as it shrinks. */
+/* Panels: one under another, scrolling up under the collapsed stage. */
 .slides {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   margin: 8px -6px 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
 }
 
 .slides::-webkit-scrollbar {
@@ -375,38 +370,43 @@ html.is-zoomed .app {
 
 .slide {
   display: flex;
-  flex: 0 0 100%;
+  flex: none;
   flex-direction: column;
   gap: var(--gap);
   min-width: 0;
   padding: 6px;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
 }
 
-/* ---------- Pager: one bar per panel ---------- */
+/* Sliders take sideways drags only; a vertical swipe that starts on one
+   scrolls the panels instead of changing its value. */
+input[type="range"] {
+  touch-action: pan-y;
+}
+
+/* ---------- Pager: one bar per panel, down the right edge ---------- */
 
 .pager {
   position: fixed;
-  left: 50%;
-  bottom: max(8px, env(safe-area-inset-bottom));
+  right: env(safe-area-inset-right);
+  bottom: max(12px, env(safe-area-inset-bottom));
   z-index: 10;
   display: flex;
+  flex-direction: column;
   gap: 2px;
-  padding: 2px 6px;
+  padding: 4px 1px;
   border: 1px solid var(--line);
+  border-right: 0;
   background: rgb(8 9 10 / 50%);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  transform: translateX(-50%);
 }
 
 .pager__bar {
   position: relative;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 32px;
+  width: 12px;
+  height: 40px;
   padding: 0;
   border: 0;
   background: none;
@@ -414,10 +414,10 @@ html.is-zoomed .app {
 
 .pager__bar::before {
   content: "";
-  width: 20px;
-  height: 3px;
+  width: 3px;
+  height: 20px;
   background: rgba(255, 255, 255, 0.28);
-  transition: width 220ms var(--ease), background-color 220ms var(--ease);
+  transition: height 220ms var(--ease), background-color 220ms var(--ease);
 }
 
 .pager__bar:hover::before {
@@ -425,7 +425,7 @@ html.is-zoomed .app {
 }
 
 .pager__bar[aria-current="true"]::before {
-  width: 32px;
+  height: 32px;
   background: var(--accent);
   box-shadow: 0 0 10px var(--accent-glow);
 }
@@ -2330,17 +2330,19 @@ html.is-zoomed .app {
   .slides {
     grid-area: slides;
     display: block;
-    height: auto !important;
     min-height: 0;
     margin: -6px;
     overflow-x: hidden;
     overflow-y: auto;
     scroll-snap-type: y mandatory;
     overscroll-behavior-y: contain;
+    scrollbar-width: none;
   }
 
   .slide {
     height: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
     overflow-y: auto;
     overscroll-behavior-y: auto;
     scrollbar-width: thin;
@@ -2350,29 +2352,12 @@ html.is-zoomed .app {
   .pager {
     grid-area: pager;
     position: static;
-    flex-direction: column;
     align-self: center;
     justify-self: center;
     /* Sit close to the panels. */
     margin-left: calc(var(--gutter) * -1 + 6px);
     padding: 4px 2px;
-    transform: none;
-  }
-
-  .pager__bar {
-    width: 12px;
-    height: 40px;
-  }
-
-  .pager__bar::before {
-    width: 3px;
-    height: 20px;
-    transition: height 220ms var(--ease), background-color 220ms var(--ease);
-  }
-
-  .pager__bar[aria-current="true"]::before {
-    width: 3px;
-    height: 32px;
+    border-right: 1px solid var(--line);
   }
 }
 
@@ -2407,6 +2392,133 @@ html.is-zoomed .app {
    the first panel (it sets data-merged), so the list can never vanish. */
 html[data-merged="true"] .slide--channels {
   display: none;
+}
+
+/* ---------- Thumbnail strip: large horizontal screens only ---------- */
+
+/* Takes the numbered strip's place there: what's playing, as thumbnails
+   under the title, numbered by their place in the mix. Tap one to bring it
+   to the main display. Muted, so the artwork above stays the focus. */
+.thumbs {
+  display: none;
+}
+
+html[data-merged="true"] .now__visual .strip {
+  display: none;
+}
+
+html[data-merged="true"] .stage-wrap .now {
+  height: 100%;
+}
+
+html[data-merged="true"] .thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  align-content: start;
+  gap: 12px 10px;
+  flex: 1 1 0;
+  min-height: 0;
+  /* Room for the selected tile's glow. */
+  margin: -4px -6px 0;
+  padding: 6px 6px 4px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.thumbs__btn {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.thumbs__img {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  background: var(--noise), var(--dither), var(--fill);
+  transition: border-color 160ms var(--ease), box-shadow 220ms var(--ease), transform 160ms var(--ease);
+}
+
+.thumbs__img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(0.6) brightness(0.6);
+  transition: filter 220ms var(--ease), transform 220ms var(--ease);
+}
+
+.thumbs__num {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 6px;
+  background: rgba(8, 9, 10, 0.8);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-2);
+  transition: background-color 160ms var(--ease), color 160ms var(--ease);
+}
+
+.thumbs__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.thumbs__state::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+}
+
+.thumbs__btn:hover .thumbs__img {
+  border-color: var(--text-2);
+}
+
+.thumbs__btn:hover .thumbs__img img {
+  filter: grayscale(0.3) brightness(0.8);
+}
+
+.thumbs__btn:active .thumbs__img {
+  transform: scale(0.97);
+}
+
+/* The channel on the main display: the same accent flare as the numbered strip. */
+.thumbs__item.is-focus .thumbs__img {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow), 0 0 28px var(--accent-glow);
+}
+
+.thumbs__item.is-focus .thumbs__img img {
+  filter: grayscale(0.25) brightness(0.8);
+}
+
+.thumbs__item.is-focus .thumbs__num {
+  background: var(--accent);
+  color: #08090A;
+  font-weight: 500;
+}
+
+.thumbs__item.is-focus .thumbs__state {
+  color: var(--accent);
 }
 
 /* Short horizontal screens (a phone on its side): tighter title, more room

@@ -1183,6 +1183,16 @@ function focusedTrack() {
 function stripFor(id) {
     return mixStrip.querySelector(`[data-track-id="${CSS.escape(id)}"]`);
 }
+/** Scroll the strip sideways (never the page) just enough to show a tile. */
+function keepTileVisible(tile) {
+    const view = mixStrip.getBoundingClientRect();
+    const r = tile.getBoundingClientRect();
+    const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
+    if (r.left < view.left)
+        mixStrip.scrollBy({ left: r.left - view.left - 6, behavior });
+    else if (r.right > view.right)
+        mixStrip.scrollBy({ left: r.right - view.right + 6, behavior });
+}
 /** The mix strip under the title: rebuilt with the list, patched in place on state changes. */
 function renderStrip() {
     const tracks = playlistManager.getTracks();
@@ -1514,7 +1524,7 @@ function setFocus(id) {
         tile.classList.toggle('is-focus', on);
         tile.querySelector('.strip__focus')?.setAttribute('aria-current', String(on));
         if (on)
-            tile.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+            keepTileVisible(tile);
     });
     renderStage(true);
 }

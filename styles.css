@@ -858,7 +858,7 @@ svg {
      src/accent.ts) gets a square frame and its own cap. */
   --art-ratio: 1.778;
   --art-cap: 780px;
-  --art-w: min(100%, var(--art-cap));
+  --art-w: min(100%, var(--art-cap), max(240px, calc((100svh - 220px) * var(--art-ratio))));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1015,10 +1015,10 @@ svg {
   display: none;
 }
 
-/* ---------- Mix strip: every channel at a glance (wide screens only) ---------- */
+/* ---------- Mix strip: every channel at a glance, under the title ---------- */
 
 .strip {
-  display: none;
+  display: flex;
   gap: 8px;
   width: calc(100% + 12px);
   margin: 0 -6px;
@@ -2343,11 +2343,12 @@ svg {
   }
 }
 
-/* Wide pinned screens (16:10 and wider): the main display gets the mix
-   strip, so channels can be switched and toggled next to the artwork. */
-@media (min-width: 1000px) and (min-height: 480px) and (min-aspect-ratio: 3/2) {
+/* Pinned but short (under 700px tall): the strip would squeeze the status
+   and mixes pane to nothing, so it steps aside there. */
+@media (min-width: 760px) and (min-aspect-ratio: 1/1) and (min-height: 480px) and (max-height: 699px),
+       (min-width: 1000px) and (min-height: 480px) and (max-height: 699px) {
   .strip {
-    display: flex;
+    display: none;
   }
 }
 

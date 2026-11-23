@@ -958,10 +958,79 @@ svg {
    ========================================================================== */
 
 .deck {
-  display: grid;
-  grid-template-columns: 200px minmax(0, 1fr) auto;
-  gap: 16px;
+  container: deck / inline-size;
   min-width: 0;
+}
+
+/* The deck picks its layout from its own width, not the window's, so the
+   timeline never gets squeezed between the time cards and the transport. */
+.deck__grid {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) auto;
+  grid-template-areas: "times timeline transport";
+  gap: 16px;
+}
+
+.deck__times { grid-area: times; }
+.timeline { grid-area: timeline; }
+.transport { grid-area: transport; }
+
+/* Tight single row: slimmer transport tiles leave the timeline more room. */
+@container deck (max-width: 1100px) {
+  .tile-btn {
+    width: 84px;
+  }
+
+  .tile-btn--primary {
+    width: 104px;
+  }
+}
+
+/* Medium: time cards beside the timeline, transport as a full-width row. */
+@container deck (max-width: 1000px) {
+  .deck__grid {
+    grid-template-columns: minmax(180px, 0.6fr) minmax(0, 1.4fr);
+    grid-template-areas:
+      "times timeline"
+      "transport transport";
+  }
+
+  .transport {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr 1fr 1fr;
+  }
+
+  .tile-btn,
+  .tile-btn--primary {
+    width: auto;
+    min-height: 76px;
+    flex-direction: row;
+    gap: 10px;
+  }
+}
+
+/* Narrow: everything stacks; the two time cards sit side by side. */
+@container deck (max-width: 560px) {
+  .deck__grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "times"
+      "timeline"
+      "transport";
+  }
+
+  .deck__times {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tile-btn,
+  .tile-btn--primary {
+    flex-direction: column;
+    gap: 8px;
+    min-height: 84px;
+    padding: 10px 4px;
+    font-size: 11px;
+  }
 }
 
 .deck__times {
@@ -998,6 +1067,7 @@ svg {
 /* Timeline */
 
 .timeline {
+  container: timeline / inline-size;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1005,11 +1075,24 @@ svg {
   min-width: 0;
 }
 
+@container timeline (max-width: 440px) {
+  .timeline__ticks span:nth-child(2n) {
+    visibility: hidden;
+  }
+}
+
+@container timeline (max-width: 240px) {
+  .timeline__ticks span:nth-child(3) {
+    visibility: hidden;
+  }
+}
+
 .timeline__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px 12px;
 }
 
 .timeline__time {
@@ -1556,10 +1639,15 @@ svg {
    ========================================================================== */
 
 /* Wide screens fill the window like an app; the channel list scrolls inside. */
-@media (min-width: 1200px) and (min-height: 720px) {
+@media (min-width: 1440px) and (min-height: 760px) {
   .app {
     height: 100dvh;
     overflow: hidden;
+  }
+
+  .now {
+    container-type: size;
+    --art-w: min(100%, 780px, calc((100cqh - 230px) * 1.778));
   }
 
   .channel-list {
@@ -1586,7 +1674,7 @@ svg {
   }
 }
 
-@media (max-width: 1199px), (max-height: 719px) {
+@media (max-width: 1439px), (max-height: 759px) {
   .app {
     grid-template-columns: minmax(0, 1fr) 320px;
     grid-template-rows: auto;
@@ -1598,7 +1686,7 @@ svg {
   }
 
   .now {
-    --art-w: 100%;
+    --art-w: min(100%, 820px);
     justify-content: flex-start;
   }
 
@@ -1631,24 +1719,6 @@ svg {
     align-items: start;
   }
 
-  .deck {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .deck__times {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .transport {
-    display: grid;
-    grid-template-columns: 1fr 1.3fr 1fr 1fr;
-  }
-
-  .tile-btn,
-  .tile-btn--primary {
-    width: auto;
-    min-height: 84px;
-  }
 }
 
 @media (max-width: 640px) {
@@ -1680,12 +1750,6 @@ svg {
     font-size: 21px;
   }
 
-  .tile-btn {
-    gap: 8px;
-    padding: 10px 4px;
-    font-size: 11px;
-  }
-
   .field-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1696,10 +1760,6 @@ svg {
 
   .ch__vol {
     padding-left: 0;
-  }
-
-  .timeline__ticks span:nth-child(2n) {
-    visibility: hidden;
   }
 }
 

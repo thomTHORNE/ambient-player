@@ -21,6 +21,7 @@ const files = [
   'crt.js',
   'screenFx.js',
   'screen.js',
+  'commands.js',
   'layoutPref.js',
   'layout.js',
   'scale.js',

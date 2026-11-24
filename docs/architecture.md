@@ -39,6 +39,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `accent.ts` | Samples the artwork on a canvas for the accent colour, and detects square (album) art. |
 | `crt.ts` | The screen effect: renders the artwork and thumbnails as phosphor cells on a canvas. |
 | `screenFx.ts` | The Screen effect panel: style dial, Mix and fine-tune, saved on the device. |
+| `commands.ts` | The command layer: every change to playback or the mix as a `Command`, applied through `dispatch()`. |
 | `screen.ts` | Fullscreen (with the WebKit fallback), installed-app detection and the screen wake lock. |
 | `scale.ts` | The UI scale setting: reads, applies and stores it. |
 | `layoutPref.ts` | The Layout setting (Auto or Stacked), kept per screen. |
@@ -56,6 +57,22 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `focusedId` | The channel on the main display; the deck acts on it. |
 | `mixName` | The saved mix's name, if any. |
 | `openDrawers` | Which channel rows have their settings drawer open. |
+
+**Commands.** Nothing in the interface calls the players directly.
+
+- **dispatch():** every change to playback or the mix goes through
+  `dispatch()` in `commands.ts` as a `Command`. The commands are play, pause,
+  play all, pause all, focus, step, seek, stop, volume, repeat, add, remove,
+  change link and load mix.
+- **Where they run:** `runCommand()` in `main.ts` applies them on this
+  device. Remote control will add a route that sends them to the main device
+  instead (see `docs/remote-control-plan.md`).
+- **Self-contained:** commands are plain JSON and carry the value to apply,
+  never a toggle ("pause this channel", not "toggle it"), so they mean the
+  same on another device.
+- **Not commands:** purely local actions, such as a row's drawer, the remove
+  confirmation, saving mixes on this device, share links, and the layout,
+  scale and screen settings.
 
 **Rendering.**
 

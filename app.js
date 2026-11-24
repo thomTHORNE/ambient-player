@@ -1705,6 +1705,43 @@ document.addEventListener('visibilitychange', () => {
 });
 
 
+// ===== commands.js =====
+/**
+ * Commands: every change to playback or the mix, as plain data.
+ *
+ * The interface never calls the players directly; it calls dispatch() with a
+ * command. Today every command runs here, on this device. Remote control
+ * (docs/remote-control-plan.md) adds a route that sends commands to the main
+ * device instead, and the same data travels over the wire, so each command
+ * must stay JSON-serialisable and self-contained: it carries the values to
+ * apply ("pause this channel"), never a toggle that depends on the state the
+ * sender happened to see.
+ *
+ * Purely local actions are not commands: opening a row's drawer, the remove
+ * confirmation, saving mixes on this device, share links, and the layout,
+ * scale and screen settings.
+ */
+let cmdRunLocally = null;
+let cmdRoute = null;
+/** The local implementation (src/main.ts registers it at start-up). */
+function setCommandRunner(runner) {
+    cmdRunLocally = runner;
+}
+/** Remote control's hook: send commands elsewhere instead of running them. */
+function setCommandRoute(next) {
+    cmdRoute = next;
+}
+/**
+ * Apply a command: on this device, or wherever the route sends it.
+ * True when it was applied here or handed on; false when it failed here.
+ */
+function dispatch(command) {
+    if (cmdRoute && cmdRoute(command))
+        return true;
+    return cmdRunLocally ? cmdRunLocally(command) : false;
+}
+
+
 // ===== layoutPref.js =====
 /**
  * Layout choice: Auto (the layout follows the screen) or Stacked (the
@@ -2276,6 +2313,7 @@ function setupStageResize() {
  * "focused": it fills the centre of the screen and the deck controls it.
  * Every channel stays playable from the channel list.
  */
+
 
 
 
@@ -2900,7 +2938,7 @@ function reloadTrack(id, newUrl) {
     const newVideoId = isValidYouTubeUrl(newUrl) ? extractVideoId(newUrl) : null;
     if (!track || !newVideoId) {
         showError(inputError, 'That link has no YouTube video in it. The channel was not changed.');
-        return;
+        return false;
     }
     const keep = { volume: track.volume, loop: track.loop };
     playlistManager.getController(id)?.destroy();
@@ -2918,18 +2956,130 @@ function reloadTrack(id, newUrl) {
     renderStatus();
     if (id === focusedId)
         renderStage(true);
+    return true;
 }
-function togglePlay(id) {
+function playTrack(id) {
     const track = playlistManager.getTrack(id);
     const controller = playlistManager.getController(id);
-    if (!track || !controller)
-        return;
-    if (track.state === 'playing')
-        controller.pause();
-    else if (track.state === 'paused') {
-        controller.play();
-        startPolling();
+    if (!track || !controller || track.state !== 'paused')
+        return false;
+    controller.play();
+    startPolling();
+    return true;
+}
+function pauseTrack(id) {
+    const track = playlistManager.getTrack(id);
+    const controller = playlistManager.getController(id);
+    if (!track || !controller || track.state !== 'playing')
+        return false;
+    controller.pause();
+    return true;
+}
+function playAll() {
+    playlistManager.getTracks().forEach((t) => t.state === 'paused' && playlistManager.getController(t.id)?.play());
+    startPolling();
+    return true;
+}
+function pauseAll() {
+    playlistManager.getTracks().forEach((t) => t.state === 'playing' && playlistManager.getController(t.id)?.pause());
+    return true;
+}
+/** Jump within a channel. */
+function seekTrack(id, time) {
+    const controller = playlistManager.getController(id);
+    if (!controller)
+        return false;
+    controller.seekTo(time);
+    playlistManager.updateTrack(id, { currentTime: time });
+    const row = rowFor(id);
+    const track = playlistManager.getTrack(id);
+    if (row && track)
+        patchChannelRow(row, track);
+    if (id === focusedId)
+        renderTime();
+    return true;
+}
+/** The deck's Stop: pause and go back to the start. */
+function stopTrack(id) {
+    const controller = playlistManager.getController(id);
+    if (!controller)
+        return false;
+    controller.pause();
+    return seekTrack(id, 0);
+}
+function setLoop(id, on) {
+    if (!playlistManager.getTrack(id))
+        return false;
+    playlistManager.updateTrack(id, { loop: on });
+    if (id === focusedId)
+        renderStage(false);
+    return true;
+}
+/** Add a channel from a link; renders the result. */
+function addChannel(url) {
+    const wasEmpty = playlistManager.getTracks().length === 0;
+    if (!addTrackFromUrl(url))
+        return false;
+    renderAll(wasEmpty);
+    return true;
+}
+/** Replace the mix with these links (taking `name`) or add them to it. */
+function loadMix(urls, name, mode) {
+    if (mode === 'replace')
+        mixName = name;
+    loadTracksFromUrls(urls, mode);
+    return true;
+}
+/** Every command, applied on this device. Registered with src/commands.ts. */
+function runCommand(command) {
+    switch (command.type) {
+        case 'play':
+            return playTrack(command.trackId);
+        case 'pause':
+            return pauseTrack(command.trackId);
+        case 'play_all':
+            return playAll();
+        case 'pause_all':
+            return pauseAll();
+        case 'focus':
+            if (!playlistManager.getTrack(command.trackId))
+                return false;
+            setFocus(command.trackId);
+            return true;
+        case 'step':
+            stepFocus(command.dir);
+            return true;
+        case 'seek':
+            return seekTrack(command.trackId, command.time);
+        case 'stop':
+            return stopTrack(command.trackId);
+        case 'volume':
+            if (!playlistManager.getTrack(command.trackId))
+                return false;
+            setVolume(command.trackId, Math.min(1, Math.max(0, command.volume)));
+            return true;
+        case 'loop':
+            return setLoop(command.trackId, command.on);
+        case 'add':
+            return addChannel(command.url);
+        case 'remove':
+            if (!playlistManager.getTrack(command.trackId))
+                return false;
+            removeTrack(command.trackId);
+            return true;
+        case 'relink':
+            return reloadTrack(command.trackId, command.url);
+        case 'load_mix':
+            return loadMix(command.urls, command.name, command.mode);
     }
+}
+/** Play or pause a channel, from what this device shows (UI helper). */
+function togglePlay(id) {
+    const track = playlistManager.getTrack(id);
+    if (track?.state === 'playing')
+        dispatch({ type: 'pause', trackId: id });
+    else if (track?.state === 'paused')
+        dispatch({ type: 'play', trackId: id });
 }
 function setVolume(id, volume) {
     playlistManager.getController(id)?.setVolume(volume);
@@ -2955,18 +3105,12 @@ function loadTracksFromUrls(urls, mode) {
 /** Load a mix, asking to replace or add when channels are open. False if cancelled. */
 async function handleLoadPlaylist(urls, name) {
     const open = playlistManager.getTracks().length;
-    if (open === 0) {
-        mixName = name;
-        loadTracksFromUrls(urls, 'replace');
-        return true;
-    }
+    if (open === 0)
+        return dispatch({ type: 'load_mix', urls, name, mode: 'replace' });
     const choice = await showReplaceAppendModal(`This mix has ${urls.length} channel${urls.length === 1 ? '' : 's'}. Replace the ${open} you have open, or add them to the current mix?`);
     if (choice === 'cancel')
         return false;
-    if (choice === 'replace')
-        mixName = name;
-    loadTracksFromUrls(urls, choice);
-    return true;
+    return dispatch({ type: 'load_mix', urls, name, mode: choice });
 }
 /** Briefly swap a button's label; a second flash restarts it, never sticks. */
 const flashTimers = new WeakMap();
@@ -2993,11 +3137,9 @@ function initializeEventListeners() {
             urlInput.focus();
             return;
         }
-        const wasEmpty = playlistManager.getTracks().length === 0;
-        if (addTrackFromUrl(url)) {
+        if (dispatch({ type: 'add', url })) {
             urlInput.value = '';
             inputError.textContent = '';
-            renderAll(wasEmpty);
         }
     };
     addButton.addEventListener('click', submitUrl);
@@ -3006,21 +3148,12 @@ function initializeEventListeners() {
             submitUrl();
     });
     globalPlayPauseButton.addEventListener('click', () => {
-        const tracks = playlistManager.getTracks();
-        if (playlistManager.hasPlayingTracks()) {
-            tracks.forEach((t) => t.state === 'playing' && playlistManager.getController(t.id)?.pause());
-        }
-        else {
-            tracks.forEach((t) => t.state === 'paused' && playlistManager.getController(t.id)?.play());
-            startPolling();
-        }
+        dispatch({ type: playlistManager.hasPlayingTracks() ? 'pause_all' : 'play_all' });
     });
     loopSwitch.addEventListener('click', () => {
         const track = focusedTrack();
-        if (!track)
-            return;
-        playlistManager.updateTrack(track.id, { loop: !track.loop });
-        renderStage(false);
+        if (track)
+            dispatch({ type: 'loop', trackId: track.id, on: !track.loop });
     });
     shareButton.addEventListener('click', async () => {
         const urls = playlistManager.getTrackUrls();
@@ -3104,7 +3237,7 @@ function initializeEventListeners() {
         if (!el || !id)
             return;
         if (el.dataset.action === 'focus')
-            setFocus(id);
+            dispatch({ type: 'focus', trackId: id });
         else if (el.dataset.action === 'toggle')
             togglePlay(id);
         else if (el.dataset.action === 'drawer') {
@@ -3124,7 +3257,7 @@ function initializeEventListeners() {
             const input = rowFor(id)?.querySelector('.ch__link-input');
             const url = input?.value.trim();
             if (url)
-                reloadTrack(id, url);
+                dispatch({ type: 'relink', trackId: id, url });
         }
         else if (el.dataset.action === 'remove-ask') {
             const row = rowFor(id);
@@ -3143,7 +3276,7 @@ function initializeEventListeners() {
         else if (el.dataset.action === 'remove-yes') {
             const tracks = playlistManager.getTracks();
             const next = tracks[tracks.findIndex((t) => t.id === id) + 1] ?? tracks[tracks.findIndex((t) => t.id === id) - 1];
-            removeTrack(id);
+            dispatch({ type: 'remove', trackId: id });
             // Keep keyboard users in the list rather than dropping focus to the page.
             (next ? rowFor(next.id)?.querySelector('.ch__focus') : urlInput)?.focus();
         }
@@ -3166,7 +3299,7 @@ function initializeEventListeners() {
         const input = e.target;
         const id = input.closest('[data-track-id]')?.dataset.trackId;
         if (id && input.dataset.action === 'volume')
-            setVolume(id, Number(input.value) / 100);
+            dispatch({ type: 'volume', trackId: id, volume: Number(input.value) / 100 });
     });
     /** Switch to the always-present thumbnail; false when already on it. */
     const useFallback = () => {
@@ -3198,24 +3331,15 @@ function initializeEventListeners() {
         const el = e.target.closest('[data-action]');
         const id = el?.closest('[data-track-id]')?.dataset.trackId;
         if (el?.dataset.action === 'focus' && id)
-            setFocus(id);
+            dispatch({ type: 'focus', trackId: id });
     }));
     // Deck
     playButton.addEventListener('click', () => focusedId && togglePlay(focusedId));
-    prevButton.addEventListener('click', () => stepFocus(-1));
-    nextButton.addEventListener('click', () => stepFocus(1));
+    prevButton.addEventListener('click', () => dispatch({ type: 'step', dir: -1 }));
+    nextButton.addEventListener('click', () => dispatch({ type: 'step', dir: 1 }));
     resetButton.addEventListener('click', () => {
-        const track = focusedTrack();
-        const controller = track && playlistManager.getController(track.id);
-        if (!track || !controller)
-            return;
-        controller.pause();
-        controller.seekTo(0);
-        playlistManager.updateTrack(track.id, { currentTime: 0 });
-        const row = rowFor(track.id);
-        if (row)
-            patchChannelRow(row, playlistManager.getTrack(track.id));
-        renderTime();
+        if (focusedId)
+            dispatch({ type: 'stop', trackId: focusedId });
     });
     const endSeek = () => (seeking = false);
     seekInput.addEventListener('pointerdown', () => (seeking = true));
@@ -3224,20 +3348,13 @@ function initializeEventListeners() {
     seekInput.addEventListener('change', endSeek);
     seekInput.addEventListener('input', () => {
         const track = focusedTrack();
-        const controller = track && playlistManager.getController(track.id);
-        if (!track || !controller || !track.duration)
+        if (!track || !track.duration)
             return;
-        const target = (Number(seekInput.value) / 1000) * track.duration;
-        controller.seekTo(target);
-        playlistManager.updateTrack(track.id, { currentTime: target });
-        const row = rowFor(track.id);
-        if (row)
-            patchChannelRow(row, playlistManager.getTrack(track.id));
-        renderTime();
+        dispatch({ type: 'seek', trackId: track.id, time: (Number(seekInput.value) / 1000) * track.duration });
     });
     volumeInput.addEventListener('input', () => {
         if (focusedId)
-            setVolume(focusedId, Number(volumeInput.value) / 100);
+            dispatch({ type: 'volume', trackId: focusedId, volume: Number(volumeInput.value) / 100 });
     });
     // Keyboard: Space plays the focused channel, [ and ] step between channels.
     document.addEventListener('keydown', (e) => {
@@ -3251,10 +3368,10 @@ function initializeEventListeners() {
             togglePlay(focusedId);
         }
         else if (e.key === '[') {
-            stepFocus(-1);
+            dispatch({ type: 'step', dir: -1 });
         }
         else if (e.key === ']') {
-            stepFocus(1);
+            dispatch({ type: 'step', dir: 1 });
         }
     });
 }
@@ -3281,6 +3398,7 @@ function setupScreenEffect() {
     });
 }
 async function initialize() {
+    setCommandRunner(runCommand);
     setupScreenTakeover();
     setupScreenEffect();
     setupLayout();
@@ -3301,8 +3419,7 @@ async function initialize() {
     }
     const lastPlaylist = getLastPlaylist();
     if (lastPlaylist && lastPlaylist.urls.length > 0) {
-        mixName = lastPlaylist.name;
-        loadTracksFromUrls(lastPlaylist.urls, 'replace');
+        dispatch({ type: 'load_mix', urls: lastPlaylist.urls, name: lastPlaylist.name, mode: 'replace' });
     }
 }
 initialize().catch(console.error);

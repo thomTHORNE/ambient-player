@@ -128,6 +128,7 @@ src/
   accent.ts           Accent colour and square-art detection from artwork
   crt.ts              Screen effect: draws the artwork as phosphor cells
   screenFx.ts         Screen effect panel: style dial, Mix, fine-tune
+  commands.ts         Command layer: every change to playback or the mix
   screen.ts           Fullscreen and screen wake lock
   scale.ts            UI scale setting
   layoutPref.ts       Layout setting (Auto or Stacked), kept per screen

@@ -82,10 +82,13 @@ The panels are, in order:
 
 1. **Deck:** transport, timeline, channel volume.
 2. **Channels:** add a link, Play all / Pause all, the channel rows.
-3. **Saved mixes, mix status, devices, then the screen effect:**
-   - **Mix status:** duration, repeat, layout, UI scale, share link.
-   - **Devices:** pairing and the device list.
-   - **Screen effect:** the style dial, Mix and fine-tune.
+3. **Saved mixes, then mix status:** duration, repeat, layout, UI scale,
+   share link.
+4. **Devices, then the screen effect:** pairing and the device list; the
+   style dial, Mix and fine-tune.
+
+On large horizontal screens the deck and channels share the first page, so
+there are three.
 
 ## Interaction rules
 

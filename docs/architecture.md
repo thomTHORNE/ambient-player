@@ -331,7 +331,7 @@ the screen directly.
 **Stacked (vertical) layout.**
 
 - **One scroller.** `#scroller` scrolls everything: the stage (artwork,
-  numbered strip, title) and the three panels below it.
+  numbered strip, title) and the four panels below it.
 - **Collapsing stage.** The stage is `position: sticky` with a fixed height
   and a negative `top` equal to its collapse range, so the content under it
   never moves out of step. While scrolling through that range only two

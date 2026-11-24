@@ -132,7 +132,7 @@
            column (src/resize.ts). Hidden everywhere else. -->
       <div id="stageSplitter" class="splitter" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="stageWrap" aria-label="Artwork column width" aria-valuemin="0" aria-valuemax="100" aria-valuenow="42" title="Drag to resize the artwork; double-click to reset"></div>
 
-      <!-- ============ 2-4. Panels: swipe between deck, channels, status + mixes ============ -->
+      <!-- ============ Panels: swipe between deck, channels, mixes + status, devices + screen effect ============ -->
       <div id="slides" class="slides" aria-label="Panels">
         <div class="slide slide--deck" id="slideDeck" aria-label="Playback">
           <section class="deck" aria-label="Playback">
@@ -277,6 +277,8 @@
                 <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
               </div>
             </section>
+        </div>
+        <div class="slide slide--more" id="slideMore" aria-label="Devices and screen effect">
           <!-- Devices: pair another device to use as a remote (src/devices.ts). -->
           <section class="panel devices" aria-labelledby="devicesTitle">
             <header class="panel__head">
@@ -367,6 +369,7 @@
       <button class="pager__bar" type="button" data-slide="0" aria-label="Playback controls" aria-current="true"></button>
       <button class="pager__bar" type="button" data-slide="1" aria-label="Channels" aria-current="false"></button>
       <button class="pager__bar" type="button" data-slide="2" aria-label="Saved mixes and mix status" aria-current="false"></button>
+      <button class="pager__bar" type="button" data-slide="3" aria-label="Devices and screen effect" aria-current="false"></button>
     </nav>
   </div>
 
@@ -374,7 +377,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=081fae0b5c"></script>
+  <script src="app.js?v=c594a82d31"></script>
 </body>
 
 </html>

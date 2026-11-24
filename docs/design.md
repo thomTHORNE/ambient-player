@@ -69,11 +69,12 @@ The artwork's brackets sit inside the frame like a viewfinder.
 
 | Screen | Query | Arrangement |
 | --- | --- | --- |
-| Vertical | `orientation: portrait` | Brand, then the stage: artwork at full width with the numbered strip down its right edge inside the frame, then the title. Panels below; the artwork collapses as you scroll, to about a tenth of the screen height. |
-| Horizontal | `orientation: landscape` | Brand across the top; the stage in a left column (a fixed 4:3 artwork frame, the strip beside it, the title under it), panels in the middle, pager on the right. |
+| Vertical (Stacked) | `orientation: portrait`, or **Layout: Stacked** | Brand, then the stage: artwork at full width with the numbered strip down its right edge inside the frame, then the title. Panels below; the artwork collapses as you scroll, to about a tenth of the screen height. |
+| Horizontal (Columns) | `orientation: landscape` on **Layout: Auto** | Brand across the top; the stage in a left column (a fixed 4:3 artwork frame, the strip beside it, the title under it), panels in the middle, pager on the right. |
 | Large horizontal | `landscape`, ≥ 960 × 680 | A wider stage column (up to 600px) with a bigger artwork and the thumbnail strip under the title; the deck and the channel list share the first panel. |
 | Large horizontal, mouse | `landscape`, ≥ 1280 × 680, `hover: hover` and `pointer: fine` | As above, plus a divider between the artwork and the panels. Dragging it resizes the artwork column, from 300px up to the most the artwork can use at the screen's height, always leaving the panels 560px. |
 | Short horizontal | `landscape`, height ≤ 500px | A phone on its side: smaller title and more room for the artwork. |
+| Stacked on a horizontal screen | **Layout: Stacked** | The vertical layout in a centred 600px column with the pager beside it. On short screens: smaller title type, and the first swipe tucks the title away, leaving a slim band of artwork. |
 | Narrow | width ≤ 640px | 16px gutters, a smaller brand. |
 | Touch | `pointer: coarse` | 44px tap targets throughout. |
 
@@ -82,7 +83,7 @@ The panels are, in order:
 1. **Deck:** transport, timeline, channel volume.
 2. **Channels:** add a link, Play all / Pause all, the channel rows.
 3. **Saved mixes, then mix status:** playback state, counts, duration,
-   repeat, UI scale, share link.
+   repeat, layout, UI scale, share link.
 
 ## Interaction rules
 

@@ -44,6 +44,10 @@ API); only the sound and the artwork are shown.
 - **UI scale.** The Status panel has a 70–130% setting for the whole
   interface, kept per device. The line under it shows the size the app lays
   out at and which layout that gives.
+- **Layout choice.** The Status panel's **Layout** setting picks **Auto**
+  (follow the screen) or **Stacked**, the vertical phone layout on any
+  screen, just because you prefer it. It's remembered per screen, so Stacked
+  on a Fold's cover display leaves the inner display on Auto.
 - **Resizable artwork.** On large screens used with a mouse or trackpad
   (1280 × 680 and up, such as an ultrawide monitor), drag the divider between
   the artwork and the panels to make the artwork bigger or smaller.
@@ -59,6 +63,10 @@ API); only the sound and the artwork are shown.
 | Horizontal | The artwork and title in a column on the left; the panels page vertically on the right. |
 | Large horizontal (960 × 680 and up: a Fold's inner display, laptops) | A wider left column with bigger artwork and the thumbnail strip; the deck and the channel list share the first panel. |
 | Large horizontal with a mouse (1280 × 680 and up) | As above, with a draggable divider that sets the artwork column's width. |
+
+With **Layout: Stacked**, any horizontal screen uses the vertical layout
+instead, in a centred column on wide screens. On short screens the first
+swipe also tucks the title away, leaving a slim band of artwork.
 
 The pager bars on the right edge show the panel in view and jump to a panel
 on tap.
@@ -115,6 +123,7 @@ src/
   accent.ts           Accent colour and square-art detection from artwork
   screen.ts           Fullscreen and screen wake lock
   scale.ts            UI scale setting
+  layoutPref.ts       Layout setting (Auto or Stacked), kept per screen
   resize.ts           Draggable divider for the artwork column
   storage.ts          Saved mixes in localStorage
   shareLinks.ts       Encode, decode and import share links

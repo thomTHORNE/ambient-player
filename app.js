@@ -1130,6 +1130,64 @@ document.addEventListener('visibilitychange', () => {
 });
 
 
+// ===== layoutPref.js =====
+/**
+ * Layout choice: Auto (the layout follows the screen) or Stacked (the
+ * vertical phone layout on any screen, out of preference).
+ *
+ * The choice is remembered per screen, keyed by the screen's physical size,
+ * which doesn't change when it rotates. A Fold's cover and inner displays
+ * have different sizes, so Stacked on one leaves the other on Auto.
+ *
+ * src/layout.ts turns the choice and the screen into the page's layout
+ * markers; the inline script in index.html does the same before the first
+ * paint (keep the two in sync).
+ */
+const LAYOUT_KEY = 'ambient-player:layout';
+/** Fired on window when the choice changes. */
+const LAYOUT_CHOICE_EVENT = 'ambient:layout-choice';
+/** This screen's size, the same in either orientation. */
+function screenKey() {
+    const a = window.screen.width;
+    const b = window.screen.height;
+    return `${Math.min(a, b)}x${Math.max(a, b)}`;
+}
+/** Loaded once; kept here too, so a choice holds even where storage fails. */
+let choiceCache = null;
+function readChoices() {
+    if (choiceCache)
+        return choiceCache;
+    try {
+        const value = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}');
+        choiceCache = value && typeof value === 'object' ? value : {};
+    }
+    catch {
+        choiceCache = {};
+    }
+    return choiceCache;
+}
+function layoutChoice() {
+    return readChoices()[screenKey()] === 'stacked' ? 'stacked' : 'auto';
+}
+function setLayoutChoice(choice) {
+    const choices = readChoices();
+    if (choice === 'auto')
+        delete choices[screenKey()];
+    else
+        choices[screenKey()] = choice;
+    try {
+        if (Object.keys(choices).length)
+            localStorage.setItem(LAYOUT_KEY, JSON.stringify(choices));
+        else
+            localStorage.removeItem(LAYOUT_KEY);
+    }
+    catch {
+        // Not saved; it still applies for this visit.
+    }
+    window.dispatchEvent(new Event(LAYOUT_CHOICE_EVENT));
+}
+
+
 // ===== layout.js =====
 /**
  * Layout behaviour that CSS can't do alone.
@@ -1146,12 +1204,24 @@ document.addEventListener('visibilitychange', () => {
  * Both move between panels with a vertical swipe (a sideways swipe too
  * easily caught the timeline or volume sliders). The pager bars show which
  * panel is in view and jump on tap.
+ *
+ * Which layout applies is decided here, from the screen and the Layout
+ * setting (src/layoutPref.ts), and marked on <html> for styles.css:
+ *   data-layout="stacked" | "columns"   vertical or side-by-side layout
+ *   data-layout-forced="true"           Stacked chosen on a horizontal screen
+ *   data-merged="true"                  deck and channels share a panel
+ *   data-resizable="true"               the artwork column can be resized
+ * The inline script in index.html sets the same markers before the first
+ * paint; keep its queries in sync with these.
  */
+
 
 const portraitQuery = window.matchMedia('(orientation: portrait)');
 /** Large horizontal screens (a Fold's inner display at 4:3 and up) have room
- *  for the deck and the channel list on one panel. Keep in sync with styles.css. */
+ *  for the deck and the channel list on one panel. */
 const mergeQuery = window.matchMedia('(orientation: landscape) and (min-width: 960px) and (min-height: 680px)');
+/** Large horizontal screens with a mouse or trackpad: the artwork column can be resized. */
+const resizeQuery = window.matchMedia('(orientation: landscape) and (min-width: 1280px) and (min-height: 680px) and (hover: hover) and (pointer: fine)');
 const byId = (id) => document.getElementById(id);
 const lScroller = byId('scroller');
 const lStageWrap = byId('stageWrap');
@@ -1169,16 +1239,27 @@ let activeSlide = 0;
 let artMaxH = 0;
 let artMinH = 0;
 let collapseFrame = 0;
-function isPortrait() {
-    return portraitQuery.matches;
+const lRoot = document.documentElement;
+/** The vertical layout: on upright screens, or wherever Stacked is chosen. */
+function isStacked() {
+    return lRoot.dataset.layout === 'stacked';
+}
+/** Mark the layout on <html>. True when it changed. */
+function decideLayout() {
+    const before = lRoot.dataset.layout;
+    const stacked = portraitQuery.matches || layoutChoice() === 'stacked';
+    lRoot.dataset.layout = stacked ? 'stacked' : 'columns';
+    lRoot.dataset.layoutForced = String(stacked && !portraitQuery.matches);
+    lRoot.dataset.resizable = String(!stacked && resizeQuery.matches);
+    return before !== lRoot.dataset.layout;
 }
 // ---------------------------------------------------------------------------
 // Merged panel on large horizontal screens
 // ---------------------------------------------------------------------------
 /** Put the channel list on the deck's panel (large screens) or its own (others). */
 function applyMerge() {
-    const merged = mergeQuery.matches;
-    document.documentElement.dataset.merged = String(merged);
+    const merged = !isStacked() && mergeQuery.matches;
+    lRoot.dataset.merged = String(merged);
     const home = merged ? lDeckSlide : lChannelsSlide;
     if (lChannelsPanel.parentElement !== home)
         home.appendChild(lChannelsPanel);
@@ -1207,7 +1288,7 @@ function currentIndex() {
     const pages = visibleSlides();
     if (!pages.length)
         return 0;
-    if (isPortrait()) {
+    if (isStacked()) {
         // Scrolled to the very end: the last panel, even if it's too short to
         // reach the top.
         const atEnd = lScroller.scrollTop > 0 && lScroller.scrollTop + lScroller.clientHeight >= lScroller.scrollHeight - 4;
@@ -1240,7 +1321,7 @@ function portraitTop(index) {
 /** Show a panel: 0 deck, 1 channels, 2 status and saved mixes. */
 function goToSlide(index) {
     const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
-    if (isPortrait()) {
+    if (isStacked()) {
         lScroller.scrollTo({ top: portraitTop(index), behavior });
         return;
     }
@@ -1260,12 +1341,15 @@ function goToSlide(index) {
 let range = 0;
 /** Re-measure the stage (after a resize or rotation). */
 function refreshLayout() {
+    // Resting at the top (artwork at full size) stays there: re-measuring moves
+    // the snap stops, and the browser would otherwise re-snap to the collapsed one.
+    const atTop = isStacked() && lScroller.scrollTop < 1;
     lArt.style.height = '';
     lStage.style.transform = '';
     lStageWrap.style.height = '';
     lStageWrap.style.top = '';
     ['--deck-snap', '--pinned-h', '--page-h'].forEach((name) => lScroller.style.removeProperty(name));
-    if (!isPortrait()) {
+    if (!isStacked()) {
         artMaxH = artMinH = range = 0;
         return;
     }
@@ -1280,6 +1364,12 @@ function refreshLayout() {
     artMinH = Math.round(Math.min(artMaxH, Math.max(72, window.innerHeight * 0.1)));
     range = artMaxH - artMinH;
     const stageH = artMaxH + meta + gap + padY;
+    // Stacked by choice on a short horizontal screen: if the collapsed stage
+    // would leave the panels under half the space, it also scrolls the title
+    // away, leaving only a slim band of artwork.
+    if (lRoot.dataset.layoutForced === 'true' && lScroller.clientHeight - (stageH - range) < lScroller.clientHeight * 0.5) {
+        range += meta + gap;
+    }
     lStageWrap.style.height = `${stageH}px`;
     lStageWrap.style.top = `${-range}px`;
     // Snapping (styles.css): each panel fills the space under the collapsed
@@ -1288,23 +1378,40 @@ function refreshLayout() {
     lScroller.style.setProperty('--deck-snap', `${range + slidesGap}px`);
     lScroller.style.setProperty('--pinned-h', `${stageH - range}px`);
     lScroller.style.setProperty('--page-h', `${lScroller.clientHeight - (stageH - range)}px`);
+    if (atTop) {
+        lScroller.scrollTop = 0;
+        requestAnimationFrame(() => {
+            if (isStacked() && lScroller.scrollTop !== 0)
+                lScroller.scrollTop = 0;
+        });
+    }
     applyCollapse();
 }
 function applyCollapse() {
     collapseFrame = 0;
-    if (!isPortrait() || !artMaxH)
+    if (!isStacked() || !artMaxH)
         return;
     const c = Math.max(0, Math.min(range, lScroller.scrollTop));
-    lArt.style.height = `${artMaxH - c}px`;
+    lArt.style.height = `${Math.max(artMinH, artMaxH - c)}px`;
     lStage.style.transform = c ? `translate3d(0, ${c}px, 0)` : '';
     lStageWrap.classList.toggle('is-collapsed', c >= range - 1);
 }
+/**
+ * Until the user first touches, scrolls or presses a key, a vertical page
+ * rests at the top with the artwork at full size. Content arriving on load
+ * (fonts, the channel's title) moves the snap stops, and the browser would
+ * otherwise re-snap to the collapsed one.
+ */
+let userMoved = false;
+['pointerdown', 'touchstart', 'wheel', 'keydown'].forEach((type) => window.addEventListener(type, () => (userMoved = true), { capture: true, passive: true, once: true }));
 function onScrollerScroll() {
     if (collapseFrame)
         return;
     collapseFrame = requestAnimationFrame(() => {
+        if (!userMoved && isStacked() && lScroller.scrollTop !== 0)
+            lScroller.scrollTop = 0;
         applyCollapse();
-        if (isPortrait())
+        if (isStacked())
             setActive(currentIndex());
     });
 }
@@ -1312,6 +1419,7 @@ function onScrollerScroll() {
 // Boot
 // ---------------------------------------------------------------------------
 function setupLayout() {
+    decideLayout();
     applyMerge();
     lBars.forEach((bar) => bar.addEventListener('click', () => goToSlide(Number(bar.dataset.slide))));
     let slideFrame = 0;
@@ -1320,20 +1428,28 @@ function setupLayout() {
             return;
         slideFrame = requestAnimationFrame(() => {
             slideFrame = 0;
-            if (!isPortrait())
+            if (!isStacked())
                 setActive(currentIndex());
         });
     }, { passive: true });
     lScroller.addEventListener('scroll', onScrollerScroll, { passive: true });
     // A plain resize keeps the page where it is on vertical screens (moving it
-    // would scroll on its own); horizontal panels re-align to their page.
-    const relayout = (rotated) => {
+    // would scroll on its own); horizontal panels re-align to their page, and
+    // a change of layout (rotation, the Layout setting) brings the same panel
+    // back into view.
+    const relayout = () => {
+        const changed = decideLayout();
         applyMerge();
         refreshLayout();
-        if (rotated || !isPortrait())
+        if (changed || !isStacked())
             goToSlideInstant(activeSlide);
+        // Right after a switch to the vertical layout the browser re-snaps to
+        // the nearest stop once the new layout settles; put the panel back then.
+        if (changed && isStacked())
+            requestAnimationFrame(() => goToSlideInstant(activeSlide));
     };
-    window.addEventListener('resize', () => relayout(false));
+    window.addEventListener('resize', relayout);
+    window.addEventListener(LAYOUT_CHOICE_EVENT, relayout);
     // The space under the brand can change without a window resize (the
     // brand's status line wrapping, fonts loading), and the stage's text with
     // the channel; the snap sizes follow.
@@ -1349,13 +1465,14 @@ function setupLayout() {
     const metaEl = lStage.querySelector('.now__meta');
     if (metaEl)
         remeasure.observe(metaEl);
-    portraitQuery.addEventListener('change', () => relayout(true));
-    mergeQuery.addEventListener('change', () => relayout(false));
+    portraitQuery.addEventListener('change', relayout);
+    mergeQuery.addEventListener('change', relayout);
+    resizeQuery.addEventListener('change', relayout);
     refreshLayout();
 }
 /** After a resize or rotation, keep the same panel in view without animating. */
 function goToSlideInstant(index) {
-    if (isPortrait()) {
+    if (isStacked()) {
         lScroller.scrollTop = portraitTop(index);
         return;
     }
@@ -1442,7 +1559,8 @@ function applyScale(scale) {
 /**
  * Resizable artwork column on large horizontal screens with a mouse or
  * trackpad (an ultrawide monitor, a desktop, a laptop). Touch screens, the
- * Fold and phones never get the divider.
+ * Fold and phones never get the divider; src/layout.ts decides where it
+ * applies (data-resizable on <html>).
  *
  * The width is kept as a share of the app's width in --stage-pref, which
  * styles.css clamps: at least 300px, at most what the artwork can use at
@@ -1451,9 +1569,12 @@ function applyScale(scale) {
  * script in index.html.
  */
 
+
 const RESIZE_KEY = 'ambient-player:stage-width';
-/** Keep in sync with the resizable layout's media query in styles.css. */
-const resizeQuery = window.matchMedia('(orientation: landscape) and (min-width: 1280px) and (min-height: 680px) and (hover: hover) and (pointer: fine)');
+/** src/layout.ts decides where the divider applies and marks it on <html>. */
+function resizable() {
+    return document.documentElement.dataset.resizable === 'true';
+}
 /** One arrow-key step, as a share of the width. */
 const RESIZE_STEP = 0.02;
 const rzRoot = document.documentElement;
@@ -1501,7 +1622,7 @@ function reset() {
     updateAria();
 }
 function updateAria() {
-    if (!resizeQuery.matches)
+    if (!resizable())
         return;
     const pct = Math.round(effectiveRatio() * 100);
     rzHandle.setAttribute('aria-valuenow', String(pct));
@@ -1517,7 +1638,7 @@ function setupStageResize() {
         setPreferred((lastX - box.left - half) / box.width);
     };
     rzHandle.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0 || !resizeQuery.matches)
+        if (e.button !== 0 || !resizable())
             return;
         e.preventDefault();
         rzHandle.setPointerCapture(e.pointerId);
@@ -1567,7 +1688,7 @@ function setupStageResize() {
         if (!ariaFrame)
             ariaFrame = requestAnimationFrame(() => ((ariaFrame = 0), updateAria()));
     });
-    resizeQuery.addEventListener('change', updateAria);
+    window.addEventListener(LAYOUT_CHOICE_EVENT, updateAria);
     updateAria();
 }
 
@@ -1580,6 +1701,7 @@ function setupStageResize() {
  * "focused": it fills the centre of the screen and the deck controls it.
  * Every channel stays playable from the channel list.
  */
+
 
 
 
@@ -1875,13 +1997,47 @@ function updateScaleReadout() {
         const zoom = appZoom();
         const w = Math.round(window.innerWidth / zoom);
         const h = Math.round(window.innerHeight / zoom);
-        const mode = document.documentElement.dataset.merged === 'true'
+        const root = document.documentElement;
+        const mode = root.dataset.merged === 'true'
             ? 'large-screen layout'
-            : window.matchMedia('(orientation: portrait)').matches
+            : root.dataset.layout === 'stacked'
                 ? 'vertical layout'
                 : 'horizontal layout';
-        readout.textContent = `Layout ${w} × ${h} · ${mode}`;
+        const chosen = root.dataset.layoutForced === 'true' ? ' · Stacked on this screen' : '';
+        readout.textContent = `Layout ${w} × ${h} · ${mode}${chosen}`;
     }
+}
+/** Layout setting (Status panel): Auto follows the screen, Stacked keeps the
+ *  vertical layout on this screen whatever its shape. */
+function setupLayoutControl() {
+    const buttons = Array.from(document.querySelectorAll('[data-layout-choice]'));
+    const show = () => {
+        const choice = layoutChoice();
+        buttons.forEach((b) => {
+            const on = b.dataset.layoutChoice === choice;
+            b.setAttribute('aria-checked', String(on));
+            b.tabIndex = on ? 0 : -1;
+        });
+        updateScaleReadout();
+    };
+    const choose = (choice) => {
+        if (choice !== layoutChoice())
+            setLayoutChoice(choice);
+        show();
+    };
+    buttons.forEach((b) => {
+        b.addEventListener('click', () => choose(b.dataset.layoutChoice));
+        // A radio group: the arrow keys move the choice.
+        b.addEventListener('keydown', (e) => {
+            if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key))
+                return;
+            e.preventDefault();
+            const next = buttons[(buttons.indexOf(b) + 1) % buttons.length];
+            choose(next.dataset.layoutChoice);
+            next.focus();
+        });
+    });
+    show();
 }
 function setupScaleControl() {
     const step = (dir) => {
@@ -2542,6 +2698,7 @@ async function initialize() {
     setupScreenTakeover();
     setupLayout();
     setupScaleControl();
+    setupLayoutControl();
     setupStageResize();
     buildStaticMeters();
     renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);

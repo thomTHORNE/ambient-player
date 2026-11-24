@@ -13,14 +13,28 @@
  * Both move between panels with a vertical swipe (a sideways swipe too
  * easily caught the timeline or volume sliders). The pager bars show which
  * panel is in view and jump on tap.
+ *
+ * Which layout applies is decided here, from the screen and the Layout
+ * setting (src/layoutPref.ts), and marked on <html> for styles.css:
+ *   data-layout="stacked" | "columns"   vertical or side-by-side layout
+ *   data-layout-forced="true"           Stacked chosen on a horizontal screen
+ *   data-merged="true"                  deck and channels share a panel
+ *   data-resizable="true"               the artwork column can be resized
+ * The inline script in index.html sets the same markers before the first
+ * paint; keep its queries in sync with these.
  */
 
 import { prefersReducedMotion } from './ui.js';
+import { layoutChoice, LAYOUT_CHOICE_EVENT } from './layoutPref.js';
 
 const portraitQuery = window.matchMedia('(orientation: portrait)');
 /** Large horizontal screens (a Fold's inner display at 4:3 and up) have room
- *  for the deck and the channel list on one panel. Keep in sync with styles.css. */
+ *  for the deck and the channel list on one panel. */
 const mergeQuery = window.matchMedia('(orientation: landscape) and (min-width: 960px) and (min-height: 680px)');
+/** Large horizontal screens with a mouse or trackpad: the artwork column can be resized. */
+const resizeQuery = window.matchMedia(
+  '(orientation: landscape) and (min-width: 1280px) and (min-height: 680px) and (hover: hover) and (pointer: fine)'
+);
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -42,8 +56,21 @@ let artMaxH = 0;
 let artMinH = 0;
 let collapseFrame = 0;
 
-function isPortrait(): boolean {
-  return portraitQuery.matches;
+const lRoot = document.documentElement;
+
+/** The vertical layout: on upright screens, or wherever Stacked is chosen. */
+function isStacked(): boolean {
+  return lRoot.dataset.layout === 'stacked';
+}
+
+/** Mark the layout on <html>. True when it changed. */
+function decideLayout(): boolean {
+  const before = lRoot.dataset.layout;
+  const stacked = portraitQuery.matches || layoutChoice() === 'stacked';
+  lRoot.dataset.layout = stacked ? 'stacked' : 'columns';
+  lRoot.dataset.layoutForced = String(stacked && !portraitQuery.matches);
+  lRoot.dataset.resizable = String(!stacked && resizeQuery.matches);
+  return before !== lRoot.dataset.layout;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,8 +79,8 @@ function isPortrait(): boolean {
 
 /** Put the channel list on the deck's panel (large screens) or its own (others). */
 function applyMerge(): void {
-  const merged = mergeQuery.matches;
-  document.documentElement.dataset.merged = String(merged);
+  const merged = !isStacked() && mergeQuery.matches;
+  lRoot.dataset.merged = String(merged);
   const home = merged ? lDeckSlide : lChannelsSlide;
   if (lChannelsPanel.parentElement !== home) home.appendChild(lChannelsPanel);
   // The channels bar leads to the merged panel, like the deck's.
@@ -82,7 +109,7 @@ function setActive(index: number): void {
 function currentIndex(): number {
   const pages = visibleSlides();
   if (!pages.length) return 0;
-  if (isPortrait()) {
+  if (isStacked()) {
     // Scrolled to the very end: the last panel, even if it's too short to
     // reach the top.
     const atEnd = lScroller.scrollTop > 0 && lScroller.scrollTop + lScroller.clientHeight >= lScroller.scrollHeight - 4;
@@ -113,7 +140,7 @@ function portraitTop(index: number): number {
 /** Show a panel: 0 deck, 1 channels, 2 status and saved mixes. */
 function goToSlide(index: number): void {
   const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
-  if (isPortrait()) {
+  if (isStacked()) {
     lScroller.scrollTo({ top: portraitTop(index), behavior });
     return;
   }
@@ -136,12 +163,15 @@ let range = 0;
 
 /** Re-measure the stage (after a resize or rotation). */
 function refreshLayout(): void {
+  // Resting at the top (artwork at full size) stays there: re-measuring moves
+  // the snap stops, and the browser would otherwise re-snap to the collapsed one.
+  const atTop = isStacked() && lScroller.scrollTop < 1;
   lArt.style.height = '';
   lStage.style.transform = '';
   lStageWrap.style.height = '';
   lStageWrap.style.top = '';
   ['--deck-snap', '--pinned-h', '--page-h'].forEach((name) => lScroller.style.removeProperty(name));
-  if (!isPortrait()) {
+  if (!isStacked()) {
     artMaxH = artMinH = range = 0;
     return;
   }
@@ -156,6 +186,12 @@ function refreshLayout(): void {
   artMinH = Math.round(Math.min(artMaxH, Math.max(72, window.innerHeight * 0.1)));
   range = artMaxH - artMinH;
   const stageH = artMaxH + meta + gap + padY;
+  // Stacked by choice on a short horizontal screen: if the collapsed stage
+  // would leave the panels under half the space, it also scrolls the title
+  // away, leaving only a slim band of artwork.
+  if (lRoot.dataset.layoutForced === 'true' && lScroller.clientHeight - (stageH - range) < lScroller.clientHeight * 0.5) {
+    range += meta + gap;
+  }
   lStageWrap.style.height = `${stageH}px`;
   lStageWrap.style.top = `${-range}px`;
   // Snapping (styles.css): each panel fills the space under the collapsed
@@ -164,23 +200,41 @@ function refreshLayout(): void {
   lScroller.style.setProperty('--deck-snap', `${range + slidesGap}px`);
   lScroller.style.setProperty('--pinned-h', `${stageH - range}px`);
   lScroller.style.setProperty('--page-h', `${lScroller.clientHeight - (stageH - range)}px`);
+  if (atTop) {
+    lScroller.scrollTop = 0;
+    requestAnimationFrame(() => {
+      if (isStacked() && lScroller.scrollTop !== 0) lScroller.scrollTop = 0;
+    });
+  }
   applyCollapse();
 }
 
 function applyCollapse(): void {
   collapseFrame = 0;
-  if (!isPortrait() || !artMaxH) return;
+  if (!isStacked() || !artMaxH) return;
   const c = Math.max(0, Math.min(range, lScroller.scrollTop));
-  lArt.style.height = `${artMaxH - c}px`;
+  lArt.style.height = `${Math.max(artMinH, artMaxH - c)}px`;
   lStage.style.transform = c ? `translate3d(0, ${c}px, 0)` : '';
   lStageWrap.classList.toggle('is-collapsed', c >= range - 1);
 }
 
+/**
+ * Until the user first touches, scrolls or presses a key, a vertical page
+ * rests at the top with the artwork at full size. Content arriving on load
+ * (fonts, the channel's title) moves the snap stops, and the browser would
+ * otherwise re-snap to the collapsed one.
+ */
+let userMoved = false;
+['pointerdown', 'touchstart', 'wheel', 'keydown'].forEach((type) =>
+  window.addEventListener(type, () => (userMoved = true), { capture: true, passive: true, once: true })
+);
+
 function onScrollerScroll(): void {
   if (collapseFrame) return;
   collapseFrame = requestAnimationFrame(() => {
+    if (!userMoved && isStacked() && lScroller.scrollTop !== 0) lScroller.scrollTop = 0;
     applyCollapse();
-    if (isPortrait()) setActive(currentIndex());
+    if (isStacked()) setActive(currentIndex());
   });
 }
 
@@ -189,6 +243,7 @@ function onScrollerScroll(): void {
 // ---------------------------------------------------------------------------
 
 export function setupLayout(): void {
+  decideLayout();
   applyMerge();
   lBars.forEach((bar) => bar.addEventListener('click', () => goToSlide(Number(bar.dataset.slide))));
 
@@ -199,7 +254,7 @@ export function setupLayout(): void {
       if (slideFrame) return;
       slideFrame = requestAnimationFrame(() => {
         slideFrame = 0;
-        if (!isPortrait()) setActive(currentIndex());
+        if (!isStacked()) setActive(currentIndex());
       });
     },
     { passive: true }
@@ -208,13 +263,20 @@ export function setupLayout(): void {
   lScroller.addEventListener('scroll', onScrollerScroll, { passive: true });
 
   // A plain resize keeps the page where it is on vertical screens (moving it
-  // would scroll on its own); horizontal panels re-align to their page.
-  const relayout = (rotated: boolean) => {
+  // would scroll on its own); horizontal panels re-align to their page, and
+  // a change of layout (rotation, the Layout setting) brings the same panel
+  // back into view.
+  const relayout = () => {
+    const changed = decideLayout();
     applyMerge();
     refreshLayout();
-    if (rotated || !isPortrait()) goToSlideInstant(activeSlide);
+    if (changed || !isStacked()) goToSlideInstant(activeSlide);
+    // Right after a switch to the vertical layout the browser re-snaps to
+    // the nearest stop once the new layout settles; put the panel back then.
+    if (changed && isStacked()) requestAnimationFrame(() => goToSlideInstant(activeSlide));
   };
-  window.addEventListener('resize', () => relayout(false));
+  window.addEventListener('resize', relayout);
+  window.addEventListener(LAYOUT_CHOICE_EVENT, relayout);
   // The space under the brand can change without a window resize (the
   // brand's status line wrapping, fonts loading), and the stage's text with
   // the channel; the snap sizes follow.
@@ -229,15 +291,16 @@ export function setupLayout(): void {
   remeasure.observe(lScroller);
   const metaEl = lStage.querySelector<HTMLElement>('.now__meta');
   if (metaEl) remeasure.observe(metaEl);
-  portraitQuery.addEventListener('change', () => relayout(true));
-  mergeQuery.addEventListener('change', () => relayout(false));
+  portraitQuery.addEventListener('change', relayout);
+  mergeQuery.addEventListener('change', relayout);
+  resizeQuery.addEventListener('change', relayout);
 
   refreshLayout();
 }
 
 /** After a resize or rotation, keep the same panel in view without animating. */
 function goToSlideInstant(index: number): void {
-  if (isPortrait()) {
+  if (isStacked()) {
     lScroller.scrollTop = portraitTop(index);
     return;
   }

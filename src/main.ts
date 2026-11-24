@@ -52,6 +52,8 @@ import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
 import { setupLayout } from './layout.js';
 import { storedScale, applyScale, appZoom, SCALE_MIN, SCALE_MAX, SCALE_STEP } from './scale.js';
 import { setupStageResize } from './resize.js';
+import { layoutChoice, setLayoutChoice } from './layoutPref.js';
+import type { LayoutChoice } from './layoutPref.js';
 import {
   fullscreenSupported,
   isFullscreen,
@@ -373,14 +375,47 @@ function updateScaleReadout(): void {
     const zoom = appZoom();
     const w = Math.round(window.innerWidth / zoom);
     const h = Math.round(window.innerHeight / zoom);
+    const root = document.documentElement;
     const mode =
-      document.documentElement.dataset.merged === 'true'
+      root.dataset.merged === 'true'
         ? 'large-screen layout'
-        : window.matchMedia('(orientation: portrait)').matches
+        : root.dataset.layout === 'stacked'
           ? 'vertical layout'
           : 'horizontal layout';
-    readout.textContent = `Layout ${w} × ${h} · ${mode}`;
+    const chosen = root.dataset.layoutForced === 'true' ? ' · Stacked on this screen' : '';
+    readout.textContent = `Layout ${w} × ${h} · ${mode}${chosen}`;
   }
+}
+
+/** Layout setting (Status panel): Auto follows the screen, Stacked keeps the
+ *  vertical layout on this screen whatever its shape. */
+function setupLayoutControl(): void {
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-layout-choice]'));
+  const show = () => {
+    const choice = layoutChoice();
+    buttons.forEach((b) => {
+      const on = b.dataset.layoutChoice === choice;
+      b.setAttribute('aria-checked', String(on));
+      b.tabIndex = on ? 0 : -1;
+    });
+    updateScaleReadout();
+  };
+  const choose = (choice: LayoutChoice) => {
+    if (choice !== layoutChoice()) setLayoutChoice(choice);
+    show();
+  };
+  buttons.forEach((b) => {
+    b.addEventListener('click', () => choose(b.dataset.layoutChoice as LayoutChoice));
+    // A radio group: the arrow keys move the choice.
+    b.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+      e.preventDefault();
+      const next = buttons[(buttons.indexOf(b) + 1) % buttons.length];
+      choose(next.dataset.layoutChoice as LayoutChoice);
+      next.focus();
+    });
+  });
+  show();
 }
 
 function setupScaleControl(): void {
@@ -1037,6 +1072,7 @@ async function initialize(): Promise<void> {
   setupScreenTakeover();
   setupLayout();
   setupScaleControl();
+  setupLayoutControl();
   setupStageResize();
   buildStaticMeters();
   renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);

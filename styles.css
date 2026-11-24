@@ -270,6 +270,11 @@ svg {
    Both move between panels vertically, so a swipe never catches a slider.
    The pager bars run down the right edge, show the panel in view and jump
    on tap.
+   src/layout.ts decides which layout applies (the screen, or the Layout
+   setting) and marks it on <html>: data-layout="stacked" (vertical, the base
+   styles) or "columns", plus data-layout-forced, data-merged and
+   data-resizable. Rules for one layout use :where(html[...]), which adds no
+   specificity, so they rank exactly as unconditional rules would.
    ========================================================================== */
 
 html,
@@ -396,36 +401,34 @@ input[type="range"] {
    under the collapsed stage and snaps to its top; a long one scrolls freely
    until its end. The first swipe shrinks the artwork (the deck's two stops:
    artwork at full size, then collapsed). src/layout.ts measures the sizes. */
-@media (orientation: portrait) {
-  .scroller {
-    padding-bottom: 0;
-    scroll-snap-type: y mandatory;
-    scroll-padding-top: var(--pinned-h, 0px);
-    /* Sub-pixel layout can leave the last panel a fraction short of the
-       scroll end; without this its very bottom would snap back. */
-    scroll-padding-bottom: 1px;
-  }
+:where(html[data-layout="stacked"]) .scroller {
+  padding-bottom: 0;
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: var(--pinned-h, 0px);
+  /* Sub-pixel layout can leave the last panel a fraction short of the
+     scroll end; without this its very bottom would snap back. */
+  scroll-padding-bottom: 1px;
+}
 
-  /* Start and end: a panel taller than the screen also stops at its end. */
-  .slide {
-    min-height: var(--page-h, auto);
-    scroll-snap-align: start end;
-    scroll-snap-stop: always;
-  }
+/* Start and end: a panel taller than the screen also stops at its end. */
+:where(html[data-layout="stacked"]) .slide {
+  min-height: var(--page-h, auto);
+  scroll-snap-align: start end;
+  scroll-snap-stop: always;
+}
 
-  .slide--deck {
-    scroll-margin-top: var(--deck-snap, 0px);
-  }
+:where(html[data-layout="stacked"]) .slide--deck {
+  scroll-margin-top: var(--deck-snap, 0px);
+}
 
-  .slide--deck > .deck {
-    scroll-snap-align: start;
-    scroll-snap-stop: always;
-    scroll-margin-top: 6px;
-  }
+:where(html[data-layout="stacked"]) .slide--deck > .deck {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  scroll-margin-top: 6px;
+}
 
-  .slide:last-child {
-    padding-bottom: max(var(--gutter), env(safe-area-inset-bottom));
-  }
+:where(html[data-layout="stacked"]) .slide:last-child {
+  padding-bottom: max(var(--gutter), env(safe-area-inset-bottom));
 }
 
 /* ---------- Pager: one bar per panel, down the right edge ---------- */
@@ -473,6 +476,21 @@ input[type="range"] {
   height: 32px;
   background: var(--accent);
   box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* Stacked by choice on a horizontal screen (the Layout setting): the phone
+   layout in a centred column, so the artwork keeps its shape instead of
+   stretching into a thin band; the pager sits just beside the column. */
+@media (min-width: 700px) {
+  :where(html[data-layout-forced="true"]) .app {
+    --stack-w: 600px;
+    grid-template-columns: minmax(0, var(--stack-w));
+    justify-content: center;
+  }
+
+  :where(html[data-layout-forced="true"]) .pager {
+    right: max(env(safe-area-inset-right), calc(50% - var(--stack-w) / 2 - var(--gutter)));
+  }
 }
 
 /* ---------- Surfaces ---------- */
@@ -1276,24 +1294,22 @@ input[type="range"] {
 
 /* Vertical screens: the artwork takes the full width and the numbered strip
    runs down its right edge, inside the viewfinder brackets. */
-@media (orientation: portrait) {
-  .now__visual {
-    position: relative;
-  }
+:where(html[data-layout="stacked"]) .now__visual {
+  position: relative;
+}
 
-  .strip {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    bottom: 14px;
-    z-index: 4;
-  }
+:where(html[data-layout="stacked"]) .strip {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 4;
+}
 
-  .strip__btn {
-    background: rgba(8, 9, 10, 0.62);
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
-  }
+:where(html[data-layout="stacked"]) .strip__btn {
+  background: rgba(8, 9, 10, 0.62);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .art__img:not([src]),
@@ -2168,6 +2184,40 @@ input[type="range"] {
   color: var(--text);
 }
 
+/* Layout setting: two joined buttons, the chosen one filled with the accent. */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+}
+
+.seg__btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background-color 160ms var(--ease), color 160ms var(--ease);
+}
+
+.seg__btn + .seg__btn {
+  border-left: 1px solid var(--line-strong);
+}
+
+.seg__btn:hover {
+  color: var(--text);
+}
+
+.seg__btn[aria-checked="true"] {
+  background: var(--accent);
+  color: #08090A;
+}
+
 .status__readout {
   margin-top: 8px;
   font-family: var(--mono);
@@ -2335,116 +2385,112 @@ input[type="range"] {
    Breakpoints
    ========================================================================== */
 
-/* Horizontal screens: the stage becomes a narrow column on the left (artwork,
+/* Columns (horizontal screens on Auto): the stage becomes a narrow column on the left (artwork,
    strip and title, scaled down), the panels swipe vertically on the right,
    one screen each, and the pager runs down the right edge. */
-@media (orientation: landscape) {
-  .app {
-    grid-template-columns: clamp(240px, 32vw, 440px) minmax(0, 1fr) auto;
-    grid-template-rows: auto minmax(0, 1fr);
-    grid-template-areas:
-      "brand  brand  brand"
-      "stage  slides pager";
-    column-gap: var(--gutter);
-    padding-bottom: max(var(--gutter), env(safe-area-inset-bottom));
-  }
+:where(html[data-layout="columns"]) .app {
+  grid-template-columns: clamp(240px, 32vw, 440px) minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "brand  brand  brand"
+    "stage  slides pager";
+  column-gap: var(--gutter);
+  padding-bottom: max(var(--gutter), env(safe-area-inset-bottom));
+}
 
-  .scroller {
-    display: contents;
-  }
+:where(html[data-layout="columns"]) .scroller {
+  display: contents;
+}
 
-  .stage-wrap .now {
-    transform: none !important;
-  }
+:where(html[data-layout="columns"]) .stage-wrap .now {
+  transform: none !important;
+}
 
-  .stage-wrap {
-    grid-area: stage;
-    height: auto !important;
-    top: auto !important;
-    position: static;
-    min-height: 0;
-    margin: 0;
-    padding: 0;
-    overflow-y: auto;
-    background: none;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    border: 0;
-    scrollbar-width: none;
-  }
+:where(html[data-layout="columns"]) .stage-wrap {
+  grid-area: stage;
+  height: auto !important;
+  top: auto !important;
+  position: static;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 0;
+  scrollbar-width: none;
+}
 
-  /* A fixed 4:3 frame (whatever the thumbnail's shape, so switching
-     channels never resizes it) that fits the column and leaves room for the
-     title under it. The portrait collapse's inline sizes never apply here,
-     even straight after a rotation. */
-  .art {
-    flex: 0 1 auto;
-    height: auto !important;
-    aspect-ratio: 4 / 3;
-    --text-room: 240px;
-    width: min(100%, max(140px, calc((100dvh - 2 * var(--gutter) - var(--text-room)) * 4 / 3)));
-  }
+/* A fixed 4:3 frame (whatever the thumbnail's shape, so switching
+   channels never resizes it) that fits the column and leaves room for the
+   title under it. The portrait collapse's inline sizes never apply here,
+   even straight after a rotation. */
+:where(html[data-layout="columns"]) .art {
+  flex: 0 1 auto;
+  height: auto !important;
+  aspect-ratio: 4 / 3;
+  --text-room: 240px;
+  width: min(100%, max(140px, calc((100dvh - 2 * var(--gutter) - var(--text-room)) * 4 / 3)));
+}
 
-  .now__title {
-    font-size: 20px;
-  }
+:where(html[data-layout="columns"]) .now__title {
+  font-size: 20px;
+}
 
-  /* The brand fits the narrow column on one line. */
-  .brand__tile {
-    width: 40px;
-    height: 40px;
-  }
+/* The brand fits the narrow column on one line. */
+:where(html[data-layout="columns"]) .brand__tile {
+  width: 40px;
+  height: 40px;
+}
 
-  .brand__title {
-    font-size: clamp(15px, 1.6vw, 22px);
-    letter-spacing: 0.08em;
-    white-space: nowrap;
-  }
+:where(html[data-layout="columns"]) .brand__title {
+  font-size: clamp(15px, 1.6vw, 22px);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
 
-  .slides {
-    grid-area: slides;
-    display: block;
-    min-height: 0;
-    margin: -6px;
-    overflow-x: hidden;
-    overflow-y: auto;
-    scroll-snap-type: y mandatory;
-    overscroll-behavior-y: contain;
-    scrollbar-width: none;
-  }
+:where(html[data-layout="columns"]) .slides {
+  grid-area: slides;
+  display: block;
+  min-height: 0;
+  margin: -6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+}
 
-  .slide {
-    height: 100%;
-    scroll-snap-align: start;
-    scroll-snap-stop: always;
-    overflow-y: auto;
-    overscroll-behavior-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--line-strong) transparent;
-  }
+:where(html[data-layout="columns"]) .slide {
+  height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
 
-  .pager {
-    grid-area: pager;
-    position: static;
-    align-self: center;
-    justify-self: center;
-    /* Sit close to the panels. */
-    margin-left: calc(var(--gutter) * -1 + 6px);
-    padding: 4px 2px;
-    border-right: 1px solid var(--line);
-  }
+:where(html[data-layout="columns"]) .pager {
+  grid-area: pager;
+  position: static;
+  align-self: center;
+  justify-self: center;
+  /* Sit close to the panels. */
+  margin-left: calc(var(--gutter) * -1 + 6px);
+  padding: 4px 2px;
+  border-right: 1px solid var(--line);
 }
 
 /* Horizontal screens: square album art (published with bars at the sides)
    zooms to fill the 4:3 frame, still centred, so no bars show. */
-@media (orientation: landscape) {
-  .now[data-shape="square"] .art__img {
-    transform: scale(1.334);
-  }
+:where(html[data-layout="columns"]) .now[data-shape="square"] .art__img {
+  transform: scale(1.334);
+}
 
-  .now[data-shape="square"] .art__img.is-letterboxed {
-    transform: scale(1.78);
-  }
+:where(html[data-layout="columns"]) .now[data-shape="square"] .art__img.is-letterboxed {
+  transform: scale(1.78);
 }
 
 /* Large horizontal screens (a Fold's inner display at 4:3, laptops, desktops):
@@ -2452,14 +2498,12 @@ input[type="range"] {
    share the first panel (src/layout.ts moves the list there), so there are
    two panels: playback with channels, then status with saved mixes.
    Keep the query in sync with mergeQuery in src/layout.ts. */
-@media (orientation: landscape) and (min-width: 960px) and (min-height: 680px) {
-  .app {
-    grid-template-columns: clamp(300px, 42vw, 600px) minmax(0, 1fr) auto;
-  }
+:where(html[data-merged="true"]) .app {
+  grid-template-columns: clamp(300px, 42vw, 600px) minmax(0, 1fr) auto;
+}
 
-  .now__title {
-    font-size: 22px;
-  }
+:where(html[data-merged="true"]) .now__title {
+  font-size: 22px;
 }
 
 /* Resizable artwork column: large horizontal screens with a mouse or
@@ -2473,93 +2517,91 @@ input[type="range"] {
   display: none;
 }
 
-@media (orientation: landscape) and (min-width: 1280px) and (min-height: 680px) and (hover: hover) and (pointer: fine) {
-  .app {
-    --art-room: 350px;
-    --stage-max: max(300px, min(calc(100% - 560px - var(--gutter) - 24px), calc((100dvh - 2 * var(--gutter) - var(--art-room)) * 4 / 3)));
-    grid-template-columns:
-      clamp(300px, var(--stage-pref, clamp(300px, 42vw, 600px)), var(--stage-max))
-      var(--gutter)
-      minmax(0, 1fr)
-      auto;
-    grid-template-areas:
-      "brand  brand  brand  brand"
-      "stage  split  slides pager";
-    column-gap: 0;
-  }
-
-  .art {
-    --text-room: var(--art-room);
-  }
-
-  /* The divider replaces the gap, so the pager keeps its place by the panels. */
-  .pager {
-    margin-left: 6px;
-  }
-
-  .splitter {
-    grid-area: split;
-    position: relative;
-    display: block;
-    min-height: 0;
-    cursor: col-resize;
-    touch-action: none;
-  }
-
-  .splitter:focus-visible {
-    outline: none;
-  }
-
-  /* A hairline down the middle, with a grip at half height. */
-  .splitter::before,
-  .splitter::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    transition: background-color 160ms var(--ease), box-shadow 160ms var(--ease), height 160ms var(--ease);
-  }
-
-  .splitter::before {
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--line);
-  }
-
-  .splitter::after {
-    top: 50%;
-    width: 3px;
-    height: 40px;
-    margin-top: -20px;
-    background: var(--line-strong);
-  }
-
-  .splitter:hover::before,
-  .splitter:focus-visible::before,
-  html.is-resizing .splitter::before {
-    background: var(--accent-line);
-  }
-
-  .splitter:hover::after,
-  .splitter:focus-visible::after,
-  html.is-resizing .splitter::after {
-    height: 64px;
-    margin-top: -32px;
-    background: var(--accent);
-    box-shadow: 0 0 12px var(--accent-glow);
-  }
-
-  /* While dragging: the resize cursor everywhere and no text selection. */
-  html.is-resizing,
-  html.is-resizing * {
-    cursor: col-resize !important;
-    user-select: none;
-  }
+:where(html[data-resizable="true"]) .app {
+  --art-room: 350px;
+  --stage-max: max(300px, min(calc(100% - 560px - var(--gutter) - 24px), calc((100dvh - 2 * var(--gutter) - var(--art-room)) * 4 / 3)));
+  grid-template-columns:
+    clamp(300px, var(--stage-pref, clamp(300px, 42vw, 600px)), var(--stage-max))
+    var(--gutter)
+    minmax(0, 1fr)
+    auto;
+  grid-template-areas:
+    "brand  brand  brand  brand"
+    "stage  split  slides pager";
+  column-gap: 0;
 }
 
-/* The channels panel hides only once src/layout.ts has moved its list onto
-   the first panel (it sets data-merged), so the list can never vanish. */
+:where(html[data-resizable="true"]) .art {
+  --text-room: var(--art-room);
+}
+
+/* The divider replaces the gap, so the pager keeps its place by the panels. */
+:where(html[data-resizable="true"]) .pager {
+  margin-left: 6px;
+}
+
+:where(html[data-resizable="true"]) .splitter {
+  grid-area: split;
+  position: relative;
+  display: block;
+  min-height: 0;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+:where(html[data-resizable="true"]) .splitter:focus-visible {
+  outline: none;
+}
+
+/* A hairline down the middle, with a grip at half height. */
+:where(html[data-resizable="true"]) .splitter::before,
+:where(html[data-resizable="true"]) .splitter::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: background-color 160ms var(--ease), box-shadow 160ms var(--ease), height 160ms var(--ease);
+}
+
+:where(html[data-resizable="true"]) .splitter::before {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+:where(html[data-resizable="true"]) .splitter::after {
+  top: 50%;
+  width: 3px;
+  height: 40px;
+  margin-top: -20px;
+  background: var(--line-strong);
+}
+
+:where(html[data-resizable="true"]) .splitter:hover::before,
+:where(html[data-resizable="true"]) .splitter:focus-visible::before,
+html:where([data-resizable="true"]).is-resizing .splitter::before {
+  background: var(--accent-line);
+}
+
+:where(html[data-resizable="true"]) .splitter:hover::after,
+:where(html[data-resizable="true"]) .splitter:focus-visible::after,
+html:where([data-resizable="true"]).is-resizing .splitter::after {
+  height: 64px;
+  margin-top: -32px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* While dragging: the resize cursor everywhere and no text selection. */
+html:where([data-resizable="true"]).is-resizing,
+html:where([data-resizable="true"]).is-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+/* The channels panel is hidden once the list belongs on the first panel
+   (data-merged; src/layout.ts moves the list there as the app starts). */
 html[data-merged="true"] .slide--channels {
   display: none;
 }
@@ -2693,16 +2735,29 @@ html[data-merged="true"] .thumbs {
 
 /* Short horizontal screens (a phone on its side): tighter title, more room
    for the artwork. */
-@media (orientation: landscape) and (max-height: 500px) {
-  .art {
+@media (max-height: 500px) {
+  :where(html[data-layout="columns"]) .art {
     --text-room: 190px;
   }
 
-  .now__title {
+  :where(html[data-layout="columns"]) .now__title {
     font-size: 16px;
   }
 
-  .now__artist {
+  :where(html[data-layout="columns"]) .now__artist {
+    font-size: 12px;
+  }
+}
+
+/* Stacked by choice on a short screen (a phone on its side): smaller title
+   type, so the artwork keeps its room. The first swipe also scrolls the
+   title away (src/layout.ts), leaving a slim band of artwork. */
+@media (max-height: 500px) {
+  :where(html[data-layout-forced="true"]) .now__title {
+    font-size: 17px;
+  }
+
+  :where(html[data-layout-forced="true"]) .now__artist {
     font-size: 12px;
   }
 }

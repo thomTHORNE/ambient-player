@@ -1,7 +1,8 @@
 /**
  * Resizable artwork column on large horizontal screens with a mouse or
  * trackpad (an ultrawide monitor, a desktop, a laptop). Touch screens, the
- * Fold and phones never get the divider.
+ * Fold and phones never get the divider; src/layout.ts decides where it
+ * applies (data-resizable on <html>).
  *
  * The width is kept as a share of the app's width in --stage-pref, which
  * styles.css clamps: at least 300px, at most what the artwork can use at
@@ -11,12 +12,14 @@
  */
 
 import { appZoom } from './scale.js';
+import { LAYOUT_CHOICE_EVENT } from './layoutPref.js';
 
 const RESIZE_KEY = 'ambient-player:stage-width';
-/** Keep in sync with the resizable layout's media query in styles.css. */
-const resizeQuery = window.matchMedia(
-  '(orientation: landscape) and (min-width: 1280px) and (min-height: 680px) and (hover: hover) and (pointer: fine)'
-);
+
+/** src/layout.ts decides where the divider applies and marks it on <html>. */
+function resizable(): boolean {
+  return document.documentElement.dataset.resizable === 'true';
+}
 /** One arrow-key step, as a share of the width. */
 const RESIZE_STEP = 0.02;
 
@@ -69,7 +72,7 @@ function reset(): void {
 }
 
 function updateAria(): void {
-  if (!resizeQuery.matches) return;
+  if (!resizable()) return;
   const pct = Math.round(effectiveRatio() * 100);
   rzHandle.setAttribute('aria-valuenow', String(pct));
   rzHandle.setAttribute('aria-valuetext', `Artwork column ${pct}% of the width`);
@@ -87,7 +90,7 @@ export function setupStageResize(): void {
   };
 
   rzHandle.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || !resizeQuery.matches) return;
+    if (e.button !== 0 || !resizable()) return;
     e.preventDefault();
     rzHandle.setPointerCapture(e.pointerId);
     rzRoot.classList.add('is-resizing');
@@ -132,6 +135,6 @@ export function setupStageResize(): void {
   window.addEventListener('resize', () => {
     if (!ariaFrame) ariaFrame = requestAnimationFrame(() => ((ariaFrame = 0), updateAria()));
   });
-  resizeQuery.addEventListener('change', updateAria);
+  window.addEventListener(LAYOUT_CHOICE_EVENT, updateAria);
   updateAria();
 }

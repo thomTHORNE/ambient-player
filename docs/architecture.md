@@ -39,6 +39,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `accent.ts` | Samples the artwork on a canvas for the accent colour, and detects square (album) art. |
 | `screen.ts` | Fullscreen (with the WebKit fallback), installed-app detection and the screen wake lock. |
 | `scale.ts` | The UI scale setting: reads, applies and stores it. |
+| `layoutPref.ts` | The Layout setting (Auto or Stacked), kept per screen. |
 | `resize.ts` | The divider that resizes the artwork column on large screens with a mouse. |
 | `storage.ts` | Saved mixes in `localStorage` under `yt_audio_playlists`. |
 | `shareLinks.ts` | Encodes a mix's URLs into `#pl=<base64url JSON>`, reads it back from the page URL, and finds a mix in pasted text for Import. |
@@ -109,7 +110,48 @@ stops itself when nothing plays.
 The app shell (`.app`) is fixed to the viewport, and the page itself never
 scrolls.
 
-**Vertical screens (portrait).**
+**Deciding the layout.** One place decides which layout applies and marks
+it on `<html>`; the stylesheet and the panel code follow the marks, never
+the screen directly.
+
+- **Who sets them.** `decideLayout()` and `applyMerge()` in `layout.ts`,
+  re-run on every resize, rotation and Layout change. The inline script in
+  `index.html` sets the same marks before the first paint; keep its queries
+  in sync with `layout.ts`.
+- **The marks:**
+
+| Mark | Meaning |
+| --- | --- |
+| `data-layout="stacked"` | The vertical layout: on upright screens, or wherever **Stacked** is chosen. |
+| `data-layout="columns"` | The side-by-side layout: horizontal screens on **Auto**. |
+| `data-layout-forced="true"` | Stacked chosen on a horizontal screen. |
+| `data-merged="true"` | Columns, `(orientation: landscape) and (min-width: 960px) and (min-height: 680px)`: deck and channels share a panel. |
+| `data-resizable="true"` | Columns, and the large-screen-with-mouse query: the artwork column can be resized. |
+
+- **In CSS.** Rules for one layout are written as
+  `:where(html[data-layout="columns"]) .art { … }`. `:where()` adds no
+  specificity, so each rule ranks exactly as an unconditional one would,
+  and source order works as it does for a media query. Size checks that
+  still matter inside a layout (short screens, narrow screens, touch) stay
+  as media queries.
+- **The Layout setting** (`layoutPref.ts`).
+  - **Choices:** **Auto** or **Stacked**.
+  - **Where it's saved:** in `localStorage` under `ambient-player:layout`,
+    as a map from the screen's physical size (`min×max` of
+    `screen.width`/`screen.height`, so rotation doesn't change it) to the
+    choice. A Fold's cover and inner displays have different sizes, so each
+    keeps its own choice.
+  - **Applying a change:** it fires `ambient:layout-choice`, and
+    `layout.ts` re-lays out on that event.
+- **Stacked on a horizontal screen.**
+  - **Wide screens (700px and up):** the column is 600px wide and centred,
+    with the pager beside it.
+  - **Short screens:** if the collapsed stage would leave the panels under
+    half the space, the collapse range also covers the title. The first
+    swipe then leaves only a slim band of artwork. The title type is
+    smaller at heights of 500px and under.
+
+**Stacked (vertical) layout.**
 
 - **One scroller.** `#scroller` scrolls everything: the stage (artwork,
   numbered strip, title) and the three panels below it.
@@ -137,9 +179,15 @@ scrolls.
   sub-pixel rounding so the last panel's end stays reachable.
 - **Re-measuring.** A `ResizeObserver` on the scroller and the title block
   re-measures whenever the space changes. A plain window resize never moves
-  the scroll position; only a rotation brings the same panel back into view.
+  the scroll position; only a change of layout (rotation, the Layout
+  setting) brings the same panel back into view.
+- **Resting at the top.** Until the user first touches, scrolls or presses a
+  key, the page stays at the top with the artwork at full size. Content
+  arriving on load (fonts, the channel's title) moves the snap stops, and the
+  browser would otherwise re-snap to the collapsed one. Re-measuring also
+  keeps a page that was at the top there.
 
-**Horizontal screens (landscape).**
+**Columns (side-by-side) layout.**
 
 - **Grid.** `#scroller` becomes `display: contents`, and its children join
   the app grid: stage on the left, panels in the middle, pager on the right.
@@ -148,32 +196,32 @@ scrolls.
 
 **Large horizontal screens.**
 
-- **Merge.** At `(orientation: landscape) and (min-width: 960px) and
-  (min-height: 680px)`, `applyMerge()` moves the channel list onto the
-  deck's panel and sets `html[data-merged="true"]`. CSS then hides the empty
-  channels panel and its pager bar, widens the stage column, and swaps the
-  numbered strip for the thumbnail strip.
+- **Merge.** In the columns layout at `(orientation: landscape) and
+  (min-width: 960px) and (min-height: 680px)`, `applyMerge()` moves the
+  channel list onto the deck's panel and sets `html[data-merged="true"]`.
+  CSS then hides the empty channels panel and its pager bar, widens the
+  stage column, and swaps the numbered strip for the thumbnail strip.
 - **Keep in sync.** The same query appears in `layout.ts` (`mergeQuery`) and
-  `styles.css`; keep them in sync.
+  the inline script in `index.html`; keep them in sync.
 
 **Pager and panel tracking.** The pager bars map to the visible panels.
 `currentIndex()` works out the panel in view:
 
-- **Portrait:** the last panel whose top has passed a line a third of the way
+- **Stacked:** the last panel whose top has passed a line a third of the way
   down the space under the stage, or the last panel when scrolled to the end.
-- **Landscape:** the snapped page.
+- **Columns:** the snapped page.
 
 ## Resizable artwork column (`resize.ts`)
 
-**Where it applies.** Only on large horizontal screens with a mouse or
-trackpad:
+**Where it applies.** Only in the columns layout on large horizontal screens
+with a mouse or trackpad (`data-resizable`):
 
 ```
 (orientation: landscape) and (min-width: 1280px) and (min-height: 680px)
   and (hover: hover) and (pointer: fine)
 ```
 
-The same query is in `resize.ts` and `styles.css`. Touch screens (the Fold,
+The query is in `layout.ts` and the inline script. Touch screens (the Fold,
 tablets, phones) never match.
 
 **Layout.** In this mode the app grid gains a fourth column for the divider
@@ -247,6 +295,7 @@ inline script in `index.html` applies it before the first paint.
 | --- | --- |
 | `localStorage["yt_audio_playlists"]` | `{ playlists: [{ name, urls[] }], lastPlaylistName? }`. Saving a mix makes it the last one; it reopens on the next visit. An unsaved mix is not kept. |
 | `localStorage["ambient-player:ui-scale"]` | The UI scale (0.7–1.3), removed at 100%. |
+| `localStorage["ambient-player:layout"]` | The Layout setting per screen: `{ "<min>x<max>": "stacked" }`. Auto removes the screen's entry. |
 | `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
 | Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. **Import** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |
 
@@ -257,7 +306,10 @@ Attributes on `<html>` that CSS keys off:
 | Attribute | Set by | Meaning |
 | --- | --- | --- |
 | `data-empty` | `renderChannels()` | No channels yet. |
-| `data-merged` | `applyMerge()` | Large-screen layout: deck and channels on one panel. |
+| `data-layout` | `decideLayout()`, inline script | `stacked` (vertical) or `columns` (side by side). |
+| `data-layout-forced` | `decideLayout()`, inline script | Stacked chosen on a horizontal screen. |
+| `data-merged` | `applyMerge()`, inline script | Large-screen layout: deck and channels on one panel. |
+| `data-resizable` | `decideLayout()`, inline script | The artwork column can be resized. |
 | `data-fullscreen` | `setupScreenTakeover()` | Fullscreen or the installed fullscreen app. |
 | `class="is-zoomed"`, `--ui-zoom` | `scale.ts` | Desktop UI scale in effect. |
 | `--stage-pref` | `resize.ts`, inline script | The chosen artwork column width. |

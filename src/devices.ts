@@ -112,7 +112,10 @@ function dvRender(status: ConnectionStatus): void {
           <span class="device__name">${dvEsc(d.name)}</span>
           <span class="device__seen">${dvSeen(d)}</span>
         </span>
-        ${d.id === me.id ? '<span class="device__tag">This device</span>' : ''}
+        <span>
+          ${d.id === status.mainId ? '<span class="device__tag device__tag--main">Plays</span>' : ''}
+          ${d.id === me.id ? '<span class="device__tag">This device</span>' : ''}
+        </span>
       </li>`
     )
     .join('');
@@ -248,7 +251,7 @@ export function setupDevicesPanel(): void {
       saveRoom(null);
       dvHidePairBox();
       dvKnownIds = new Set();
-      dvRender({ state: 'off', devices: [], unpaired: false });
+      dvRender(connectionStatus());
       dvMessage('This device is unpaired.', true);
     }, 150);
   });

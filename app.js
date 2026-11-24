@@ -154,6 +154,13 @@ class PlaylistManager {
         this.state.tracks = [];
     }
     /**
+     * Replace every track (a remote mirroring the main device): no players.
+     */
+    replaceTracks(tracks) {
+        this.clearTracks();
+        this.state.tracks = tracks.map((t) => ({ ...t }));
+    }
+    /**
      * Get all track URLs in order
      */
     getTrackUrls() {
@@ -192,7 +199,7 @@ function waitForYouTubeAPI() {
  */
 function createYouTubePlayerFactory() {
     return {
-        createPlayer(trackId, containerElement, videoId, onMeta, onState, onError) {
+        createPlayer(trackId, containerElement, videoId, onMeta, onState, onError, startSeconds) {
             let player = null;
             let isReady = false;
             let timeoutId = null;
@@ -268,6 +275,7 @@ function createYouTubePlayerFactory() {
                     height: 1,
                     playerVars: {
                         autoplay: 0,
+                        ...(startSeconds && startSeconds > 0 ? { start: Math.floor(startSeconds) } : {}),
                         controls: 0,
                         enablejsapi: 1,
                         origin: window.location.origin,
@@ -1956,22 +1964,57 @@ function takePairCodeFromLocation() {
  * back) and sends a heartbeat every 20 seconds, which the relay answers
  * without waking the room.
  *
- * Phase 2 covers presence only. Phase 3 adds roles, state and commands to
- * the same connection.
+ * Roles: one device in the room is the main device (it plays the audio).
+ * While the main device is online, every other device is a remote: it
+ * mirrors the main device's `state` and sends it commands. When no main
+ * device is online, every device is idle and plays on its own; the first to
+ * play claims main.
  */
 
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000, 30000];
 const HEARTBEAT_MS = 20000;
+const COMMAND_TIMEOUT_MS = 5000;
 let rcSocket = null;
-let rcStatus = { state: 'off', devices: [], unpaired: false };
+let rcStatus = { state: 'off', devices: [], unpaired: false, mainId: null, role: 'idle', mainName: '' };
+/** Room clock minus this device's clock, from `welcome`. */
+let rcClockOffset = 0;
+/** The main device's latest snapshot and when the room received it (room clock). */
+let rcLastState = null;
+let rcCommandSeq = 0;
+const rcPending = new Map();
+const rcStateListeners = new Set();
+let rcCommandHandler = null;
 let rcAttempt = 0;
 let rcRetryTimer = 0;
 let rcHeartbeat = 0;
 let rcWanted = false;
 const rcListeners = new Set();
 function rcEmit(patch) {
-    rcStatus = { ...rcStatus, ...patch };
+    const next = { ...rcStatus, ...patch };
+    // The role follows from who is main and whether it is online.
+    const me = thisDevice().id;
+    const main = next.devices.find((d) => d.id === next.mainId);
+    next.mainName = main?.name ?? '';
+    if (next.mainId && next.mainId === me)
+        next.role = 'main';
+    else if (next.state === 'online')
+        next.role = main?.online ? 'remote' : 'idle';
+    // A remote stays one through a dropped connection while it reconnects;
+    // only knowing the main device is offline (or unpairing) makes it idle.
+    else if (next.state === 'off' || rcStatus.role !== 'remote')
+        next.role = 'idle';
+    rcStatus = next;
     rcListeners.forEach((listener) => listener(rcStatus));
+}
+function rcStateAge(receivedAt) {
+    return Math.max(0, Date.now() + rcClockOffset - receivedAt);
+}
+function rcFailPending(error) {
+    rcPending.forEach(({ resolve, timer }) => {
+        window.clearTimeout(timer);
+        resolve({ ok: false, error });
+    });
+    rcPending.clear();
 }
 function onConnection(listener) {
     rcListeners.add(listener);
@@ -2031,12 +2074,41 @@ function rcOpen() {
         catch {
             return;
         }
-        if (msg.type === 'welcome') {
-            rcAttempt = 0;
-            rcEmit({ state: 'online', devices: msg.devices ?? [] });
-        }
-        else if (msg.type === 'devices') {
-            rcEmit({ devices: msg.devices ?? [] });
+        switch (msg.type) {
+            case 'welcome':
+                rcAttempt = 0;
+                rcClockOffset = (msg.serverTime ?? Date.now()) - Date.now();
+                rcLastState = msg.state ? { state: msg.state, receivedAt: msg.receivedAt ?? 0 } : null;
+                rcEmit({ state: 'online', devices: msg.devices ?? [], mainId: msg.mainId ?? null });
+                if (rcLastState)
+                    rcStateListeners.forEach((l) => l(rcLastState.state, rcStateAge(rcLastState.receivedAt)));
+                break;
+            case 'devices':
+                if (msg.mainId !== rcStatus.mainId)
+                    rcLastState = null;
+                rcEmit({ devices: msg.devices ?? [], mainId: msg.mainId ?? null });
+                break;
+            case 'state':
+                rcLastState = { state: msg.state, receivedAt: msg.receivedAt ?? Date.now() + rcClockOffset };
+                rcStateListeners.forEach((l) => l(rcLastState.state, rcStateAge(rcLastState.receivedAt)));
+                break;
+            case 'command': {
+                const id = msg.id;
+                const from = msg.from;
+                if (!id || !from || !msg.command || !rcCommandHandler)
+                    break;
+                rcCommandHandler(msg.command, (ok, error) => rcSend({ type: 'ack', id, to: from, ok, error }));
+                break;
+            }
+            case 'ack': {
+                const pending = msg.id ? rcPending.get(msg.id) : undefined;
+                if (!pending || !msg.id)
+                    break;
+                window.clearTimeout(pending.timer);
+                rcPending.delete(msg.id);
+                pending.resolve({ ok: msg.ok === true, error: msg.error });
+                break;
+            }
         }
     });
     socket.addEventListener('close', (event) => {
@@ -2044,11 +2116,12 @@ function rcOpen() {
             return;
         rcSocket = null;
         window.clearInterval(rcHeartbeat);
+        rcFailPending('offline');
         if (event.code === 4001) {
             // The room no longer knows this device: it was unpaired elsewhere.
             saveRoom(null);
             rcWanted = false;
-            rcEmit({ state: 'off', devices: [], unpaired: true });
+            rcEmit({ state: 'off', devices: [], unpaired: true, mainId: null });
             return;
         }
         if (event.code === 4000 || !rcWanted) {
@@ -2077,7 +2150,9 @@ function disconnectRoom() {
     const socket = rcSocket;
     rcSocket = null;
     socket?.close(1000, 'bye');
-    rcEmit({ state: 'off', devices: [], unpaired: false });
+    rcLastState = null;
+    rcFailPending('offline');
+    rcEmit({ state: 'off', devices: [], unpaired: false, mainId: null });
 }
 /** Reconnect from scratch (after the room's secret changed). */
 function reconnectRoom() {
@@ -2090,6 +2165,47 @@ function sendRename(name) {
 /** Tell the room this device is leaving it (unpair). */
 function sendLeave() {
     rcSend({ type: 'leave' });
+}
+// ---------------------------------------------------------------------------
+// Roles, state and commands
+// ---------------------------------------------------------------------------
+/** Ask to become the main device (granted when no main device is online). */
+function claimMain() {
+    rcSend({ type: 'claim_main' });
+}
+/** Main device: share the current state with the remotes. */
+function sendState(state) {
+    if (rcStatus.role === 'main')
+        rcSend({ type: 'state', state });
+}
+/** Remote: send a command to the main device; resolves with its answer. */
+function sendCommand(command) {
+    const id = `c${Date.now().toString(36)}${(rcCommandSeq++).toString(36)}`;
+    if (!rcSend({ type: 'command', id, command }))
+        return Promise.resolve({ ok: false, error: 'offline' });
+    return new Promise((resolve) => {
+        const timer = window.setTimeout(() => {
+            rcPending.delete(id);
+            resolve({ ok: false, error: 'timeout' });
+        }, COMMAND_TIMEOUT_MS);
+        rcPending.set(id, { resolve, timer });
+    });
+}
+/** Commands in flight (for a pending indicator). */
+function pendingCommands() {
+    return rcPending.size;
+}
+/** Main device: run commands from remotes. */
+function onRemoteCommand(handler) {
+    rcCommandHandler = handler;
+}
+/** Remote: hear the main device's snapshots, with how old each is (ms). */
+function onRoomState(listener) {
+    rcStateListeners.add(listener);
+}
+/** The latest snapshot and its current age, if any. */
+function lastRoomState() {
+    return rcLastState ? { state: rcLastState.state, ageMs: rcStateAge(rcLastState.receivedAt) } : null;
 }
 /** Retry straight away when the page comes back or the network returns. */
 function setupReconnectTriggers() {
@@ -2433,7 +2549,10 @@ function dvRender(status) {
           <span class="device__name">${dvEsc(d.name)}</span>
           <span class="device__seen">${dvSeen(d)}</span>
         </span>
-        ${d.id === me.id ? '<span class="device__tag">This device</span>' : ''}
+        <span>
+          ${d.id === status.mainId ? '<span class="device__tag device__tag--main">Plays</span>' : ''}
+          ${d.id === me.id ? '<span class="device__tag">This device</span>' : ''}
+        </span>
       </li>`)
         .join('');
     manage.hidden = !paired;
@@ -2569,7 +2688,7 @@ function setupDevicesPanel() {
             saveRoom(null);
             dvHidePairBox();
             dvKnownIds = new Set();
-            dvRender({ state: 'off', devices: [], unpaired: false });
+            dvRender(connectionStatus());
             dvMessage('This device is unpaired.', true);
         }, 150);
     });
@@ -3386,13 +3505,15 @@ function renderStatus() {
     globalPlayPauseButton.textContent = live > 0 ? 'Pause all' : 'Play all';
     globalPlayPauseButton.disabled = tracks.length === 0;
     shareButton.disabled = tracks.length === 0;
+    scheduleBroadcast();
 }
 // ---------------------------------------------------------------------------
 // Screen takeover
 // ---------------------------------------------------------------------------
 /** Keep the screen on while something plays in fullscreen or in the installed app. */
 function updateKeepAwake() {
-    void setKeepAwake(liveCount() > 0 && (isFullscreen() || runningAsApp()));
+    // A remote plays nothing, so it has no reason to keep the screen on.
+    void setKeepAwake(mcRole !== 'remote' && liveCount() > 0 && (isFullscreen() || runningAsApp()));
 }
 function updateFullscreenButton() {
     const on = isFullscreen();
@@ -3721,6 +3842,10 @@ function createPlayerFor(trackId, videoId, keep) {
         const track = playlistManager.getTrack(id);
         if (track)
             playlistManager.getController(id)?.setVolume(track.volume);
+        // Taking over a mix from another device: it was created at that time
+        // (the player's start), paused; seeking would start playback.
+        if (keep?.time)
+            playlistManager.updateTrack(id, { currentTime: Math.floor(keep.time) });
         renderRow(id);
         renderStatus();
         if (id === focusedId)
@@ -3731,7 +3856,7 @@ function createPlayerFor(trackId, videoId, keep) {
         renderStatus();
         if (id === focusedId)
             renderStage(true);
-    });
+    }, keep?.time);
     playlistManager.setController(trackId, controller);
 }
 function onTrackState(id, state) {
@@ -4268,9 +4393,318 @@ function setupScreenEffect() {
         repaint();
     });
 }
+// ---------------------------------------------------------------------------
+// Remote control: roles and sync (docs/remote-control-plan.md, phase 3)
+//
+// main:   plays; shares a snapshot of the mix after every change (and every
+//         15 seconds while playing); runs commands from remotes.
+// remote: no players; mirrors the snapshots, moving playing channels' times
+//         on by itself between them; sends every command to the main device.
+// idle:   on its own, as without pairing. The first to play claims main.
+// ---------------------------------------------------------------------------
+/** This device's role (src/remote.ts decides it). */
+let mcRole = 'idle';
+let mcStatus = null;
+let mcBroadcastTimer = 0;
+let mcSeq = 0;
+let mcLastClaim = 0;
+let mcTicker = 0;
+/** Remote: each mirrored channel's time and when it was true (performance.now()). */
+const mcBases = new Map();
+/** Remote: slider commands waiting to be sent (at most ~10 per second each). */
+const mcThrottle = new Map();
+let mcNoticeTimer = 0;
+/** Every command run on this device goes through here (registered with src/commands.ts). */
+function runLocalCommand(command) {
+    const ok = !!runCommand(command);
+    if (ok && (command.type === 'play' || command.type === 'play_all'))
+        maybeClaimMain();
+    scheduleBroadcast();
+    return ok;
+}
+/** Playing while paired and no main device online: become the main device. */
+function maybeClaimMain() {
+    if (mcRole !== 'idle' || mcStatus?.state !== 'online')
+        return;
+    if (Date.now() - mcLastClaim < 3000)
+        return;
+    mcLastClaim = Date.now();
+    claimMain();
+}
+function buildRoomState() {
+    return {
+        v: 1,
+        seq: ++mcSeq,
+        sentAt: Date.now(),
+        mixName,
+        focusedId,
+        tracks: playlistManager.getTracks().map((t) => {
+            const controller = playlistManager.getController(t.id);
+            const live = t.state === 'playing' && controller ? controller.getCurrentTime() : t.currentTime;
+            return {
+                id: t.id,
+                url: t.url,
+                videoId: t.videoId,
+                meta: t.meta,
+                state: t.state,
+                error: t.error,
+                currentTime: live,
+                duration: t.duration,
+                volume: t.volume,
+                loop: t.loop,
+            };
+        }),
+    };
+}
+/** Main device: share the state soon (changes close together go as one). */
+function scheduleBroadcast() {
+    if (mcRole !== 'main' || mcBroadcastTimer)
+        return;
+    mcBroadcastTimer = window.setTimeout(broadcastNow, 150);
+}
+function broadcastNow() {
+    window.clearTimeout(mcBroadcastTimer);
+    mcBroadcastTimer = 0;
+    if (mcRole === 'main')
+        sendState(buildRoomState());
+}
+/** Remote: show the main device's snapshot. */
+function applyRoomState(raw, ageMs) {
+    if (mcRole !== 'remote' || !raw || typeof raw !== 'object')
+        return;
+    const state = raw;
+    if (!Array.isArray(state.tracks))
+        return;
+    const before = playlistManager.getTracks();
+    const sameShape = before.length === state.tracks.length &&
+        before.every((t, i) => t.id === state.tracks[i].id && t.url === state.tracks[i].url && t.meta?.title === state.tracks[i].meta?.title);
+    const focusChanged = focusedId !== state.focusedId;
+    const now = performance.now();
+    mcBases.clear();
+    const tracks = state.tracks.map((t) => {
+        mcBases.set(t.id, { t: t.currentTime, at: now - ageMs });
+        const elapsed = t.state === 'playing' ? ageMs / 1000 : 0;
+        const currentTime = t.duration ? Math.min(t.duration, t.currentTime + elapsed) : t.currentTime + elapsed;
+        return { ...t, currentTime, isMuted: false };
+    });
+    playlistManager.replaceTracks(tracks);
+    mixName = state.mixName;
+    focusedId = state.focusedId;
+    if (sameShape) {
+        tracks.forEach((t) => {
+            const row = rowFor(t.id);
+            if (row)
+                patchChannelRow(row, t);
+        });
+        renderStrip();
+        renderStatus();
+        renderStage(focusChanged);
+        if (focusChanged)
+            setFocusMarks(focusedId);
+    }
+    else {
+        renderAll(focusChanged);
+    }
+}
+/** Remote: move playing channels' times on between snapshots. */
+function remoteTick() {
+    if (mcRole !== 'remote')
+        return;
+    const now = performance.now();
+    for (const track of playlistManager.getTracks()) {
+        if (track.state !== 'playing')
+            continue;
+        const base = mcBases.get(track.id);
+        if (!base)
+            continue;
+        let t = base.t + (now - base.at) / 1000;
+        if (track.duration)
+            t = track.loop ? t % track.duration : Math.min(track.duration, t);
+        playlistManager.updateTrack(track.id, { currentTime: t });
+        const row = rowFor(track.id);
+        if (row)
+            patchChannelRow(row, playlistManager.getTrack(track.id));
+    }
+    renderTime();
+}
+/** Mark the focused row and strip tiles without re-rendering them. */
+function setFocusMarks(id) {
+    channelList.querySelectorAll('[data-track-id]').forEach((row) => {
+        const on = row.dataset.trackId === id;
+        row.classList.toggle('is-focus', on);
+        row.querySelector('.ch__focus')?.setAttribute('aria-current', String(on));
+    });
+    strips.forEach((strip) => strip.querySelectorAll('[data-track-id]').forEach((tile) => {
+        const on = tile.dataset.trackId === id;
+        tile.classList.toggle('is-focus', on);
+        tile.querySelector('button')?.setAttribute('aria-current', String(on));
+    }));
+}
+/** Remote: send a command to the main device, with immediate local feedback. */
+function routeToMain(command) {
+    if (mcRole !== 'remote')
+        return false;
+    // Feedback straight away; the main device's next snapshot confirms it.
+    if (command.type === 'focus')
+        setFocus(command.trackId);
+    else if (command.type === 'step')
+        stepFocus(command.dir);
+    else if (command.type === 'volume')
+        setVolume(command.trackId, command.volume);
+    else if (command.type === 'seek') {
+        playlistManager.updateTrack(command.trackId, { currentTime: command.time });
+        mcBases.set(command.trackId, { t: command.time, at: performance.now() });
+        renderTime();
+    }
+    // Slider drags: at most ~10 messages a second, and always the final value.
+    if (command.type === 'volume' || command.type === 'seek') {
+        const key = `${command.type}:${command.trackId}`;
+        const slot = mcThrottle.get(key) ?? { last: 0, timer: 0, command: null };
+        mcThrottle.set(key, slot);
+        const wait = 100 - (Date.now() - slot.last);
+        if (wait > 0) {
+            slot.command = command;
+            if (!slot.timer) {
+                slot.timer = window.setTimeout(() => {
+                    slot.timer = 0;
+                    slot.last = Date.now();
+                    if (slot.command)
+                        sendToMain(slot.command);
+                    slot.command = null;
+                }, wait);
+            }
+            return true;
+        }
+        slot.last = Date.now();
+    }
+    sendToMain(command);
+    return true;
+}
+function sendToMain(command) {
+    void sendCommand(command).then((reply) => {
+        renderRemoteBadge();
+        if (reply.ok)
+            return;
+        const main = mcStatus?.mainName || 'The main device';
+        const text = reply.error === 'timeout'
+            ? `${main} didn't respond.`
+            : reply.error === 'no_main' || reply.error === 'offline'
+                ? `${main} is offline.`
+                : command.type === 'add' || command.type === 'relink'
+                    ? 'That link has no YouTube video in it.'
+                    : `${main} couldn't do that.`;
+        if (command.type === 'add' || command.type === 'relink')
+            showError(inputError, text);
+        showRemoteNotice(text);
+    });
+    renderRemoteBadge();
+}
+/** Main device: run a command from a remote and answer it. */
+function handleRemoteCommand(command, reply) {
+    if (mcRole !== 'main' || !command || typeof command !== 'object' || typeof command.type !== 'string') {
+        reply(false, 'not_main');
+        return;
+    }
+    const ok = runLocalCommand(command);
+    reply(ok, ok ? undefined : 'failed');
+    if (ok)
+        broadcastNow();
+}
+/** Become a remote: stop playing here and mirror the main device. */
+function becomeRemote() {
+    stopPolling();
+    playlistManager.clearTracks();
+    playerBay.innerHTML = '';
+    setCommandRoute(routeToMain);
+    window.clearInterval(mcTicker);
+    mcTicker = window.setInterval(remoteTick, 500);
+    const last = lastRoomState();
+    if (last)
+        applyRoomState(last.state, last.ageMs);
+    else
+        renderAll(true);
+    updateKeepAwake();
+}
+/** Stop being a remote: take over the mirrored mix here, paused, at the same positions. */
+function leaveRemote() {
+    setCommandRoute(null);
+    window.clearInterval(mcTicker);
+    mcTicker = 0;
+    const mirrored = playlistManager.getTracks().map((t) => ({ ...t }));
+    playlistManager.replaceTracks(mirrored.map((t) => ({ ...t, state: 'loading', meta: t.meta })));
+    for (const t of mirrored)
+        createPlayerFor(t.id, t.videoId, { volume: t.volume, loop: t.loop, time: t.currentTime });
+    renderAll(false);
+}
+function onConnectionChange(status) {
+    const previous = mcRole;
+    const wasOnline = mcStatus?.state === 'online';
+    mcStatus = status;
+    mcRole = status.role;
+    if (previous !== mcRole) {
+        if (mcRole === 'remote')
+            becomeRemote();
+        else if (previous === 'remote')
+            leaveRemote();
+        if (mcRole === 'main')
+            broadcastNow();
+    }
+    else if (mcRole === 'main' && status.state === 'online' && !wasOnline) {
+        broadcastNow();
+    }
+    if (mcRole === 'idle' && status.state === 'online' && liveCount() > 0)
+        maybeClaimMain();
+    renderRemoteBadge();
+}
+/** The header badge: "Remote · Laptop", or "Playing here · 1 remote". */
+function renderRemoteBadge() {
+    const badge = $('remoteBadge');
+    const text = $('remoteBadgeText');
+    if (!badge || !text || mcNoticeTimer)
+        return;
+    const status = mcStatus;
+    if (!status || status.state === 'off' || mcRole === 'idle') {
+        badge.hidden = true;
+        return;
+    }
+    const remotes = status.devices.filter((d) => d.online && d.id !== status.mainId).length;
+    badge.hidden = false;
+    badge.classList.toggle('is-offline', status.state !== 'online');
+    badge.classList.toggle('is-pending', pendingCommands() > 0);
+    if (mcRole === 'remote') {
+        text.textContent = status.state === 'online' ? `Remote · ${status.mainName}` : `Remote · reconnecting`;
+    }
+    else {
+        text.textContent = remotes ? `Playing here · ${remotes} remote${remotes === 1 ? '' : 's'}` : 'Playing here';
+    }
+}
+/** A short message in the badge (a command that failed on the main device). */
+function showRemoteNotice(message) {
+    const badge = $('remoteBadge');
+    const text = $('remoteBadgeText');
+    if (!badge || !text)
+        return;
+    window.clearTimeout(mcNoticeTimer);
+    badge.hidden = false;
+    badge.classList.add('is-notice');
+    text.textContent = message;
+    mcNoticeTimer = window.setTimeout(() => {
+        mcNoticeTimer = 0;
+        badge.classList.remove('is-notice');
+        renderRemoteBadge();
+    }, 4000);
+}
 /** Remote control: the Devices section and the connection to the paired room. */
 async function setupRemoteControl() {
     takeRelayOverride();
+    onConnection(onConnectionChange);
+    onRoomState(applyRoomState);
+    onRemoteCommand(handleRemoteCommand);
+    // The main device refreshes everyone's times every 15 seconds while playing.
+    window.setInterval(() => {
+        if (mcRole === 'main' && liveCount() > 0)
+            broadcastNow();
+    }, 15000);
     setupDevicesPanel();
     setupReconnectTriggers();
     // A pairing link opened while the app is already open on this page.
@@ -4286,7 +4720,7 @@ async function setupRemoteControl() {
         connectRoom();
 }
 async function initialize() {
-    setCommandRunner(runCommand);
+    setCommandRunner(runLocalCommand);
     void setupRemoteControl();
     setupScreenTakeover();
     setupScreenEffect();

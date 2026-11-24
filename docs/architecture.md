@@ -155,11 +155,11 @@ stays visible underneath. Changing it never re-renders.
 - **Saved:** in `localStorage` under `ambient-player:screen` as
   `{ style, mix, tuned }`.
 
-## Pairing and the relay (remote control, phase 2)
+## Pairing and the relay (remote control)
 
 Remote control is being built in phases (`docs/remote-control-plan.md`).
-Phase 2 pairs devices and shows who's online; controlling playback comes in
-phase 3.
+Phases 1–3 are built: commands, pairing, and controlling the main device
+from a remote. Handover ("Play here") is phase 4.
 
 **The relay** (`worker/`) is a Cloudflare Worker with two SQLite-backed
 Durable Objects:
@@ -205,6 +205,31 @@ The routes and messages are listed in `worker/README.md`.
   away when the page becomes visible or the network returns.
 - **Unpaired elsewhere:** close code 4001 means **Forget all devices** was
   used on another device. This device then forgets the room and says so.
+
+**Roles and sync** (`main.ts`, "Remote control: roles and sync").
+
+| Role | When | What it does |
+| --- | --- | --- |
+| **Main** | The room's `mainId` is this device. | Plays. After every change it shares a snapshot of the mix (`buildRoomState()`: channels, states, times, volumes, repeat, focus, mix name), debounced to 150 ms, plus every 15 seconds while playing. Runs commands from remotes and answers them. |
+| **Remote** | Another device is main and online. | Destroys its players and mirrors the snapshots (`applyRoomState()`). Playing channels' times move on locally between snapshots, using the snapshot's age (room clock offset). Every command goes to the main device (`setCommandRoute`). |
+| **Idle** | No main device online (or not paired). | Plays on its own, as without pairing. Starting playback while paired and online claims main. |
+
+- **Switching roles:**
+  - **To remote:** the device destroys its players and shows the main
+    device's mix.
+  - **Back to idle:** when the main device goes offline, the device takes
+    the mirrored mix over **paused**. Its players are created at each
+    channel's last position, using the player's `start` (a seek would start
+    playback).
+- **On a remote:** focus, previous and next, volume and seek respond at once,
+  and the next snapshot confirms them. Volume and seek drags send at most
+  about 10 messages a second, always including the final value.
+- **Failed commands:** if the main device doesn't answer within 5 seconds,
+  or a command fails there, the header badge shows why for a few seconds.
+- **The header badge:** **Remote · Laptop** on a remote; **Playing here ·
+  1 remote** on the main device. It pulses while a command is on its way.
+- **The Devices list:** marks the main device **Plays**.
+- **Keep-awake:** off on a remote, since it plays nothing.
 
 **This device** (`ambient-player:device`) has a random ID and a generated
 name such as "Brave on Android", which can be renamed in the Devices

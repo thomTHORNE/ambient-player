@@ -1090,6 +1090,52 @@ input[type="range"] {
   color: var(--text-3);
 }
 
+/* Remote control: "Remote · Laptop" or "Playing here · 1 remote", with a live
+   dot. It pulses while a command is on its way, turns grey while
+   reconnecting, and briefly shows a message when a command fails. */
+.remote-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+}
+
+.remote-badge i {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.remote-badge.is-pending i {
+  animation: remote-pulse 600ms ease-in-out infinite alternate;
+}
+
+.remote-badge.is-offline,
+.remote-badge.is-offline i {
+  color: var(--text-3);
+  background-color: transparent;
+}
+
+.remote-badge.is-offline i {
+  background: var(--text-3);
+  box-shadow: none;
+}
+
+.remote-badge.is-notice {
+  color: var(--orange);
+}
+
+.remote-badge.is-notice i {
+  background: var(--orange);
+  box-shadow: none;
+}
+
+@keyframes remote-pulse {
+  from { opacity: 1; }
+  to { opacity: 0.25; }
+}
+
 /* ==========================================================================
    Now playing
    ========================================================================== */
@@ -2355,6 +2401,12 @@ input[type="range"] {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-3);
+}
+
+.device__tag--main {
+  margin-right: 4px;
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .device__tag {

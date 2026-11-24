@@ -72,11 +72,17 @@ It runs on the Workers Free plan.
 | Direction | `type` | Fields |
 | --- | --- | --- |
 | device → room | `hello` | `protocol`, `deviceId`, `name`, `secret` |
-| room → device | `welcome` | `protocol`, `deviceId`, `devices`, `serverTime` |
-| room → devices | `devices` | `devices`: `{ id, name, lastSeen, online }[]` |
+| room → device | `welcome` | `protocol`, `deviceId`, `devices`, `mainId`, `state`, `receivedAt`, `serverTime` |
+| room → devices | `devices` | `devices`: `{ id, name, lastSeen, online }[]`, `mainId` |
 | device → room | `rename` | `name` |
-| device → room | `leave` | none (unpairs this device) |
+| device → room | `leave` | none (unpairs this device; if it was main, the room has no main) |
+| device → room | `claim_main` | none. Granted when no main device is online (the device list then carries the new `mainId`); otherwise answered with `claim_denied`. |
+| main → room → others | `state` | `state` (the mix snapshot). The room keeps the latest one with `receivedAt` (room clock) and sends it to devices that join later. |
+| remote → room → main | `command` | `id`, `command`; the main device receives `from` as well. With no main online, the room answers `ack` with `error: "no_main"`. |
+| main → room → remote | `ack` | `id`, `to` (from the main device), `ok`, `error` |
 | device → room | `ping` (plain text) | Answered with `pong` without waking the room. |
+
+Each socket may send 40 messages a second; the rest are dropped.
 
 **Close codes:**
 - **4000:** replaced by a newer connection from the same device.
@@ -84,5 +90,6 @@ It runs on the Workers Free plan.
 - **4003:** the first message wasn't a valid `hello`.
 - **4004:** the room is full (12 devices).
 
-**Coming in phase 3:** roles, state and commands, added to the same
-connection.
+**After changing the relay:** redeploy it with `npx wrangler deploy`. A
+client that is newer than the relay still works; it just stays on its own
+until the relay understands `claim_main`.

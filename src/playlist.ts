@@ -126,6 +126,14 @@ export class PlaylistManager {
   }
 
   /**
+   * Replace every track (a remote mirroring the main device): no players.
+   */
+  replaceTracks(tracks: Track[]): void {
+    this.clearTracks();
+    this.state.tracks = tracks.map((t) => ({ ...t }));
+  }
+
+  /**
    * Get all track URLs in order
    */
   getTrackUrls(): string[] {

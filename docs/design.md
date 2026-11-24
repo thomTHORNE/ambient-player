@@ -151,6 +151,15 @@ mix:
   While disconnected, no one is shown as online.
 - **Unpairing:** **Unpair this device** and **Forget all devices** both ask
   first; forgetting all is styled as destructive.
+- **Main device:** the device that plays is tagged **Plays** in the accent
+  colour.
+- **Header badge:** sits after the status line, with a small accent dot:
+  - **On a remote:** **Remote · Laptop**.
+  - **On the main device:** **Playing here · 1 remote**.
+  - **While a command is on its way:** the dot pulses.
+  - **While reconnecting:** it turns grey.
+  - **When a command fails:** it shows the reason in orange for a few
+    seconds.
 
 **Screen effect.**
 

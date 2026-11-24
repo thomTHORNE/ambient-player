@@ -24,12 +24,20 @@ API); only the sound and the artwork are shown.
 - **Per-channel settings.** The volume button on a channel row opens its
   drawer: a volume slider, its YouTube link (paste a new one and press **Load
   link**) and **Remove channel**, which asks for confirmation first.
-- **Devices (pairing for remote control).** In the last panel, **Connect a
-  device** shows a QR code and a 6-character code. Scan it or enter it on
-  another device to pair the two. Paired devices are listed with who's
-  online, and can be renamed or unpaired. Controlling one device from
-  another is the next phase of the work (`docs/remote-control-plan.md`).
-  Pairing goes through the relay in `worker/`, deployed on Cloudflare.
+- **Remote control.** Pair devices in the last panel.
+  - **Pairing:** **Connect a device** shows a QR code and a 6-character code.
+    Scan or enter it on the other device.
+  - **Main and remote:** the device that starts playing becomes the main
+    device. Any other paired device that opens the app becomes its remote:
+    it shows the same mix live and controls everything, from play, pause,
+    volume and seeking to switching, adding and removing channels and
+    loading mixes.
+  - **When the main device goes offline:** remotes take the mix over,
+    paused, at the same positions.
+  - **The relay:** pairing goes through the relay in `worker/`, deployed on
+    Cloudflare.
+
+  See `docs/remote-control-plan.md`.
 - **Screen effect.** The cover art and the thumbnail strip are drawn as if
   on a CRT or LED wall: phosphor cells, colour fringe, glow. The Screen
   effect panel (the last one) has a dial for the style (Slot mask, Hero,

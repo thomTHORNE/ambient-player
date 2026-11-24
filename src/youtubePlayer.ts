@@ -34,6 +34,7 @@ declare global {
 
     interface PlayerVars {
       autoplay?: 0 | 1;
+      start?: number;
       controls?: 0 | 1;
       enablejsapi?: 0 | 1;
       origin?: string;
@@ -100,7 +101,9 @@ export interface YouTubePlayerFactory {
     videoId: string,
     onMeta: TrackMetaListener,
     onState: TrackStateListener,
-    onError: TrackErrorListener
+    onError: TrackErrorListener,
+    /** Start here (whole seconds) without starting playback. */
+    startSeconds?: number
   ): YouTubePlayerController;
 }
 
@@ -130,7 +133,8 @@ export function createYouTubePlayerFactory(): YouTubePlayerFactory {
       videoId: string,
       onMeta: TrackMetaListener,
       onState: TrackStateListener,
-      onError: TrackErrorListener
+      onError: TrackErrorListener,
+      startSeconds?: number
     ): YouTubePlayerController {
       let player: YT.Player | null = null;
       let isReady = false;
@@ -209,6 +213,7 @@ export function createYouTubePlayerFactory(): YouTubePlayerFactory {
           height: 1,
           playerVars: {
             autoplay: 0,
+            ...(startSeconds && startSeconds > 0 ? { start: Math.floor(startSeconds) } : {}),
             controls: 0,
             enablejsapi: 1,
             origin: window.location.origin,

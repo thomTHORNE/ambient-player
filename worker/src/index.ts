@@ -12,6 +12,12 @@
  *   POST /rooms/:id/rotate    { secret } -> a new secret; every other device is unpaired
  *   POST /pair/:code          swap a pairing code for { roomId, secret }
  *   GET  /rooms/:id/ws        WebSocket into the room (authenticates with a `hello` message)
+ *
+ * In a room, one device is the main device: it plays the audio and is the
+ * only one that changes the mix. It sends `state` snapshots, which the room
+ * keeps and forwards; other devices send `command`s, which the room forwards
+ * to the main device, and its `ack`s go back to the sender. See
+ * worker/README.md for the messages.
  */
 
 import { DurableObject } from 'cloudflare:workers';
@@ -29,6 +35,8 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const ROOM_ID = /^[A-Za-z0-9_-]{16,40}$/;
 const MAX_MESSAGE = 64 * 1024;
 const MAX_DEVICES = 12;
+/** Messages a socket may send per second before the rest are dropped. */
+const MAX_RATE = 40;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -166,7 +174,16 @@ interface SocketTag {
   deviceId?: string;
 }
 
+/** The main device's last snapshot, with when the room received it (room clock). */
+interface StoredState {
+  state: unknown;
+  receivedAt: number;
+}
+
 export class Room extends DurableObject<Env> {
+  /** Recent message times per socket, for the rate limit (kept in memory only). */
+  private rates = new WeakMap<WebSocket, number[]>();
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     // Heartbeats are answered without waking the object, so idle rooms sleep.
@@ -185,7 +202,7 @@ export class Room extends DurableObject<Env> {
 
   /** Forget all devices: a new secret, and every connection closed. */
   async rotate(secretHash: string): Promise<void> {
-    await this.ctx.storage.put({ hash: secretHash, devices: {} });
+    await this.ctx.storage.put({ hash: secretHash, devices: {}, mainId: null, state: null });
     for (const ws of this.ctx.getWebSockets()) ws.close(4001, 'unpaired');
   }
 
@@ -240,28 +257,94 @@ export class Room extends DurableObject<Env> {
       ws.serializeAttachment({ authed: true, deviceId } satisfies SocketTag);
       devices[deviceId] = { id: deviceId, name: cleanName(msg.name), lastSeen: Date.now() };
       await this.ctx.storage.put('devices', devices);
+      const mainId = await this.mainId();
+      const stored = await this.ctx.storage.get<StoredState>('state');
       ws.send(
-        JSON.stringify({ type: 'welcome', protocol: PROTOCOL, deviceId, devices: this.list(devices), serverTime: Date.now() })
+        JSON.stringify({
+          type: 'welcome',
+          protocol: PROTOCOL,
+          deviceId,
+          devices: this.list(devices),
+          mainId,
+          state: stored?.state ?? null,
+          receivedAt: stored?.receivedAt ?? 0,
+          serverTime: Date.now(),
+        })
       );
-      this.broadcastDevices(devices, { skip: ws });
+      await this.broadcastDevices(devices, { skip: ws });
       return;
     }
 
+    if (!this.allow(ws)) return;
     const devices = await this.devices();
     const me = tag.deviceId ? devices[tag.deviceId] : undefined;
     if (!me) return;
+    const mainId = await this.mainId();
+
     switch (msg.type) {
       case 'rename':
         me.name = cleanName(msg.name);
         await this.ctx.storage.put('devices', devices);
-        this.broadcastDevices(devices);
+        await this.broadcastDevices(devices);
         break;
+
       case 'leave':
         delete devices[me.id];
         await this.ctx.storage.put('devices', devices);
+        if (mainId === me.id) await this.ctx.storage.put({ mainId: null, state: null });
         ws.close(1000, 'left');
-        this.broadcastDevices(devices, { skip: ws, closing: ws });
+        await this.broadcastDevices(devices, { skip: ws, closing: ws });
         break;
+
+      // Become the main device: granted when there is none, or it is offline.
+      case 'claim_main': {
+        const mainOnline = !!mainId && mainId !== me.id && !!this.socketFor(mainId);
+        if (mainOnline) {
+          ws.send(JSON.stringify({ type: 'claim_denied', mainId }));
+          break;
+        }
+        if (mainId !== me.id) {
+          await this.ctx.storage.put({ mainId: me.id, state: null });
+          await this.broadcastDevices(devices);
+        }
+        break;
+      }
+
+      // A snapshot from the main device: keep it and pass it on.
+      case 'state': {
+        if (mainId !== me.id || typeof msg.state !== 'object' || msg.state === null) break;
+        const stored: StoredState = { state: msg.state, receivedAt: Date.now() };
+        await this.ctx.storage.put('state', stored);
+        const text = JSON.stringify({ type: 'state', ...stored });
+        for (const other of this.authedSockets()) if (other !== ws) this.trySend(other, text);
+        break;
+      }
+
+      // A command from a remote: to the main device, or back with an error.
+      case 'command': {
+        const id = typeof msg.id === 'string' ? msg.id.slice(0, 40) : '';
+        if (!id || typeof msg.command !== 'object' || msg.command === null) break;
+        const main = mainId && mainId !== me.id ? this.socketFor(mainId) : null;
+        if (!main) {
+          ws.send(JSON.stringify({ type: 'ack', id, ok: false, error: 'no_main' }));
+          break;
+        }
+        this.trySend(main, JSON.stringify({ type: 'command', id, from: me.id, command: msg.command }));
+        break;
+      }
+
+      // The main device's answer to a command, back to the device that sent it.
+      case 'ack': {
+        if (mainId !== me.id || typeof msg.to !== 'string' || typeof msg.id !== 'string') break;
+        const target = this.socketFor(msg.to);
+        if (target) {
+          this.trySend(
+            target,
+            JSON.stringify({ type: 'ack', id: msg.id, ok: msg.ok === true, error: typeof msg.error === 'string' ? msg.error : undefined })
+          );
+        }
+        break;
+      }
     }
   }
 
@@ -279,7 +362,7 @@ export class Room extends DurableObject<Env> {
       me.lastSeen = Date.now();
       await this.ctx.storage.put('devices', devices);
     }
-    this.broadcastDevices(devices, { skip: ws, closing: ws });
+    await this.broadcastDevices(devices, { skip: ws, closing: ws });
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
@@ -288,6 +371,41 @@ export class Room extends DurableObject<Env> {
 
   private async devices(): Promise<Record<string, DeviceRecord>> {
     return (await this.ctx.storage.get<Record<string, DeviceRecord>>('devices')) ?? {};
+  }
+
+  private async mainId(): Promise<string | null> {
+    return (await this.ctx.storage.get<string | null>('mainId')) ?? null;
+  }
+
+  private authedSockets(): WebSocket[] {
+    return this.ctx.getWebSockets().filter((ws) => {
+      const tag = ws.deserializeAttachment() as SocketTag | null;
+      return !!tag?.authed && ws.readyState === WebSocket.OPEN;
+    });
+  }
+
+  /** The open connection of a device, if it is online. */
+  private socketFor(deviceId: string): WebSocket | null {
+    return (
+      this.authedSockets().find((ws) => (ws.deserializeAttachment() as SocketTag | null)?.deviceId === deviceId) ?? null
+    );
+  }
+
+  private trySend(ws: WebSocket, text: string): void {
+    try {
+      ws.send(text);
+    } catch {
+      // Closing; it will be cleaned up.
+    }
+  }
+
+  /** At most MAX_RATE messages per second per socket; the rest are dropped. */
+  private allow(ws: WebSocket): boolean {
+    const now = Date.now();
+    const recent = (this.rates.get(ws) ?? []).filter((t) => now - t < 1000);
+    recent.push(now);
+    this.rates.set(ws, recent);
+    return recent.length <= MAX_RATE;
   }
 
   /** The device list, with who is connected right now. */
@@ -302,10 +420,13 @@ export class Room extends DurableObject<Env> {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /** Send the device list to every connected device except `skip`; `closing` counts as offline. */
-  private broadcastDevices(devices: Record<string, DeviceRecord>, opts: { skip?: WebSocket; closing?: WebSocket } = {}): void {
+  /** Send the device list (and the main device) to every connected device except `skip`; `closing` counts as offline. */
+  private async broadcastDevices(
+    devices: Record<string, DeviceRecord>,
+    opts: { skip?: WebSocket; closing?: WebSocket } = {}
+  ): Promise<void> {
     const { skip, closing } = opts;
-    const text = JSON.stringify({ type: 'devices', devices: this.list(devices, closing) });
+    const text = JSON.stringify({ type: 'devices', devices: this.list(devices, closing), mainId: await this.mainId() });
     for (const ws of this.ctx.getWebSockets()) {
       const tag = ws.deserializeAttachment() as SocketTag | null;
       if (ws === skip || !tag?.authed || ws.readyState !== WebSocket.OPEN) continue;

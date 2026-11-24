@@ -39,7 +39,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=6c0f468359">
+  <link rel="stylesheet" href="styles.css?v=e28796903f">
 </head>
 
 <body>
@@ -211,6 +211,15 @@
                 </label>
                 <button id="savePlaylistButton" class="btn" type="button">Save</button>
               </div>
+              <!-- Import: the installed app has no address bar to open a share link in. -->
+              <div class="field-row field-row--import">
+                <label class="field">
+                  <span class="visually-hidden">Share link or YouTube links to import</span>
+                  <input id="importInput" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Paste a share link to import" />
+                </label>
+                <button id="importButton" class="btn btn--quiet" type="button">Import</button>
+              </div>
+              <p id="mixesMessage" class="status-msg mixes__msg" role="status" aria-live="polite"></p>
               <ul id="savedPlaylistsList" class="mix-list"></ul>
             </section>
           <section class="panel status" aria-labelledby="statusTitle">
@@ -270,7 +279,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=57ed377ea2"></script>
+  <script src="app.js?v=3526f2c3c8"></script>
 </body>
 
 </html>

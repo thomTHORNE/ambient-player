@@ -24,6 +24,7 @@ import {
 import {
   encodePlaylistToUrl,
   decodePlaylistFromLocation,
+  decodePlaylistFromText,
   clearPlaylistHash,
 } from './shareLinks.js';
 import {
@@ -86,6 +87,9 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const urlInput = $<HTMLInputElement>('urlInput');
 const addButton = $<HTMLButtonElement>('addButton');
 const inputError = $<HTMLElement>('inputError');
+const mixesMessage = $<HTMLElement>('mixesMessage');
+const importInput = $<HTMLInputElement>('importInput');
+const importButton = $<HTMLButtonElement>('importButton');
 const globalPlayPauseButton = $<HTMLButtonElement>('globalPlayPause');
 const loopSwitch = $<HTMLButtonElement>('loopSwitch');
 const shareButton = $<HTMLButtonElement>('shareButton');
@@ -736,25 +740,37 @@ function loadTracksFromUrls(urls: string[], mode: 'replace' | 'append'): void {
   renderAll(true);
 }
 
-async function handleLoadPlaylist(urls: string[], name: string | null): Promise<void> {
+/** Load a mix, asking to replace or add when channels are open. False if cancelled. */
+async function handleLoadPlaylist(urls: string[], name: string | null): Promise<boolean> {
   const open = playlistManager.getTracks().length;
   if (open === 0) {
     mixName = name;
     loadTracksFromUrls(urls, 'replace');
-    return;
+    return true;
   }
   const choice = await showReplaceAppendModal(
     `This mix has ${urls.length} channel${urls.length === 1 ? '' : 's'}. Replace the ${open} you have open, or add them to the current mix?`
   );
-  if (choice === 'cancel') return;
+  if (choice === 'cancel') return false;
   if (choice === 'replace') mixName = name;
   loadTracksFromUrls(urls, choice);
+  return true;
 }
 
+/** Briefly swap a button's label; a second flash restarts it, never sticks. */
+const flashTimers = new WeakMap<HTMLButtonElement, number>();
 function flash(button: HTMLButtonElement, text: string): void {
-  const original = button.textContent;
+  const running = flashTimers.get(button);
+  if (running !== undefined) clearTimeout(running);
+  else button.dataset.label = button.textContent ?? '';
   button.textContent = text;
-  setTimeout(() => (button.textContent = original), 1800);
+  flashTimers.set(
+    button,
+    window.setTimeout(() => {
+      button.textContent = button.dataset.label ?? '';
+      flashTimers.delete(button);
+    }, 1800)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -809,12 +825,13 @@ function initializeEventListeners(): void {
   savePlaylistButton.addEventListener('click', () => {
     const name = playlistNameInput.value.trim();
     if (!name) {
-      showError(inputError, 'Name the mix before saving it.');
+      showError(mixesMessage, 'Name the mix before saving it.');
       playlistNameInput.focus();
       return;
     }
     const urls = playlistManager.getTrackUrls();
-    if (urls.length === 0) return showError(inputError, 'Add a channel before saving a mix.');
+    if (urls.length === 0) return showError(mixesMessage, 'Add a channel before saving a mix.');
+    mixesMessage.textContent = '';
     saveOrUpdatePlaylist(name, urls);
     mixName = name;
     playlistNameInput.value = '';
@@ -824,6 +841,31 @@ function initializeEventListeners(): void {
   });
   playlistNameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') savePlaylistButton.click();
+  });
+
+  // Import: a share link (or plain YouTube links) pasted in, for the
+  // installed app, which has no address bar to open the link in.
+  const importMix = async () => {
+    const text = importInput.value.trim();
+    if (!text) {
+      showError(mixesMessage, 'Paste a share link first.');
+      importInput.focus();
+      return;
+    }
+    const urls = decodePlaylistFromText(text);
+    if (!urls) {
+      showError(mixesMessage, 'That is not a share link or a YouTube link, so there is nothing to import.');
+      return;
+    }
+    mixesMessage.textContent = '';
+    // Cancelled in the replace-or-add dialog: keep the text for another try.
+    if (!(await handleLoadPlaylist(urls, null))) return;
+    importInput.value = '';
+    flash(importButton, urls.length === 1 ? 'Imported 1' : `Imported ${urls.length}`);
+  };
+  importButton.addEventListener('click', () => void importMix());
+  importInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') void importMix();
   });
 
   savedPlaylistsList.addEventListener('click', async (e) => {

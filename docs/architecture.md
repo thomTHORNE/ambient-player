@@ -41,7 +41,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `scale.ts` | The UI scale setting: reads, applies and stores it. |
 | `resize.ts` | The divider that resizes the artwork column on large screens with a mouse. |
 | `storage.ts` | Saved mixes in `localStorage` under `yt_audio_playlists`. |
-| `shareLinks.ts` | Encodes a mix's URLs into `#pl=<base64url JSON>` and reads it back. |
+| `shareLinks.ts` | Encodes a mix's URLs into `#pl=<base64url JSON>`, reads it back from the page URL, and finds a mix in pasted text for Import. |
 
 ## State and rendering
 
@@ -248,7 +248,7 @@ inline script in `index.html` applies it before the first paint.
 | `localStorage["yt_audio_playlists"]` | `{ playlists: [{ name, urls[] }], lastPlaylistName? }`. Saving a mix makes it the last one; it reopens on the next visit. An unsaved mix is not kept. |
 | `localStorage["ambient-player:ui-scale"]` | The UI scale (0.7–1.3), removed at 100%. |
 | `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
-| Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. |
+| Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. **Import** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |
 
 ## Page flags
 

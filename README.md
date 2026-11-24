@@ -30,8 +30,13 @@ API); only the sound and the artwork are shown.
 - **Saved mixes.** Name a mix and save it on this device. The last saved mix
   reopens next time. Loading a mix while channels are open asks whether to
   replace them or add to them.
-- **Share links.** **Copy share link** puts the whole mix in a URL. Opening it
-  loads that mix.
+- **Share links.** **Copy share link** puts the whole mix in a URL. Opening
+  it loads that mix.
+- **Import.** In the installed app there's no address bar to open a share
+  link in. Instead, paste the link into **Import** in the Saved mixes panel.
+  Plain YouTube links work too (one or several, separated by spaces, commas
+  or new lines). If channels are open, it asks whether to replace them or
+  add to them.
 - **Fullscreen takeover.** The first tap enters fullscreen, and while
   something plays there the screen stays awake. The button at the top right leaves or
   re-enters fullscreen. Installed from the home screen (*Add to Home screen* /
@@ -112,7 +117,7 @@ src/
   scale.ts            UI scale setting
   resize.ts           Draggable divider for the artwork column
   storage.ts          Saved mixes in localStorage
-  shareLinks.ts       Encode and decode share links
+  shareLinks.ts       Encode, decode and import share links
 assets/               Favicon, app icons and the logo artwork
 docs/                 Architecture and design notes
 ```

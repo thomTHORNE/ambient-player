@@ -312,8 +312,8 @@ export function extractVideoId(url: string): string | null {
   try {
     const urlObj = new URL(url);
 
-    // Standard youtube.com URLs
-    if (urlObj.hostname === 'www.youtube.com' || urlObj.hostname === 'youtube.com') {
+    // Standard youtube.com URLs, including the mobile and YouTube Music sites
+    if (['www.youtube.com', 'youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(urlObj.hostname)) {
       const videoId = urlObj.searchParams.get('v');
       if (videoId) return videoId;
     }

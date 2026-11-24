@@ -365,8 +365,8 @@ function createYouTubePlayerFactory() {
 function extractVideoId(url) {
     try {
         const urlObj = new URL(url);
-        // Standard youtube.com URLs
-        if (urlObj.hostname === 'www.youtube.com' || urlObj.hostname === 'youtube.com') {
+        // Standard youtube.com URLs, including the mobile and YouTube Music sites
+        if (['www.youtube.com', 'youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(urlObj.hostname)) {
             const videoId = urlObj.searchParams.get('v');
             if (videoId)
                 return videoId;
@@ -393,8 +393,10 @@ function isValidYouTubeUrl(url) {
 
 // ===== shareLinks.js =====
 /**
- * Share links module for encoding/decoding playlist URLs
+ * Share links: a mix's YouTube URLs encoded into the page URL's hash
+ * (#pl=<base64url JSON>), read back on load or pasted into Import.
  */
+
 /**
  * Encode a list of URLs into a shareable URL
  */
@@ -415,19 +417,33 @@ function decodePlaylistFromLocation() {
     const hash = window.location.hash;
     if (!hash.startsWith('#pl='))
         return null;
-    const base64 = hash.slice(4)
-        .replace(/-/g, '+')
-        .replace(/_/g, '/');
+    return decodePayload(hash.slice(4));
+}
+/** The URL list inside a share link's #pl= payload, or null if it isn't one. */
+function decodePayload(payload) {
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
     try {
-        const json = atob(base64);
-        const urls = JSON.parse(json);
+        const urls = JSON.parse(atob(base64));
         if (!Array.isArray(urls))
             return null;
-        return urls;
+        return urls.filter((u) => typeof u === 'string');
     }
     catch {
         return null;
     }
+}
+/**
+ * The mix in pasted text: a share link, or else any YouTube links in it
+ * (one or several, separated by spaces, commas or new lines). Null when
+ * there is nothing to import.
+ */
+function decodePlaylistFromText(text) {
+    const share = text.match(/#pl=([A-Za-z0-9_-]+)/);
+    const urls = share
+        ? decodePayload(share[1]) ?? []
+        : text.match(/https?:\/\/[^\s,;"'<>]+/g) ?? [];
+    const valid = urls.filter(isValidYouTubeUrl);
+    return valid.length > 0 ? valid : null;
 }
 /**
  * Clear the playlist hash from the URL
@@ -1593,6 +1609,9 @@ const $ = (id) => document.getElementById(id);
 const urlInput = $('urlInput');
 const addButton = $('addButton');
 const inputError = $('inputError');
+const mixesMessage = $('mixesMessage');
+const importInput = $('importInput');
+const importButton = $('importButton');
 const globalPlayPauseButton = $('globalPlayPause');
 const loopSwitch = $('loopSwitch');
 const shareButton = $('shareButton');
@@ -2210,24 +2229,35 @@ function loadTracksFromUrls(urls, mode) {
         addTrackFromUrl(url);
     renderAll(true);
 }
+/** Load a mix, asking to replace or add when channels are open. False if cancelled. */
 async function handleLoadPlaylist(urls, name) {
     const open = playlistManager.getTracks().length;
     if (open === 0) {
         mixName = name;
         loadTracksFromUrls(urls, 'replace');
-        return;
+        return true;
     }
     const choice = await showReplaceAppendModal(`This mix has ${urls.length} channel${urls.length === 1 ? '' : 's'}. Replace the ${open} you have open, or add them to the current mix?`);
     if (choice === 'cancel')
-        return;
+        return false;
     if (choice === 'replace')
         mixName = name;
     loadTracksFromUrls(urls, choice);
+    return true;
 }
+/** Briefly swap a button's label; a second flash restarts it, never sticks. */
+const flashTimers = new WeakMap();
 function flash(button, text) {
-    const original = button.textContent;
+    const running = flashTimers.get(button);
+    if (running !== undefined)
+        clearTimeout(running);
+    else
+        button.dataset.label = button.textContent ?? '';
     button.textContent = text;
-    setTimeout(() => (button.textContent = original), 1800);
+    flashTimers.set(button, window.setTimeout(() => {
+        button.textContent = button.dataset.label ?? '';
+        flashTimers.delete(button);
+    }, 1800));
 }
 // ---------------------------------------------------------------------------
 // Events
@@ -2282,13 +2312,14 @@ function initializeEventListeners() {
     savePlaylistButton.addEventListener('click', () => {
         const name = playlistNameInput.value.trim();
         if (!name) {
-            showError(inputError, 'Name the mix before saving it.');
+            showError(mixesMessage, 'Name the mix before saving it.');
             playlistNameInput.focus();
             return;
         }
         const urls = playlistManager.getTrackUrls();
         if (urls.length === 0)
-            return showError(inputError, 'Add a channel before saving a mix.');
+            return showError(mixesMessage, 'Add a channel before saving a mix.');
+        mixesMessage.textContent = '';
         saveOrUpdatePlaylist(name, urls);
         mixName = name;
         playlistNameInput.value = '';
@@ -2299,6 +2330,32 @@ function initializeEventListeners() {
     playlistNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter')
             savePlaylistButton.click();
+    });
+    // Import: a share link (or plain YouTube links) pasted in, for the
+    // installed app, which has no address bar to open the link in.
+    const importMix = async () => {
+        const text = importInput.value.trim();
+        if (!text) {
+            showError(mixesMessage, 'Paste a share link first.');
+            importInput.focus();
+            return;
+        }
+        const urls = decodePlaylistFromText(text);
+        if (!urls) {
+            showError(mixesMessage, 'That is not a share link or a YouTube link, so there is nothing to import.');
+            return;
+        }
+        mixesMessage.textContent = '';
+        // Cancelled in the replace-or-add dialog: keep the text for another try.
+        if (!(await handleLoadPlaylist(urls, null)))
+            return;
+        importInput.value = '';
+        flash(importButton, urls.length === 1 ? 'Imported 1' : `Imported ${urls.length}`);
+    };
+    importButton.addEventListener('click', () => void importMix());
+    importInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')
+            void importMix();
     });
     savedPlaylistsList.addEventListener('click', async (e) => {
         const button = e.target.closest('[data-mix-action]');

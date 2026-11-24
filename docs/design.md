@@ -82,8 +82,8 @@ The panels are, in order:
 
 1. **Deck:** transport, timeline, channel volume.
 2. **Channels:** add a link, Play all / Pause all, the channel rows.
-3. **Saved mixes, then mix status:** duration, repeat, layout, UI scale,
-   share link.
+3. **Saved mixes, mix status, then the screen effect:** duration, repeat,
+   layout, UI scale, share link; the style dial, Mix and fine-tune.
 
 ## Interaction rules
 
@@ -136,6 +136,22 @@ mix:
   so there's no empty space beside the art.
 - **Where.** It appears only where a mouse or trackpad can drag it; touch
   layouts keep their fixed columns.
+
+**Screen effect.**
+
+- **The look:** the artwork reads as a picture on a physical screen, not a
+  filter over it. Real phosphor cells, red, green and blue stripes, a
+  slot-mask offset, and a slight glow, like a photo of a CRT or LED wall.
+- **Calm, not loud:** the picture is graded cold and desaturated, so the
+  accent and the interface stay the focus.
+- **Style dial:** a rotary switch. A knob with a pointer and five detents
+  turns, with a small spring, to the next style on each tap; the arrow keys
+  turn it either way.
+- **Mix:** built like the volume card. A large accent readout and caption
+  sit over a small slot-mask meter whose lit columns show how much of the
+  effect is on, with the slider beneath.
+- **Fine-tune:** every other setting stays behind its toggle, out of the
+  way.
 
 **Screen.**
 

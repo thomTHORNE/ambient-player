@@ -37,6 +37,8 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `playlist.ts` | The `Track` model and `PlaylistManager`, which owns the track list and each track's player controller. |
 | `youtubePlayer.ts` | Wraps the YouTube IFrame API: waits for it to load, creates hidden players, reports state, metadata and errors through callbacks, and parses YouTube URLs. |
 | `accent.ts` | Samples the artwork on a canvas for the accent colour, and detects square (album) art. |
+| `crt.ts` | The screen effect: renders the artwork and thumbnails as phosphor cells on a canvas. |
+| `screenFx.ts` | The Screen effect panel: style dial, Mix and fine-tune, saved on the device. |
 | `screen.ts` | Fullscreen (with the WebKit fallback), installed-app detection and the screen wake lock. |
 | `scale.ts` | The UI scale setting: reads, applies and stores it. |
 | `layoutPref.ts` | The Layout setting (Auto or Stacked), kept per screen. |
@@ -86,6 +88,51 @@ stops itself when nothing plays.
   `PlaylistManager` stores next to its track.
 - **Changing a channel's link.** `reloadTrack` keeps the channel's volume and
   repeat setting and replaces its player.
+
+## Screen effect (`crt.ts`, `screenFx.ts`)
+
+The cover art and the thumbnail strip are drawn as if on a CRT or LED wall.
+
+**Rendering** (`paintCrt()`). The artwork is drawn into a canvas, device
+pixel by device pixel:
+
+1. **Sampling:** the picture is sampled into cells, one colour per cell, on
+   a small canvas (with an optional defocus blur first).
+2. **Grade:** each cell is desaturated, tinted towards a cold blue-grey, and
+   adjusted for contrast and brightness.
+3. **Phosphors:** each cell is a red, green and blue stripe. Each stripe is
+   brightest in the middle and leaks some light (`--crt-bleed`) into its
+   neighbours, which gives the colour fringe. Cells stack in columns with a
+   dark gap, and every other column is offset by half a cell (a slot mask).
+4. **Glow:** a blurred copy is screened over the result. CSS then softens
+   the canvas slightly (`--crt-soft`).
+
+**When it renders.** Only when the picture loads, the frame grows or changes
+width, or a setting changes; never per frame.
+
+- **Cover art:** `setupArtCrt()` keeps `#artCrt` over the picture. The canvas
+  holds the whole picture at the size `object-fit: cover` gives it, and CSS
+  gives it the picture's zoom (letterboxed or square art). So the two line
+  up exactly, and the collapsing artwork only crops it.
+- **Thumbnails:** `paintCrtThumbs()` renders the strip's canvases from a
+  CORS copy of each thumbnail, cached by URL and size.
+
+**Mix.** `--crt-mix` is the canvas's opacity over the plain picture, which
+stays visible underneath. Changing it never re-renders.
+
+**Settings.**
+
+- **Where they live:** every setting is a `--crt-*` custom property. The
+  defaults in `styles.css` are the Slot mask style.
+- **How the panel applies them:** `screenFx.ts` sets the properties on
+  `<html>` for the chosen style plus any fine-tuning, then fires
+  `ambient:fx-change` to re-render.
+- **Styles:** each style is a full set of values (`SCREEN_STYLES`). The dial
+  turns through them in order.
+- **Fine-tune:** a moved slider is kept as an override until the dial turns
+  or the style is reset.
+- **Saved:** in `localStorage` under `ambient-player:screen` as
+  `{ style, mix, tuned }`.
 
 ## Artwork and accent
 
@@ -301,6 +348,7 @@ inline script in `index.html` applies it before the first paint.
 | `localStorage["yt_audio_playlists"]` | `{ playlists: [{ name, urls[] }], lastPlaylistName? }`. Saving a mix makes it the last one; it reopens on the next visit. An unsaved mix is not kept. |
 | `localStorage["ambient-player:ui-scale"]` | The UI scale (0.7–1.3), removed at 100%. |
 | `localStorage["ambient-player:layout"]` | The Layout setting per screen: `{ "<min>x<max>": "stacked" }`. Auto removes the screen's entry. |
+| `localStorage["ambient-player:screen"]` | The screen effect: `{ style, mix, tuned }` (style name, 0–1, overridden `--crt-*` values). |
 | `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
 | Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. **Import** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |
 

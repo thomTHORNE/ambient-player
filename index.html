@@ -58,7 +58,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=dc5678f032">
+  <link rel="stylesheet" href="styles.css?v=7439dd2bd9">
 </head>
 
 <body>
@@ -96,6 +96,8 @@
           <div class="now__visual">
             <figure class="art" id="art" data-state="empty">
                 <img id="artImg" class="art__img" alt="" crossorigin="anonymous" />
+                <!-- The artwork on a simulated screen (src/crt.ts). -->
+                <canvas id="artCrt" class="art__crt" aria-hidden="true"></canvas>
                 <div class="art__empty">
                   <span class="art__empty-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>
@@ -273,6 +275,45 @@
                 <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
               </div>
             </section>
+          <!-- Screen effect over the artwork (src/screenFx.ts, drawn by src/crt.ts). -->
+          <section class="panel screen" aria-labelledby="screenTitle">
+            <header class="panel__head">
+              <h2 id="screenTitle" class="panel__title">Screen effect</h2>
+            </header>
+            <div class="screen__controls">
+              <!-- A rotary switch: each tap turns it to the next style. -->
+              <button id="screenDial" class="dial" type="button" aria-describedby="screenNote">
+                <span class="dial__face" aria-hidden="true">
+                  <span id="screenTicks" class="dial__ticks"></span>
+                  <span class="dial__knob"><span class="dial__pointer"></span></span>
+                </span>
+                <span class="dial__text">
+                  <span class="dial__label">Style</span>
+                  <span id="screenStyle" class="dial__value">Slot mask</span>
+                  <span id="screenStep" class="dial__step">1 / 5 · tap to turn</span>
+                </span>
+              </button>
+              <!-- Mix: how much of the effect, over the plain picture. -->
+              <div class="card mixer">
+                <p class="card__label">Mix</p>
+                <div class="mixer__body">
+                  <div>
+                    <p id="mixReadout" class="mixer__value">100 %</p>
+                    <p id="mixCaption" class="mixer__caption">Full screen</p>
+                  </div>
+                  <div id="mixMeter" class="mixer__meter" aria-hidden="true"></div>
+                </div>
+                <label class="visually-hidden" for="mixInput">How much of the screen effect to show</label>
+                <input id="mixInput" class="slider" type="range" min="0" max="100" step="1" value="100" style="--v:100%" />
+              </div>
+            </div>
+            <p id="screenNote" class="screen__note"></p>
+            <button id="screenMoreToggle" class="btn btn--quiet btn--small screen__toggle" type="button" aria-expanded="false" aria-controls="screenMore">Fine-tune</button>
+            <div id="screenMore" class="screen__more" hidden>
+              <div id="screenSliders" class="screen__sliders"></div>
+              <button id="screenReset" class="btn btn--quiet btn--small" type="button">Back to the style's settings</button>
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -289,7 +330,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=bb394a33a8"></script>
+  <script src="app.js?v=7a2b49e5b3"></script>
 </body>
 
 </html>

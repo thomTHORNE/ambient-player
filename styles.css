@@ -54,6 +54,29 @@
   --gap: 18px;
   --tap: 44px;
 
+  /* Screen effect on the artwork and thumbnails (src/crt.ts): the picture
+     drawn as phosphor cells on a simulated CRT / LED wall. These are the
+     Slot mask style; the Screen effect panel (src/screenFx.ts) sets them to
+     the chosen style and fine-tuning. Sizes are CSS pixels. */
+  --crt-mix: 1;             /* how much of the effect: 0 the plain picture, 1 all screen */
+  --crt-pitch: 6px;         /* width of one cell: a red, green and blue stripe */
+  --crt-cell: 6px;          /* height of one cell */
+  --crt-gap: 1.5px;         /* dark gap between cells in a column */
+  --crt-gap-dark: 0.2;      /* brightness left in the gap */
+  --crt-stagger: 1;         /* 1: every other column offset by half a cell */
+  --crt-bleed: 0.4;         /* light reaching the neighbouring stripes */
+  --crt-edge: 0.85;         /* falloff from a stripe's middle to its edges */
+  --crt-boost: 2.5;         /* makes up for the light the mask takes away */
+  --crt-glow: 0.35;         /* blurred copy screened over the phosphors */
+  --crt-glow-radius: 2.5px;
+  --crt-src-blur: 1;        /* defocus before sampling, in cells */
+  --crt-gray: 0.5;          /* desaturation */
+  --crt-tint: 0.45;         /* pull towards the tint colour */
+  --crt-tint-color: #50667A;
+  --crt-contrast: 0.95;
+  --crt-bright: 1;
+  --crt-soft: 0.35px;       /* final softening, like a photo of a screen */
+
   --font: "Chakra Petch", "Rajdhani", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -1120,8 +1143,32 @@ input[type="range"] {
   transition: opacity 300ms var(--ease);
 }
 
-.art__img.is-letterboxed {
+.art__img.is-letterboxed,
+.art__img.is-letterboxed + .art__crt {
   transform: scale(1.34);
+}
+
+/* The artwork on a simulated screen (src/crt.ts), over the plain picture
+   and lined up with it (same fit, same zoom); --crt-mix fades between the
+   two. When the frame collapses it only crops, like the picture. */
+.art__crt {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: var(--crt-mix);
+  filter: blur(var(--crt-soft));
+}
+
+.art.has-crt .art__crt {
+  display: block;
+}
+
+.art[data-state="empty"] .art__crt,
+.art[data-state="error"] .art__crt {
+  display: none;
 }
 
 /* ---------- Artwork controls: tap to play / pause, progress along the foot ---------- */
@@ -2250,6 +2297,257 @@ input[type="range"] {
   margin-top: 14px;
 }
 
+/* ---------- Screen effect (last panel) ---------- */
+
+.screen {
+  container-type: inline-size;
+}
+
+.screen__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 10px;
+}
+
+@container (max-width: 360px) {
+  .screen__controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Rotary switch: a knob with a pointer and five detents; each tap turns it
+   to the next style. --a is the pointer's angle. */
+.dial {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--glass);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease);
+  --a: -120deg;
+}
+
+.dial:hover {
+  border-color: var(--line-strong);
+}
+
+.dial:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dial__face {
+  position: relative;
+  flex: none;
+  width: 72px;
+  height: 72px;
+}
+
+.dial__ticks span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 7px;
+  margin: -3.5px 0 0 -1px;
+  background: rgba(255, 255, 255, 0.25);
+  transform: rotate(var(--t)) translateY(-32px);
+  transition: background-color 200ms var(--ease), box-shadow 200ms var(--ease);
+}
+
+.dial__ticks span.is-on {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.dial__knob {
+  position: absolute;
+  inset: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.1), transparent 70%),
+    var(--noise), rgba(8, 9, 10, 0.7);
+  transform: rotate(var(--a));
+  transition: transform 380ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.dial__pointer {
+  position: absolute;
+  left: 50%;
+  top: 5px;
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+.dial:active .dial__knob {
+  transition-duration: 120ms;
+}
+
+.dial__text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dial__label,
+.mixer__caption,
+.dial__step {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.dial__value {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+/* Mix: the readout over a little slot-mask meter. Each triad is a red, green
+   and blue stripe of phosphor cells; lit triads show how much of the effect
+   is on. */
+.mixer {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.mixer__body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 2px;
+}
+
+.mixer__value {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: var(--accent);
+}
+
+.mixer__caption {
+  margin-top: 4px;
+}
+
+.mixer__meter {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  height: 40px;
+  overflow: hidden;
+}
+
+.mixer__meter i {
+  display: flex;
+  flex: none;
+  gap: 1px;
+}
+
+/* Cells: 5px lit, 2px gap, every other triad offset by half a cell. */
+.mixer__meter b {
+  width: 2px;
+  background: repeating-linear-gradient(180deg, var(--c) 0 5px, transparent 5px 7px);
+  background-position: 0 var(--o, 0px);
+  --c: rgba(255, 255, 255, 0.1);
+}
+
+.mixer__meter i:nth-child(even) b {
+  --o: 3.5px;
+}
+
+.mixer__meter i.is-on b:nth-child(1) { --c: rgba(255, 96, 96, 0.9); }
+.mixer__meter i.is-on b:nth-child(2) { --c: rgba(96, 255, 150, 0.85); }
+.mixer__meter i.is-on b:nth-child(3) { --c: rgba(96, 150, 255, 0.95); }
+
+.screen__note {
+  min-height: 2.6em;
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.screen__toggle {
+  margin-top: 10px;
+}
+
+.screen__toggle::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: 10px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 200ms var(--ease);
+}
+
+.screen__toggle[aria-expanded="true"]::after {
+  transform: translateY(1px) rotate(-135deg);
+}
+
+.screen__more {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.screen__sliders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 4px 18px;
+  margin-bottom: 12px;
+}
+
+.screen__slider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.screen__slider output {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+}
+
+.screen__slider .slider,
+.screen__slider input[type="color"] {
+  grid-column: 1 / -1;
+}
+
+.screen__slider input[type="color"] {
+  width: 100%;
+  height: 24px;
+  margin: 2px 0 6px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+}
+
 /* ---------- Saved mixes ---------- */
 
 .mixes {
@@ -2502,11 +2800,13 @@ input[type="range"] {
 
 /* Horizontal screens: square album art (published with bars at the sides)
    zooms to fill the 4:3 frame, still centred, so no bars show. */
-:where(html[data-layout="columns"]) .now[data-shape="square"] .art__img {
+:where(html[data-layout="columns"]) .now[data-shape="square"] .art__img,
+:where(html[data-layout="columns"]) .now[data-shape="square"] .art__crt {
   transform: scale(1.334);
 }
 
-:where(html[data-layout="columns"]) .now[data-shape="square"] .art__img.is-letterboxed {
+:where(html[data-layout="columns"]) .now[data-shape="square"] .art__img.is-letterboxed,
+:where(html[data-layout="columns"]) .now[data-shape="square"] .art__img.is-letterboxed + .art__crt {
   transform: scale(1.78);
 }
 
@@ -2688,10 +2988,33 @@ html[data-merged="true"] .thumbs {
   transition: filter 220ms var(--ease), transform 220ms var(--ease);
 }
 
+/* Thumbnails on the same simulated screen, muted like the pictures. */
+.thumbs__img .crt-canvas {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: var(--crt-mix);
+  filter: blur(var(--crt-soft)) brightness(0.65);
+  transition: filter 220ms var(--ease);
+}
+
+.thumbs__img.has-crt .crt-canvas {
+  display: block;
+}
+
+.thumbs__btn:hover .crt-canvas,
+.thumbs__item.is-focus .crt-canvas {
+  filter: blur(var(--crt-soft)) brightness(0.85);
+}
+
 .thumbs__num {
   position: absolute;
   left: 0;
   top: 0;
+  z-index: 1;
   padding: 2px 6px;
   background: rgba(8, 9, 10, 0.8);
   font-family: var(--mono);

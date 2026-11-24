@@ -24,6 +24,11 @@ API); only the sound and the artwork are shown.
 - **Per-channel settings.** The volume button on a channel row opens its
   drawer: a volume slider, its YouTube link (paste a new one and press **Load
   link**) and **Remove channel**, which asks for confirmation first.
+- **Screen effect.** The cover art and the thumbnail strip are drawn as if
+  on a CRT or LED wall: phosphor cells, colour fringe, glow. The Screen
+  effect panel (the last one) has a dial for the style (Slot mask, Hero,
+  Close-up, LED wall, Photographed), a **Mix** slider from the plain picture
+  to the full effect, and **Fine-tune** for every setting. Kept per device.
 - **Accent from the artwork.** The interface's highlight colour comes from
   the current channel's thumbnail. It falls back to amber when the thumbnail
   is too dark or grey.
@@ -121,6 +126,8 @@ src/
   playlist.ts         Track model and PlaylistManager
   youtubePlayer.ts    YouTube IFrame API wrapper and URL parsing
   accent.ts           Accent colour and square-art detection from artwork
+  crt.ts              Screen effect: draws the artwork as phosphor cells
+  screenFx.ts         Screen effect panel: style dial, Mix, fine-tune
   screen.ts           Fullscreen and screen wake lock
   scale.ts            UI scale setting
   layoutPref.ts       Layout setting (Auto or Stacked), kept per screen

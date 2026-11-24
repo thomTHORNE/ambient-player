@@ -203,7 +203,7 @@ export function thumbItemHtml(track: Track, index: number, focused: boolean): st
   return `
     <li class="thumbs__item is-${track.state}${focused ? ' is-focus' : ''}" data-track-id="${esc(track.id)}">
       <button class="thumbs__btn" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Channel ${n}: ${title}, ${label}" title="${n} · ${title}">
-        <span class="thumbs__img">${thumb}<span class="thumbs__num">${n}</span></span>
+        <span class="thumbs__img">${thumb}${track.meta?.thumbnailUrl ? `<canvas class="crt-canvas" data-crt-src="${esc(track.meta.thumbnailUrl)}" aria-hidden="true"></canvas>` : ''}<span class="thumbs__num">${n}</span></span>
         <span class="thumbs__state tone-${tone}">${label}</span>
       </button>
     </li>`;

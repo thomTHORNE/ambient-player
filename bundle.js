@@ -18,6 +18,8 @@ const files = [
   'shareLinks.js',
   'ui.js',
   'accent.js',
+  'crt.js',
+  'screenFx.js',
   'screen.js',
   'layoutPref.js',
   'layout.js',

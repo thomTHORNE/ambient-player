@@ -49,10 +49,12 @@ import {
 } from './ui.js';
 import type { StateTone } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
+import { setupArtCrt, paintCrtThumbs, clearCrtThumbs, FX_CHANGE_EVENT } from './crt.js';
+import { setupScreenControl } from './screenFx.js';
 import { setupLayout } from './layout.js';
 import { storedScale, applyScale, appZoom, SCALE_MIN, SCALE_MAX, SCALE_STEP } from './scale.js';
 import { setupStageResize } from './resize.js';
-import { layoutChoice, setLayoutChoice } from './layoutPref.js';
+import { layoutChoice, setLayoutChoice, LAYOUT_CHOICE_EVENT } from './layoutPref.js';
 import type { LayoutChoice } from './layoutPref.js';
 import {
   fullscreenSupported,
@@ -168,6 +170,7 @@ function renderStrip(): void {
   thumbStrip.innerHTML = tracks
     .map((t, i) => (t.state === 'playing' ? thumbItemHtml(t, i, t.id === focusedId) : ''))
     .join('');
+  paintCrtThumbs(thumbStrip);
   if (hadFocus && focusId) {
     hadFocus.querySelector<HTMLElement>(`[data-track-id="${CSS.escape(focusId)}"] button`)?.focus();
   }
@@ -1058,8 +1061,28 @@ function initializeEventListeners(): void {
 // Boot
 // ---------------------------------------------------------------------------
 
+/** The screen effect on the artwork and the thumbnail strip (src/crt.ts). */
+function setupScreenEffect(): void {
+  // The settings first, so the first render already uses the chosen style.
+  setupScreenControl();
+  setupArtCrt(artImg, $<HTMLCanvasElement>('artCrt'), art);
+  // Thumbnails render when they come into view (the strip shows only on
+  // large screens) and again after the settings change.
+  let frame = 0;
+  const repaint = () => {
+    if (!frame) frame = requestAnimationFrame(() => ((frame = 0), paintCrtThumbs(thumbStrip)));
+  };
+  window.addEventListener('resize', repaint);
+  window.addEventListener(LAYOUT_CHOICE_EVENT, repaint);
+  window.addEventListener(FX_CHANGE_EVENT, () => {
+    clearCrtThumbs();
+    repaint();
+  });
+}
+
 async function initialize(): Promise<void> {
   setupScreenTakeover();
+  setupScreenEffect();
   setupLayout();
   setupScaleControl();
   setupLayoutControl();

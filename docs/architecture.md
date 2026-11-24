@@ -39,6 +39,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `accent.ts` | Samples the artwork on a canvas for the accent colour, and detects square (album) art. |
 | `screen.ts` | Fullscreen (with the WebKit fallback), installed-app detection and the screen wake lock. |
 | `scale.ts` | The UI scale setting: reads, applies and stores it. |
+| `resize.ts` | The divider that resizes the artwork column on large screens with a mouse. |
 | `storage.ts` | Saved mixes in `localStorage` under `yt_audio_playlists`. |
 | `shareLinks.ts` | Encodes a mix's URLs into `#pl=<base64url JSON>` and reads it back. |
 
@@ -162,6 +163,54 @@ scrolls.
   down the space under the stage, or the last panel when scrolled to the end.
 - **Landscape:** the snapped page.
 
+## Resizable artwork column (`resize.ts`)
+
+**Where it applies.** Only on large horizontal screens with a mouse or
+trackpad:
+
+```
+(orientation: landscape) and (min-width: 1280px) and (min-height: 680px)
+  and (hover: hover) and (pointer: fine)
+```
+
+The same query is in `resize.ts` and `styles.css`. Touch screens (the Fold,
+tablets, phones) never match.
+
+**Layout.** In this mode the app grid gains a fourth column for the divider
+(`#stageSplitter`, as wide as the gutter, replacing the column gap):
+
+```
+"brand brand brand  brand"
+"stage split slides pager"
+```
+
+**Width.**
+
+- **The setting.** The artwork column's width comes from `--stage-pref` on
+  `<html>`, a share of the grid's width such as `calc(0.42 * 100%)`. Without
+  it, the column keeps the default `clamp(300px, 42vw, 600px)`.
+- **Limits in CSS.** CSS clamps the column:
+  - **narrowest:** 300px;
+  - **widest:** `--stage-max`. That is the smaller of the width the 4:3
+    artwork can use at the screen's height and the width that leaves the
+    panels 560px.
+- **Room under the artwork.** In this mode 350px is kept under the artwork
+  (instead of 240px), so the title and one row of thumbnails always fit.
+
+**Interaction.**
+
+- **Dragging.** Pointer capture on the divider, one update per animation
+  frame. The pointer position is converted to a share of the app's content
+  box. Positions are measured in viewport pixels, with the app's padding
+  scaled by the desktop UI zoom, so the divider follows the pointer at any
+  UI scale.
+- **Keyboard.** The arrow keys move it by 2% of the width; Home and End go
+  to the narrowest and widest.
+- **Reset.** A double-click removes the setting.
+- **Saving.** After each change the width as laid out (after clamping) is
+  saved under `ambient-player:stage-width`. The inline script in
+  `index.html` applies it before the first paint.
+
 ## UI scale (`scale.ts`)
 
 The scale is saved in `localStorage` under `ambient-player:ui-scale`. A small
@@ -198,6 +247,7 @@ inline script in `index.html` applies it before the first paint.
 | --- | --- |
 | `localStorage["yt_audio_playlists"]` | `{ playlists: [{ name, urls[] }], lastPlaylistName? }`. Saving a mix makes it the last one; it reopens on the next visit. An unsaved mix is not kept. |
 | `localStorage["ambient-player:ui-scale"]` | The UI scale (0.7–1.3), removed at 100%. |
+| `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
 | Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. |
 
 ## Page flags
@@ -210,6 +260,8 @@ Attributes on `<html>` that CSS keys off:
 | `data-merged` | `applyMerge()` | Large-screen layout: deck and channels on one panel. |
 | `data-fullscreen` | `setupScreenTakeover()` | Fullscreen or the installed fullscreen app. |
 | `class="is-zoomed"`, `--ui-zoom` | `scale.ts` | Desktop UI scale in effect. |
+| `--stage-pref` | `resize.ts`, inline script | The chosen artwork column width. |
+| `class="is-resizing"` | `resize.ts` | The divider is being dragged: resize cursor everywhere, no text selection. |
 
 Other state hooks:
 

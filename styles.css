@@ -2453,6 +2453,102 @@ input[type="range"] {
   }
 }
 
+/* Resizable artwork column: large horizontal screens with a mouse or
+   trackpad only (src/resize.ts; keep the query in sync). A divider between
+   the artwork and the panels sets --stage-pref, a share of the width; the
+   column is clamped to at least 300px, at most what the 4:3 artwork can
+   use at the screen's height, and never leaves the panels under 560px.
+   More room is kept under the artwork for the title and one row of
+   thumbnails, however large it gets. */
+.splitter {
+  display: none;
+}
+
+@media (orientation: landscape) and (min-width: 1280px) and (min-height: 680px) and (hover: hover) and (pointer: fine) {
+  .app {
+    --art-room: 350px;
+    --stage-max: max(300px, min(calc(100% - 560px - var(--gutter) - 24px), calc((100dvh - 2 * var(--gutter) - var(--art-room)) * 4 / 3)));
+    grid-template-columns:
+      clamp(300px, var(--stage-pref, clamp(300px, 42vw, 600px)), var(--stage-max))
+      var(--gutter)
+      minmax(0, 1fr)
+      auto;
+    grid-template-areas:
+      "brand  brand  brand  brand"
+      "stage  split  slides pager";
+    column-gap: 0;
+  }
+
+  .art {
+    --text-room: var(--art-room);
+  }
+
+  /* The divider replaces the gap, so the pager keeps its place by the panels. */
+  .pager {
+    margin-left: 6px;
+  }
+
+  .splitter {
+    grid-area: split;
+    position: relative;
+    display: block;
+    min-height: 0;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .splitter:focus-visible {
+    outline: none;
+  }
+
+  /* A hairline down the middle, with a grip at half height. */
+  .splitter::before,
+  .splitter::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    transition: background-color 160ms var(--ease), box-shadow 160ms var(--ease), height 160ms var(--ease);
+  }
+
+  .splitter::before {
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--line);
+  }
+
+  .splitter::after {
+    top: 50%;
+    width: 3px;
+    height: 40px;
+    margin-top: -20px;
+    background: var(--line-strong);
+  }
+
+  .splitter:hover::before,
+  .splitter:focus-visible::before,
+  html.is-resizing .splitter::before {
+    background: var(--accent-line);
+  }
+
+  .splitter:hover::after,
+  .splitter:focus-visible::after,
+  html.is-resizing .splitter::after {
+    height: 64px;
+    margin-top: -32px;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  /* While dragging: the resize cursor everywhere and no text selection. */
+  html.is-resizing,
+  html.is-resizing * {
+    cursor: col-resize !important;
+    user-select: none;
+  }
+}
+
 /* The channels panel hides only once src/layout.ts has moved its list onto
    the first panel (it sets data-merged), so the list can never vanish. */
 html[data-merged="true"] .slide--channels {

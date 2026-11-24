@@ -72,6 +72,7 @@ The artwork's brackets sit inside the frame like a viewfinder.
 | Vertical | `orientation: portrait` | Brand, then the stage: artwork at full width with the numbered strip down its right edge inside the frame, then the title. Panels below; the artwork collapses as you scroll, to about a tenth of the screen height. |
 | Horizontal | `orientation: landscape` | Brand across the top; the stage in a left column (a fixed 4:3 artwork frame, the strip beside it, the title under it), panels in the middle, pager on the right. |
 | Large horizontal | `landscape`, ≥ 960 × 680 | A wider stage column (up to 600px) with a bigger artwork and the thumbnail strip under the title; the deck and the channel list share the first panel. |
+| Large horizontal, mouse | `landscape`, ≥ 1280 × 680, `hover: hover` and `pointer: fine` | As above, plus a divider between the artwork and the panels. Dragging it resizes the artwork column, from 300px up to the most the artwork can use at the screen's height, always leaving the panels 560px. |
 | Short horizontal | `landscape`, height ≤ 500px | A phone on its side: smaller title and more room for the artwork. |
 | Narrow | width ≤ 640px | 16px gutters, a smaller brand. |
 | Touch | `pointer: coarse` | 44px tap targets throughout. |
@@ -125,6 +126,15 @@ mix:
 - **Thumbnail strip:** muted (desaturated and dimmed), with no play buttons,
   so it never competes with the main artwork; the selected tile gets the same
   accent glow.
+
+**Resizable artwork.**
+
+- **Look.** The divider is a hairline with a short grip at half height. It
+  turns to the accent colour on hover, on keyboard focus and while dragging.
+- **Limits.** It never lets the column grow past what the artwork can fill,
+  so there's no empty space beside the art.
+- **Where.** It appears only where a mouse or trackpad can drag it; touch
+  layouts keep their fixed columns.
 
 **Screen.**
 

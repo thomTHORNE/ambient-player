@@ -39,6 +39,10 @@ API); only the sound and the artwork are shown.
 - **UI scale.** The Status panel has a 70–130% setting for the whole
   interface, kept per device. The line under it shows the size the app lays
   out at and which layout that gives.
+- **Resizable artwork.** On large screens used with a mouse or trackpad
+  (1280 × 680 and up, such as an ultrawide monitor), drag the divider between
+  the artwork and the panels to make the artwork bigger or smaller.
+  Double-click the divider to reset it. The width is kept per device.
 - **Keyboard.** <kbd>Space</kbd> plays or pauses the main channel, and
   <kbd>[</kbd> / <kbd>]</kbd> step between channels.
 
@@ -49,6 +53,7 @@ API); only the sound and the artwork are shown.
 | Vertical (phones, a Fold's cover display) | Artwork at full width above the panels. The first swipe up shrinks it; after that each swipe moves one panel: deck, channels, saved mixes with status. |
 | Horizontal | The artwork and title in a column on the left; the panels page vertically on the right. |
 | Large horizontal (960 × 680 and up: a Fold's inner display, laptops) | A wider left column with bigger artwork and the thumbnail strip; the deck and the channel list share the first panel. |
+| Large horizontal with a mouse (1280 × 680 and up) | As above, with a draggable divider that sets the artwork column's width. |
 
 The pager bars on the right edge show the panel in view and jump to a panel
 on tap.
@@ -105,6 +110,7 @@ src/
   accent.ts           Accent colour and square-art detection from artwork
   screen.ts           Fullscreen and screen wake lock
   scale.ts            UI scale setting
+  resize.ts           Draggable divider for the artwork column
   storage.ts          Saved mixes in localStorage
   shareLinks.ts       Encode and decode share links
 assets/               Favicon, app icons and the logo artwork

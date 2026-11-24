@@ -50,6 +50,7 @@ import type { StateTone } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
 import { setupLayout } from './layout.js';
 import { storedScale, applyScale, appZoom, SCALE_MIN, SCALE_MAX, SCALE_STEP } from './scale.js';
+import { setupStageResize } from './resize.js';
 import {
   fullscreenSupported,
   isFullscreen,
@@ -994,6 +995,7 @@ async function initialize(): Promise<void> {
   setupScreenTakeover();
   setupLayout();
   setupScaleControl();
+  setupStageResize();
   buildStaticMeters();
   renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
   renderAll(false);

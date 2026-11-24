@@ -21,6 +21,7 @@ const files = [
   'screen.js',
   'layout.js',
   'scale.js',
+  'resize.js',
   'main.js'
 ];
 

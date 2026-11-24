@@ -142,6 +142,10 @@ mix:
 - **Where.** It appears only where a mouse or trackpad can drag it; touch
   layouts keep their fixed columns.
 
+**Saved mixes.** The mix that's open now (by name) is marked in the list:
+an accent bar on the left, a faint accent wash, the name in the accent
+colour and "· Current" after the channel count.
+
 **Devices.**
 
 - **Pairing code:** a white QR code sits beside the code in large accent

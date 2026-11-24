@@ -282,10 +282,10 @@ export function renderSavedPlaylists(playlists: PersistedPlaylist[], container: 
     .map((p) => {
       const name = esc(p.name);
       return `
-        <li class="mix">
+        <li class="mix" data-mix-name="${name}">
           <span class="mix__text">
             <span class="mix__name">${name}</span>
-            <span class="mix__count">${p.urls.length} channel${p.urls.length === 1 ? '' : 's'}</span>
+            <span class="mix__count">${p.urls.length} channel${p.urls.length === 1 ? '' : 's'}<span class="mix__tag"> · Current</span></span>
           </span>
           <button class="btn btn--quiet btn--small" type="button" data-mix-action="load" data-playlist-name="${name}" aria-label="Load mix ${name}">Load</button>
           <button class="icon-btn" type="button" data-mix-action="delete" data-playlist-name="${name}" aria-label="Delete mix ${name}">${icons.trash}</button>

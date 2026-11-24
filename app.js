@@ -728,10 +728,10 @@ function renderSavedPlaylists(playlists, container) {
         .map((p) => {
         const name = esc(p.name);
         return `
-        <li class="mix">
+        <li class="mix" data-mix-name="${name}">
           <span class="mix__text">
             <span class="mix__name">${name}</span>
-            <span class="mix__count">${p.urls.length} channel${p.urls.length === 1 ? '' : 's'}</span>
+            <span class="mix__count">${p.urls.length} channel${p.urls.length === 1 ? '' : 's'}<span class="mix__tag"> · Current</span></span>
           </span>
           <button class="btn btn--quiet btn--small" type="button" data-mix-action="load" data-playlist-name="${name}" aria-label="Load mix ${name}">Load</button>
           <button class="icon-btn" type="button" data-mix-action="delete" data-playlist-name="${name}" aria-label="Delete mix ${name}">${icons.trash}</button>
@@ -3523,10 +3523,27 @@ function renderRow(id) {
         rowFor(id)?.querySelector('.ch__focus')?.focus();
     renderStrip();
 }
+/** The saved mixes list, with the mix that's open marked as current. */
+function renderMixList() {
+    renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+    markActiveMix();
+}
+/** Mark the saved mix that's open now (by name), if it's in the list. */
+function markActiveMix() {
+    savedPlaylistsList.querySelectorAll('.mix[data-mix-name]').forEach((li) => {
+        const active = !!mixName && li.dataset.mixName === mixName;
+        li.classList.toggle('is-active', active);
+        if (active)
+            li.setAttribute('aria-current', 'true');
+        else
+            li.removeAttribute('aria-current');
+    });
+}
 function renderStatus() {
     const tracks = playlistManager.getTracks();
     const live = liveCount();
     statusCode.textContent = mixName || 'Unsaved mix';
+    markActiveMix();
     statusLine.textContent =
         tracks.length === 0
             ? 'No channels'
@@ -4196,7 +4213,7 @@ function initializeEventListeners() {
         saveOrUpdatePlaylist(name, urls);
         mixName = name;
         playlistNameInput.value = '';
-        renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+        renderMixList();
         renderStatus();
         flash(savePlaylistButton, 'Saved');
     });
@@ -4256,7 +4273,7 @@ function initializeEventListeners() {
             deletePlaylist(name);
             if (mixName === name)
                 mixName = null;
-            renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+            renderMixList();
             renderStatus();
         }
     });
@@ -4888,7 +4905,7 @@ async function initialize() {
     setupLayoutControl();
     setupStageResize();
     buildStaticMeters();
-    renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+    renderMixList();
     renderAll(false);
     await waitForYouTubeAPI();
     playerFactory = createYouTubePlayerFactory();

@@ -295,10 +295,27 @@ function renderRow(id: TrackId): void {
   renderStrip();
 }
 
+/** The saved mixes list, with the mix that's open marked as current. */
+function renderMixList(): void {
+  renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+  markActiveMix();
+}
+
+/** Mark the saved mix that's open now (by name), if it's in the list. */
+function markActiveMix(): void {
+  savedPlaylistsList.querySelectorAll<HTMLElement>('.mix[data-mix-name]').forEach((li) => {
+    const active = !!mixName && li.dataset.mixName === mixName;
+    li.classList.toggle('is-active', active);
+    if (active) li.setAttribute('aria-current', 'true');
+    else li.removeAttribute('aria-current');
+  });
+}
+
 function renderStatus(): void {
   const tracks = playlistManager.getTracks();
   const live = liveCount();
   statusCode.textContent = mixName || 'Unsaved mix';
+  markActiveMix();
   statusLine.textContent =
     tracks.length === 0
       ? 'No channels'
@@ -982,7 +999,7 @@ function initializeEventListeners(): void {
     saveOrUpdatePlaylist(name, urls);
     mixName = name;
     playlistNameInput.value = '';
-    renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+    renderMixList();
     renderStatus();
     flash(savePlaylistButton, 'Saved');
   });
@@ -1037,7 +1054,7 @@ function initializeEventListeners(): void {
     } else if (button.dataset.mixAction === 'delete' && confirm(`Delete the mix "${name}"? This cannot be undone.`)) {
       deletePlaylist(name);
       if (mixName === name) mixName = null;
-      renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+      renderMixList();
       renderStatus();
     }
   });
@@ -1662,7 +1679,7 @@ async function initialize(): Promise<void> {
   setupLayoutControl();
   setupStageResize();
   buildStaticMeters();
-  renderSavedPlaylists(getAllPlaylists(), savedPlaylistsList);
+  renderMixList();
   renderAll(false);
 
   await waitForYouTubeAPI();

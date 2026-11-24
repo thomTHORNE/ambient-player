@@ -2817,6 +2817,26 @@ input[type="range"] {
   color: var(--text-3);
 }
 
+/* The mix that's open now: an accent bar, accent name and a "Current" note. */
+.mix__tag {
+  display: none;
+}
+
+.mix.is-active {
+  padding-left: 10px;
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: linear-gradient(90deg, var(--accent-fill), transparent 70%);
+}
+
+.mix.is-active .mix__name {
+  color: var(--accent);
+}
+
+.mix.is-active .mix__tag {
+  display: inline;
+  color: var(--accent);
+}
+
 .mix--empty {
   display: block;
   min-height: 0;

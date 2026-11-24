@@ -173,9 +173,9 @@ The routes and messages are listed in `worker/README.md`.
 **Where it's configured.**
 
 - **Address:** the app reads the relay's address from
-  `<meta name="ambient-relay">` in `index.html`, which is empty until it's
-  deployed. With no address, the Devices section says remote control isn't
-  set up and nothing connects.
+  `<meta name="ambient-relay">` in `index.html`, currently
+  `https://ambient-relay.tomica-trncic.workers.dev`. With no address, the
+  Devices section says remote control isn't set up and nothing connects.
 - **Development:** `?relay=http://127.0.0.1:8787` points one browser at a
   local relay. Only localhost addresses are accepted that way, so a link
   can't redirect a device to someone else's relay.

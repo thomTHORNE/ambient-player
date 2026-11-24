@@ -37,6 +37,12 @@ const MAX_MESSAGE = 64 * 1024;
 const MAX_DEVICES = 12;
 /** Messages a socket may send per second before the rest are dropped. */
 const MAX_RATE = 40;
+/** A socket that hasn't answered a heartbeat for this long is treated as gone (phones asleep). */
+const STALE_MS = 70 * 1000;
+/** How long a handover waits for the old main device's final state. */
+const HANDOVER_MS = 3000;
+/** Rooms nobody has connected to for this long are deleted. */
+const ROOM_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -172,6 +178,13 @@ interface DeviceRecord {
 interface SocketTag {
   authed: boolean;
   deviceId?: string;
+  connectedAt?: number;
+}
+
+/** "Play here": the device taking over, and when to give up waiting for the old main device. */
+interface Handover {
+  to: string;
+  deadline: number;
 }
 
 /** The main device's last snapshot, with when the room received it (room clock). */
@@ -254,7 +267,8 @@ export class Room extends DurableObject<Env> {
         const otherTag = other.deserializeAttachment() as SocketTag | null;
         if (other !== ws && otherTag?.deviceId === deviceId) other.close(4000, 'replaced');
       }
-      ws.serializeAttachment({ authed: true, deviceId } satisfies SocketTag);
+      ws.serializeAttachment({ authed: true, deviceId, connectedAt: Date.now() } satisfies SocketTag);
+      await this.ctx.storage.put('lastActivity', Date.now());
       devices[deviceId] = { id: deviceId, name: cleanName(msg.name), lastSeen: Date.now() };
       await this.ctx.storage.put('devices', devices);
       const mainId = await this.mainId();
@@ -276,6 +290,7 @@ export class Room extends DurableObject<Env> {
     }
 
     if (!this.allow(ws)) return;
+    await this.sweep();
     const devices = await this.devices();
     const me = tag.deviceId ? devices[tag.deviceId] : undefined;
     if (!me) return;
@@ -297,18 +312,35 @@ export class Room extends DurableObject<Env> {
         break;
 
       // Become the main device: granted when there is none, or it is offline.
+      // Become the main device: granted when there is none, or it is offline.
+      // With `force` ("Play here"), the current main device is asked to
+      // release: it sends a final state and stops, then this device takes over.
       case 'claim_main': {
-        const mainOnline = !!mainId && mainId !== me.id && !!this.socketFor(mainId);
-        if (mainOnline) {
+        const main = mainId && mainId !== me.id ? this.socketFor(mainId) : null;
+        if (main && msg.force === true) {
+          await this.ctx.storage.put('handover', { to: me.id, deadline: Date.now() + HANDOVER_MS } satisfies Handover);
+          this.trySend(main, JSON.stringify({ type: 'release', to: me.id }));
+          await this.scheduleAlarm(Date.now() + HANDOVER_MS);
+          break;
+        }
+        if (main) {
           ws.send(JSON.stringify({ type: 'claim_denied', mainId }));
           break;
         }
         if (mainId !== me.id) {
-          await this.ctx.storage.put({ mainId: me.id, state: null });
+          // Taking over from an offline main device keeps its last state.
+          await this.ctx.storage.put({ mainId: me.id });
+          await this.ctx.storage.delete('handover');
           await this.broadcastDevices(devices);
         }
         break;
       }
+
+      // A remote that hasn't heard from the main device for a while: the
+      // sweep above has already dropped sleeping devices; tell everyone.
+      case 'probe':
+        await this.broadcastDevices(devices);
+        break;
 
       // A snapshot from the main device: keep it and pass it on.
       case 'state': {
@@ -317,6 +349,11 @@ export class Room extends DurableObject<Env> {
         await this.ctx.storage.put('state', stored);
         const text = JSON.stringify({ type: 'state', ...stored });
         for (const other of this.authedSockets()) if (other !== ws) this.trySend(other, text);
+        // The old main device's last word in a handover.
+        if (msg.final === true) {
+          const handover = await this.ctx.storage.get<Handover>('handover');
+          if (handover) await this.completeHandover(handover.to);
+        }
         break;
       }
 
@@ -362,7 +399,64 @@ export class Room extends DurableObject<Env> {
       me.lastSeen = Date.now();
       await this.ctx.storage.put('devices', devices);
     }
+    await this.ctx.storage.put('lastActivity', Date.now());
     await this.broadcastDevices(devices, { skip: ws, closing: ws });
+    // Nobody left: delete the room if nobody comes back for 90 days.
+    if (this.authedSockets().filter((other) => other !== ws).length === 0) {
+      await this.scheduleAlarm(Date.now() + ROOM_TTL_MS);
+    }
+  }
+
+  /** A handover that timed out, or an empty room to delete. */
+  async alarm(): Promise<void> {
+    const now = Date.now();
+    const handover = await this.ctx.storage.get<Handover>('handover');
+    if (handover && handover.deadline <= now) await this.completeHandover(handover.to);
+
+    if (this.ctx.getWebSockets().length === 0) {
+      const last = (await this.ctx.storage.get<number>('lastActivity')) ?? 0;
+      if (now - last >= ROOM_TTL_MS) {
+        await this.ctx.storage.deleteAll();
+        return;
+      }
+      await this.ctx.storage.setAlarm(last + ROOM_TTL_MS);
+    }
+  }
+
+  /** Make `to` the main device (the end of a handover). */
+  private async completeHandover(to: string): Promise<void> {
+    await this.ctx.storage.delete('handover');
+    await this.ctx.storage.put('mainId', to);
+    await this.broadcastDevices(await this.devices());
+  }
+
+  /** Set the alarm for `at`, unless one is already due sooner. */
+  private async scheduleAlarm(at: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > at) await this.ctx.storage.setAlarm(at);
+  }
+
+  /**
+   * Close connections that stopped answering heartbeats (a phone asleep with
+   * its socket half open). The relay answers pings without waking up, so
+   * this runs whenever a message does wake it.
+   */
+  private async sweep(): Promise<void> {
+    const now = Date.now();
+    let dropped = false;
+    for (const ws of this.authedSockets()) {
+      const tag = ws.deserializeAttachment() as SocketTag | null;
+      const lastPing = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? tag?.connectedAt ?? now;
+      if (now - lastPing > STALE_MS) {
+        try {
+          ws.close(4005, 'timed out');
+        } catch {
+          // Already closing.
+        }
+        dropped = true;
+      }
+    }
+    if (dropped) await this.broadcastDevices(await this.devices());
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {

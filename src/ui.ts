@@ -212,8 +212,7 @@ export function thumbItemHtml(track: Track, index: number, focused: boolean): st
 /** Update the live parts of a row in place, so focus and slider drags survive. */
 export function patchChannelRow(li: HTMLElement, track: Track): void {
   const playing = track.state === 'playing';
-  li.classList.toggle('is-playing', playing);
-  li.classList.toggle('is-paused', track.state === 'paused');
+  for (const state of ['loading', 'playing', 'paused', 'error']) li.classList.toggle(`is-${state}`, track.state === state);
 
   const clock = li.querySelector<HTMLElement>('.ch__clock');
   if (clock) {

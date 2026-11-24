@@ -1,8 +1,9 @@
 # Remote control: plan
 
-Status: **phases 1–3 are built** (the command layer; the relay and pairing;
-remote mode). Phases 4–5 (handover, failure handling, docs) are next. The
-decisions below were taken as recommended.
+Status: **built** (phases 1–5: the command layer; the relay and pairing;
+remote mode; handover and failure handling; docs). The decisions below were
+taken as recommended. Not yet checked on real phones: a phone as the main
+device with its screen off or the app in the background.
 
 ## Goal
 

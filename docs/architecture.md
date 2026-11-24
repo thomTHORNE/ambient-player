@@ -158,8 +158,8 @@ stays visible underneath. Changing it never re-renders.
 ## Pairing and the relay (remote control)
 
 Remote control is being built in phases (`docs/remote-control-plan.md`).
-Phases 1–3 are built: commands, pairing, and controlling the main device
-from a remote. Handover ("Play here") is phase 4.
+Phases 1–4 are built: commands, pairing, controlling the main device from
+a remote, and handover ("Play here") with failure handling.
 
 **The relay** (`worker/`) is a Cloudflare Worker with two SQLite-backed
 Durable Objects:
@@ -221,13 +221,37 @@ The routes and messages are listed in `worker/README.md`.
     the mirrored mix over **paused**. Its players are created at each
     channel's last position, using the player's `start` (a seek would start
     playback).
+- **Play here (handover):** the remote asks for main with `force`.
+  1. **The old main device:** sends a final snapshot (what's playing, and
+     where), pauses everything, and turns into a remote when the relay names
+     the new main.
+  2. **The new main device:** creates its players at those positions and
+     starts the channels that were playing as soon as each is ready.
+
+  Playback continues within a few seconds.
+- **The main device going away:** the remote takes the mix over paused, and
+  the badge offers **Play here**, which plays the channels that were playing
+  there.
+- **The relay going away:** the main device keeps playing. A remote waits 30
+  seconds for the connection to come back, then takes the mix over the same
+  way and shows **Disconnected · Play here**.
+- **A sleeping main device:** a remote that hasn't had a snapshot for over 35
+  seconds sends `probe` every 30 seconds. The relay then drops connections
+  that stopped answering heartbeats, so a phone that went to sleep with its
+  connection half open shows as offline.
+- **Start-up restore stays local:** a device restores its own last mix on
+  start only on itself, never as a command to the main device.
 - **On a remote:** focus, previous and next, volume and seek respond at once,
   and the next snapshot confirms them. Volume and seek drags send at most
   about 10 messages a second, always including the final value.
 - **Failed commands:** if the main device doesn't answer within 5 seconds,
   or a command fails there, the header badge shows why for a few seconds.
-- **The header badge:** **Remote · Laptop** on a remote; **Playing here ·
-  1 remote** on the main device. It pulses while a command is on its way.
+- **The header badge:**
+  - **On a remote:** **Remote · Laptop**, with a **Play here** button.
+  - **On the main device:** **Playing here · 1 remote**.
+  - **When the main device has gone:** **Laptop offline** or
+    **Disconnected**, with **Play here**.
+  - **While a command or handover is on its way:** it pulses.
 - **The Devices list:** marks the main device **Plays**.
 - **Keep-awake:** off on a remote, since it plays nothing.
 

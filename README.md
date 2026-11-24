@@ -32,8 +32,10 @@ API); only the sound and the artwork are shown.
     it shows the same mix live and controls everything, from play, pause,
     volume and seeking to switching, adding and removing channels and
     loading mixes.
+  - **Play here:** the button in the header badge moves playback to the
+    device in your hand, from the same positions.
   - **When the main device goes offline:** remotes take the mix over,
-    paused, at the same positions.
+    paused, at the same positions, and offer **Play here**.
   - **The relay:** pairing goes through the relay in `worker/`, deployed on
     Cloudflare.
 

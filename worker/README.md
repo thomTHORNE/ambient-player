@@ -76,7 +76,10 @@ It runs on the Workers Free plan.
 | room → devices | `devices` | `devices`: `{ id, name, lastSeen, online }[]`, `mainId` |
 | device → room | `rename` | `name` |
 | device → room | `leave` | none (unpairs this device; if it was main, the room has no main) |
-| device → room | `claim_main` | none. Granted when no main device is online (the device list then carries the new `mainId`); otherwise answered with `claim_denied`. |
+| device → room | `claim_main` | `force`. Granted when no main device is online (the device list then carries the new `mainId`). Otherwise it's answered with `claim_denied`, unless `force` ("Play here") is set: then the main device gets `release`, sends a final `state` and stops, and the claimer becomes main. If no final state arrives within 3 seconds, the claimer becomes main anyway. |
+| room → main | `release` | `to`: the device taking over. |
+| main → room | `state` with `final: true` | The old main device's last state in a handover; completes it. |
+| remote → room | `probe` | none. Wakes the room so it drops connections that stopped answering heartbeats (over 70 seconds), and sends the device list. |
 | main → room → others | `state` | `state` (the mix snapshot). The room keeps the latest one with `receivedAt` (room clock) and sends it to devices that join later. |
 | remote → room → main | `command` | `id`, `command`; the main device receives `from` as well. With no main online, the room answers `ack` with `error: "no_main"`. |
 | main → room → remote | `ack` | `id`, `to` (from the main device), `ok`, `error` |
@@ -84,11 +87,15 @@ It runs on the Workers Free plan.
 
 Each socket may send 40 messages a second; the rest are dropped.
 
+**Housekeeping:** a room nobody has connected to for 90 days deletes itself
+(an alarm set when the last device disconnects).
+
 **Close codes:**
 - **4000:** replaced by a newer connection from the same device.
 - **4001:** not paired (wrong secret, or the room was reset).
 - **4003:** the first message wasn't a valid `hello`.
 - **4004:** the room is full (12 devices).
+- **4005:** dropped after missing heartbeats (asleep or gone).
 
 **After changing the relay:** redeploy it with `npx wrangler deploy`. A
 client that is newer than the relay still works; it just stays on its own

@@ -67,6 +67,12 @@ let rcCommandSeq = 0;
 const rcPending = new Map<string, { resolve: (reply: CommandReply) => void; timer: number }>();
 const rcStateListeners = new Set<StateListener>();
 let rcCommandHandler: CommandHandler | null = null;
+let rcReleaseHandler: (() => void) | null = null;
+/** When this remote lost its connection (it stays a remote for a grace period). */
+let rcOfflineSince = 0;
+let rcGraceTimer = 0;
+/** How long a disconnected remote waits before standing on its own. */
+const REMOTE_GRACE_MS = 30000;
 let rcAttempt = 0;
 let rcRetryTimer = 0;
 let rcHeartbeat = 0;
@@ -81,9 +87,21 @@ function rcEmit(patch: Partial<ConnectionStatus>): void {
   next.mainName = main?.name ?? '';
   if (next.mainId && next.mainId === me) next.role = 'main';
   else if (next.state === 'online') next.role = main?.online ? 'remote' : 'idle';
-  // A remote stays one through a dropped connection while it reconnects;
-  // only knowing the main device is offline (or unpairing) makes it idle.
+  // A remote stays one through a dropped connection for a grace period while
+  // it reconnects; after that (relay unreachable) it stands on its own.
   else if (next.state === 'off' || rcStatus.role !== 'remote') next.role = 'idle';
+  else {
+    if (!rcOfflineSince) {
+      rcOfflineSince = Date.now();
+      window.clearTimeout(rcGraceTimer);
+      rcGraceTimer = window.setTimeout(() => rcEmit({}), REMOTE_GRACE_MS + 100);
+    }
+    next.role = Date.now() - rcOfflineSince < REMOTE_GRACE_MS ? 'remote' : 'idle';
+  }
+  if (next.state === 'online') {
+    rcOfflineSince = 0;
+    window.clearTimeout(rcGraceTimer);
+  }
   rcStatus = next;
   rcListeners.forEach((listener) => listener(rcStatus));
 }
@@ -194,6 +212,9 @@ function rcOpen(): void {
         rcCommandHandler(msg.command, (ok, error) => rcSend({ type: 'ack', id, to: from, ok, error }));
         break;
       }
+      case 'release':
+        rcReleaseHandler?.();
+        break;
       case 'ack': {
         const pending = msg.id ? rcPending.get(msg.id) : undefined;
         if (!pending || !msg.id) break;
@@ -267,14 +288,27 @@ export function sendLeave(): void {
 // Roles, state and commands
 // ---------------------------------------------------------------------------
 
-/** Ask to become the main device (granted when no main device is online). */
-export function claimMain(): void {
-  rcSend({ type: 'claim_main' });
+/**
+ * Ask to become the main device: granted when no main device is online.
+ * With `force` ("Play here"), the current main device hands over to this one.
+ */
+export function claimMain(force = false): boolean {
+  return rcSend({ type: 'claim_main', force });
 }
 
-/** Main device: share the current state with the remotes. */
-export function sendState(state: unknown): void {
-  if (rcStatus.role === 'main') rcSend({ type: 'state', state });
+/** Main device: share the current state; `final` ends a handover. */
+export function sendState(state: unknown, final = false): void {
+  if (rcStatus.role === 'main') rcSend({ type: 'state', state, final });
+}
+
+/** Main device: another device asked to play here; stop and hand over. */
+export function onRelease(handler: () => void): void {
+  rcReleaseHandler = handler;
+}
+
+/** Remote: ask the relay to check who is still there (the main device may be asleep). */
+export function sendProbe(): void {
+  rcSend({ type: 'probe' });
 }
 
 /** Remote: send a command to the main device; resolves with its answer. */

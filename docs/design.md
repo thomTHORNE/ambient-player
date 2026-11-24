@@ -154,7 +154,10 @@ mix:
 - **Main device:** the device that plays is tagged **Plays** in the accent
   colour.
 - **Header badge:** sits after the status line, with a small accent dot:
-  - **On a remote:** **Remote · Laptop**.
+  - **On a remote:** **Remote · Laptop**, with a small **Play here** button
+    in the accent colour.
+  - **When the main device has gone:** **Laptop offline** (or
+    **Disconnected**), with **Play here**.
   - **On the main device:** **Playing here · 1 remote**.
   - **While a command is on its way:** the dot pulses.
   - **While reconnecting:** it turns grey.

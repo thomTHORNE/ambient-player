@@ -146,6 +146,11 @@ the screen directly.
 - **Stacked on a horizontal screen.**
   - **Wide screens (700px and up):** the column is 600px wide and centred,
     with the pager beside it.
+    - **How:** the scroller stays full width and pads its content into the
+      column with `--stack-pad`, computed against the app's width (`.app` is
+      an inline-size container here, so `100cqw`).
+    - **The band:** the stage's gradient band cancels that padding with
+      negative margins, so it spans the whole screen.
   - **Short screens:** if the collapsed stage would leave the panels under
     half the space, the collapse range also covers the title. The first
     swipe then leaves only a slim band of artwork. The title type is

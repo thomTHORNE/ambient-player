@@ -105,9 +105,6 @@ const playerBay = $<HTMLElement>('playerBay');
 const fullscreenButton = $<HTMLButtonElement>('fullscreenButton');
 const statusCode = $<HTMLElement>('statusCode');
 const statusLine = $<HTMLElement>('statusLine');
-const telChannels = $<HTMLElement>('telChannels');
-const telLive = $<HTMLElement>('telLive');
-const statPlayback = $<HTMLElement>('statPlayback');
 const statDur = $<HTMLElement>('statDur');
 
 const backdropImg = $<HTMLImageElement>('backdropImg');
@@ -279,9 +276,6 @@ function renderRow(id: TrackId): void {
 function renderStatus(): void {
   const tracks = playlistManager.getTracks();
   const live = liveCount();
-  telChannels.textContent = String(tracks.length);
-  telLive.textContent = String(live);
-
   statusCode.textContent = mixName || 'Unsaved mix';
   statusLine.textContent =
     tracks.length === 0
@@ -289,10 +283,6 @@ function renderStatus(): void {
       : live > 0
         ? `${live} of ${tracks.length} playing`
         : `${tracks.length} channel${tracks.length === 1 ? '' : 's'} on hold`;
-
-  if (tracks.length === 0) setPill(statPlayback, 'Standby', 'idle');
-  else if (live > 0) setPill(statPlayback, 'Playing', 'live');
-  else setPill(statPlayback, 'On hold', 'idle');
 
   updateKeepAwake();
 

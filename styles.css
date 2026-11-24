@@ -480,12 +480,29 @@ input[type="range"] {
 
 /* Stacked by choice on a horizontal screen (the Layout setting): the phone
    layout in a centred column, so the artwork keeps its shape instead of
-   stretching into a thin band; the pager sits just beside the column. */
+   stretching into a thin band; the pager sits just beside the column. The
+   scroller stays full width and pads its content into the column, so the
+   artwork's gradient band still spans the whole screen. --stack-pad is that
+   padding, measured against the app's width (100cqw). */
 @media (min-width: 700px) {
   :where(html[data-layout-forced="true"]) .app {
     --stack-w: 600px;
-    grid-template-columns: minmax(0, var(--stack-w));
-    justify-content: center;
+    --stack-pad: max(var(--gutter), calc((100cqw + 2 * var(--gutter) - var(--stack-w)) / 2));
+    container-type: inline-size;
+  }
+
+  :where(html[data-layout-forced="true"]) .brand {
+    justify-self: center;
+    width: min(100%, var(--stack-w));
+  }
+
+  :where(html[data-layout-forced="true"]) .scroller {
+    padding-inline: var(--stack-pad);
+  }
+
+  :where(html[data-layout-forced="true"]) .stage-wrap {
+    margin-inline: calc(-1 * var(--stack-pad));
+    padding-inline: var(--stack-pad);
   }
 
   :where(html[data-layout-forced="true"]) .pager {

@@ -1746,9 +1746,6 @@ const playerBay = $('playerBay');
 const fullscreenButton = $('fullscreenButton');
 const statusCode = $('statusCode');
 const statusLine = $('statusLine');
-const telChannels = $('telChannels');
-const telLive = $('telLive');
-const statPlayback = $('statPlayback');
 const statDur = $('statDur');
 const backdropImg = $('backdropImg');
 const stage = $('stage');
@@ -1904,8 +1901,6 @@ function renderRow(id) {
 function renderStatus() {
     const tracks = playlistManager.getTracks();
     const live = liveCount();
-    telChannels.textContent = String(tracks.length);
-    telLive.textContent = String(live);
     statusCode.textContent = mixName || 'Unsaved mix';
     statusLine.textContent =
         tracks.length === 0
@@ -1913,12 +1908,6 @@ function renderStatus() {
             : live > 0
                 ? `${live} of ${tracks.length} playing`
                 : `${tracks.length} channel${tracks.length === 1 ? '' : 's'} on hold`;
-    if (tracks.length === 0)
-        setPill(statPlayback, 'Standby', 'idle');
-    else if (live > 0)
-        setPill(statPlayback, 'Playing', 'live');
-    else
-        setPill(statPlayback, 'On hold', 'idle');
     updateKeepAwake();
     globalPlayPauseButton.textContent = live > 0 ? 'Pause all' : 'Play all';
     globalPlayPauseButton.disabled = tracks.length === 0;

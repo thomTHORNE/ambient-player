@@ -24,6 +24,13 @@ API); only the sound and the artwork are shown.
 - **Per-channel settings.** The volume button on a channel row opens its
   drawer: a volume slider, its YouTube link (paste a new one and press **Load
   link**) and **Remove channel**, which asks for confirmation first.
+- **Devices (pairing for remote control).** In the last panel, **Connect a
+  device** shows a QR code and a 6-character code. Scan it or enter it on
+  another device to pair the two. Paired devices are listed with who's
+  online, and can be renamed or unpaired. Controlling one device from
+  another is the next phase of the work (`docs/remote-control-plan.md`).
+  This needs the relay in `worker/` to be deployed; until then the section
+  says it isn't set up.
 - **Screen effect.** The cover art and the thumbnail strip are drawn as if
   on a CRT or LED wall: phosphor cells, colour fringe, glow. The Screen
   effect panel (the last one) has a dial for the style (Slot mask, Hero,
@@ -129,6 +136,10 @@ src/
   crt.ts              Screen effect: draws the artwork as phosphor cells
   screenFx.ts         Screen effect panel: style dial, Mix, fine-tune
   commands.ts         Command layer: every change to playback or the mix
+  pairing.ts          This device, its room, the relay's address and calls
+  remote.ts           The connection to the paired room (presence, reconnecting)
+  devices.ts          The Devices section: pairing codes, QR, device list
+  qr.ts               A small QR code encoder (SVG)
   screen.ts           Fullscreen and screen wake lock
   scale.ts            UI scale setting
   layoutPref.ts       Layout setting (Auto or Stacked), kept per screen
@@ -137,6 +148,7 @@ src/
   shareLinks.ts       Encode, decode and import share links
 assets/               Favicon, app icons and the logo artwork
 docs/                 Architecture and design notes
+worker/               The remote control relay (Cloudflare Worker); see worker/README.md
 ```
 
 ## Documentation

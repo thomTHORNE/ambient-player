@@ -1,7 +1,7 @@
 # Remote control: plan
 
-Status: **phase 1 (the command layer) is built**; phases 2–5 are proposed.
-Review the decisions below before phase 2.
+Status: **phases 1 and 2 are built** (the command layer; the relay and
+pairing). Phases 3–5 are next. The decisions below were taken as recommended.
 
 ## Goal
 

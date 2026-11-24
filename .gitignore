@@ -5,3 +5,6 @@ node_modules/
 # Build intermediate: tsc compiles src/ here, bundle.js combines it into app.js.
 # app.js is committed, since GitHub Pages serves the repository as it is.
 dist/
+
+# The relay's local state from `wrangler dev`.
+.wrangler/

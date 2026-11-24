@@ -1,0 +1,22 @@
+# Ambient Player relay: rooms of paired devices for remote control.
+# See docs/remote-control-plan.md and worker/README.md.
+name = "ambient-relay"
+main = "src/index.ts"
+compatibility_date = "2025-10-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[durable_objects.bindings]]
+name = "PAIRING"
+class_name = "Pairing"
+
+# SQLite-backed Durable Objects: the kind the Workers Free plan allows.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room", "Pairing"]
+
+[vars]
+# Pages allowed to use the relay (comma separated, exact origins).
+ALLOWED_ORIGINS = "https://thomthorne.github.io,http://localhost:8000,http://127.0.0.1:8000"

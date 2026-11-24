@@ -52,6 +52,9 @@ import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
 import { setupArtCrt, paintCrtThumbs, clearCrtThumbs, FX_CHANGE_EVENT } from './crt.js';
 import { setupScreenControl } from './screenFx.js';
 import { dispatch, setCommandRunner } from './commands.js';
+import { takeRelayOverride, takePairCodeFromLocation, pairCodeFromText } from './pairing.js';
+import { connectRoom, setupReconnectTriggers } from './remote.js';
+import { setupDevicesPanel, joinWithCode } from './devices.js';
 import type { Command } from './commands.js';
 import { setupLayout } from './layout.js';
 import { storedScale, applyScale, appZoom, SCALE_MIN, SCALE_MAX, SCALE_STEP } from './scale.js';
@@ -975,6 +978,18 @@ function initializeEventListeners(): void {
       importInput.focus();
       return;
     }
+    // A pairing link (the installed app has no address bar to open it in).
+    const pairCode = text.includes('#pair=') ? pairCodeFromText(text) : null;
+    if (pairCode) {
+      const error = await joinWithCode(pairCode);
+      if (error) showError(mixesMessage, error);
+      else {
+        mixesMessage.textContent = '';
+        importInput.value = '';
+        flash(importButton, 'Paired');
+      }
+      return;
+    }
     const urls = decodePlaylistFromText(text);
     if (!urls) {
       showError(mixesMessage, 'That is not a share link or a YouTube link, so there is nothing to import.');
@@ -1161,8 +1176,24 @@ function setupScreenEffect(): void {
   });
 }
 
+/** Remote control: the Devices section and the connection to the paired room. */
+async function setupRemoteControl(): Promise<void> {
+  takeRelayOverride();
+  setupDevicesPanel();
+  setupReconnectTriggers();
+  // A pairing link opened while the app is already open on this page.
+  window.addEventListener('hashchange', () => {
+    const code = takePairCodeFromLocation();
+    if (code) void joinWithCode(code);
+  });
+  const pairCode = takePairCodeFromLocation();
+  if (pairCode) await joinWithCode(pairCode);
+  else connectRoom();
+}
+
 async function initialize(): Promise<void> {
   setCommandRunner(runCommand);
+  void setupRemoteControl();
   setupScreenTakeover();
   setupScreenEffect();
   setupLayout();

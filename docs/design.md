@@ -82,8 +82,10 @@ The panels are, in order:
 
 1. **Deck:** transport, timeline, channel volume.
 2. **Channels:** add a link, Play all / Pause all, the channel rows.
-3. **Saved mixes, mix status, then the screen effect:** duration, repeat,
-   layout, UI scale, share link; the style dial, Mix and fine-tune.
+3. **Saved mixes, mix status, devices, then the screen effect:**
+   - **Mix status:** duration, repeat, layout, UI scale, share link.
+   - **Devices:** pairing and the device list.
+   - **Screen effect:** the style dial, Mix and fine-tune.
 
 ## Interaction rules
 
@@ -136,6 +138,19 @@ mix:
   so there's no empty space beside the art.
 - **Where.** It appears only where a mouse or trackpad can drag it; touch
   layouts keep their fixed columns.
+
+**Devices.**
+
+- **Pairing code:** a white QR code sits beside the code in large accent
+  type, split in two halves ("5JM 87X") so it's easy to read out. The code
+  leaves out 0, O, 1, I and L.
+- **Countdown:** the code counts down to its expiry. Its box closes on its
+  own once the other device joins.
+- **Device list:** each device shows an accent dot when it's online, a grey
+  one otherwise, with "Online" or "Seen 5 min ago"; this device is tagged.
+  While disconnected, no one is shown as online.
+- **Unpairing:** **Unpair this device** and **Forget all devices** both ask
+  first; forgetting all is styled as destructive.
 
 **Screen effect.**
 

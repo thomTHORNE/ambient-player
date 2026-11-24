@@ -2297,6 +2297,167 @@ input[type="range"] {
   margin-top: 14px;
 }
 
+/* ---------- Devices (last panel): pairing for remote control ---------- */
+
+.devices__intro {
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.device-list {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 14px;
+  list-style: none;
+}
+
+.device {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.device__dot {
+  width: 7px;
+  height: 7px;
+  background: var(--text-3);
+}
+
+.device.is-online .device__dot {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.device__name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.device__name,
+.device__seen {
+  display: block;
+}
+
+.device__seen {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.device__tag {
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+/* The pairing code: a QR code beside the code in large type. */
+.pair {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-fill);
+}
+
+.pair__qr {
+  flex: none;
+  width: 128px;
+  height: 128px;
+  background: #fff;
+}
+
+.pair__qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pair__text {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  justify-items: start;
+}
+
+.pair__label {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.pair__code {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+.pair__expiry {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+@container (max-width: 380px) {
+  .pair {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.devices {
+  container-type: inline-size;
+}
+
+.devices__actions {
+  display: grid;
+  gap: 8px;
+}
+
+.devices__manage {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.devices__leave {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.devices__msg:not(:empty) {
+  margin: 12px 0 0;
+}
+
+.devices__msg.is-ok {
+  color: var(--accent);
+}
+
 /* ---------- Screen effect (last panel) ---------- */
 
 .screen {

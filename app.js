@@ -1742,6 +1742,861 @@ function dispatch(command) {
 }
 
 
+// ===== pairing.js =====
+/**
+ * Pairing: this device's identity, the room it's paired into, and the
+ * relay's HTTP calls (docs/remote-control-plan.md).
+ *
+ * - The relay's address comes from <meta name="ambient-relay"> in
+ *   index.html (empty until the relay is deployed). For development,
+ *   ?relay=http://127.0.0.1:8787 points this browser at a local relay; only
+ *   localhost addresses are accepted that way, so a link can't redirect a
+ *   device to someone else's relay.
+ * - The room (ID and secret) is kept in localStorage. The secret is sent
+ *   only to the relay, never in a link: pairing links carry a short-lived,
+ *   single-use code instead.
+ */
+const ROOM_KEY = 'ambient-player:room';
+const DEVICE_KEY = 'ambient-player:device';
+const RELAY_KEY = 'ambient-player:relay';
+const LOCAL_RELAY = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+function pairingToken(bytes) {
+    const data = crypto.getRandomValues(new Uint8Array(bytes));
+    return btoa(String.fromCharCode(...data)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function readJson(key) {
+    try {
+        return JSON.parse(localStorage.getItem(key) || 'null');
+    }
+    catch {
+        return null;
+    }
+}
+function writeJson(key, value) {
+    try {
+        if (value === null)
+            localStorage.removeItem(key);
+        else
+            localStorage.setItem(key, JSON.stringify(value));
+    }
+    catch {
+        // Not kept; works for this visit.
+    }
+}
+// ---------------------------------------------------------------------------
+// Relay address
+// ---------------------------------------------------------------------------
+/** Take ?relay=<localhost address> from the URL (development), then drop it. */
+function takeRelayOverride() {
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get('relay');
+    if (value === null)
+        return;
+    try {
+        if (value === '' || value === 'off')
+            localStorage.removeItem(RELAY_KEY);
+        else if (LOCAL_RELAY.test(value.replace(/\/$/, '')))
+            localStorage.setItem(RELAY_KEY, value.replace(/\/$/, ''));
+    }
+    catch {
+        // Ignore.
+    }
+    params.delete('relay');
+    const query = params.toString();
+    history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : '') + window.location.hash);
+}
+/** The relay's base URL, or '' when remote control isn't set up. */
+function relayUrl() {
+    let override = '';
+    try {
+        override = localStorage.getItem(RELAY_KEY) || '';
+    }
+    catch {
+        // Ignore.
+    }
+    if (override && LOCAL_RELAY.test(override))
+        return override;
+    const meta = document.querySelector('meta[name="ambient-relay"]')?.content.trim() || '';
+    return /^https:\/\//.test(meta) ? meta.replace(/\/$/, '') : '';
+}
+// ---------------------------------------------------------------------------
+// This device and its room
+// ---------------------------------------------------------------------------
+/** A readable default name, e.g. "Brave on Android". */
+function defaultDeviceName() {
+    const ua = navigator.userAgent;
+    const brave = navigator.brave !== undefined;
+    const browser = brave
+        ? 'Brave'
+        : /Edg\//.test(ua)
+            ? 'Edge'
+            : /Firefox\//.test(ua)
+                ? 'Firefox'
+                : /Chrome\//.test(ua)
+                    ? 'Chrome'
+                    : /Safari\//.test(ua)
+                        ? 'Safari'
+                        : 'Browser';
+    const system = /Android/.test(ua)
+        ? 'Android'
+        : /iPhone/.test(ua)
+            ? 'iPhone'
+            : /iPad|Macintosh/.test(ua) && navigator.maxTouchPoints > 1
+                ? 'iPad'
+                : /Mac OS X|Macintosh/.test(ua)
+                    ? 'Mac'
+                    : /Windows/.test(ua)
+                        ? 'Windows'
+                        : /Linux/.test(ua)
+                            ? 'Linux'
+                            : 'this device';
+    return `${browser} on ${system}`;
+}
+function thisDevice() {
+    const stored = readJson(DEVICE_KEY);
+    if (stored && typeof stored.id === 'string' && typeof stored.name === 'string')
+        return stored;
+    const device = { id: pairingToken(12), name: defaultDeviceName() };
+    writeJson(DEVICE_KEY, device);
+    return device;
+}
+function renameThisDevice(name) {
+    const device = { ...thisDevice(), name: name.trim().slice(0, 40) || defaultDeviceName() };
+    writeJson(DEVICE_KEY, device);
+    return device;
+}
+function storedRoom() {
+    const room = readJson(ROOM_KEY);
+    return room && typeof room.roomId === 'string' && typeof room.secret === 'string' ? room : null;
+}
+function saveRoom(room) {
+    writeJson(ROOM_KEY, room);
+}
+// ---------------------------------------------------------------------------
+// Relay calls
+// ---------------------------------------------------------------------------
+async function relayPost(path, body) {
+    const base = relayUrl();
+    if (!base)
+        throw new Error('Remote control is not set up on this copy of the player.');
+    let response;
+    try {
+        response = await fetch(base + path, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: body === undefined ? undefined : JSON.stringify(body),
+        });
+    }
+    catch {
+        throw new Error("Couldn't reach the relay. Check the connection and try again.");
+    }
+    const data = (await response.json().catch(() => ({})));
+    if (!response.ok) {
+        const reason = data.error;
+        throw new Error(reason === 'code'
+            ? "That code doesn't work. Codes last 10 minutes and work once."
+            : reason === 'slow'
+                ? 'Too many tries. Wait a minute and try again.'
+                : reason === 'unpaired'
+                    ? 'This device is no longer paired.'
+                    : 'The relay had a problem. Try again.');
+    }
+    return data;
+}
+function createRoom() {
+    return relayPost('/rooms');
+}
+function requestPairingCode(room) {
+    return relayPost(`/rooms/${encodeURIComponent(room.roomId)}/codes`, { secret: room.secret });
+}
+function redeemPairingCode(code) {
+    return relayPost(`/pair/${encodeURIComponent(code)}`);
+}
+/** Forget all devices: the room gets a new secret; only this device keeps it. */
+async function rotateRoom(room) {
+    const { secret } = await relayPost(`/rooms/${encodeURIComponent(room.roomId)}/rotate`, {
+        secret: room.secret,
+    });
+    return { roomId: room.roomId, secret };
+}
+// ---------------------------------------------------------------------------
+// Pairing links
+// ---------------------------------------------------------------------------
+/** The link a QR code carries: opening it pairs the device. */
+function pairingLink(code) {
+    return `${window.location.origin}${window.location.pathname}#pair=${code}`;
+}
+/** A pairing code from a link or typed text ("ABC 123", "abc123"), or null. */
+function pairCodeFromText(text) {
+    const fromLink = text.match(/#pair=([A-Za-z0-9]{6})\b/);
+    if (fromLink)
+        return fromLink[1].toUpperCase();
+    const typed = text.replace(/[\s-]/g, '');
+    return /^[A-Za-z0-9]{6}$/.test(typed) ? typed.toUpperCase() : null;
+}
+/** A pairing code in the page URL (#pair=…), removed from the URL once read. */
+function takePairCodeFromLocation() {
+    const match = window.location.hash.match(/^#pair=([A-Za-z0-9]{6})$/);
+    if (!match)
+        return null;
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    return match[1].toUpperCase();
+}
+
+
+// ===== remote.js =====
+/**
+ * The connection to the paired room (docs/remote-control-plan.md).
+ *
+ * While this device is paired, it keeps one WebSocket open to its room on
+ * the relay: it says `hello` with the room secret, gets the device list in
+ * `welcome`, and hears `devices` whenever someone joins, leaves, renames or
+ * goes offline. It reconnects on its own (1, 2, 5, 10, then every 30
+ * seconds, and right away when the page becomes visible or the network comes
+ * back) and sends a heartbeat every 20 seconds, which the relay answers
+ * without waking the room.
+ *
+ * Phase 2 covers presence only. Phase 3 adds roles, state and commands to
+ * the same connection.
+ */
+
+const RECONNECT_DELAYS = [1000, 2000, 5000, 10000, 30000];
+const HEARTBEAT_MS = 20000;
+let rcSocket = null;
+let rcStatus = { state: 'off', devices: [], unpaired: false };
+let rcAttempt = 0;
+let rcRetryTimer = 0;
+let rcHeartbeat = 0;
+let rcWanted = false;
+const rcListeners = new Set();
+function rcEmit(patch) {
+    rcStatus = { ...rcStatus, ...patch };
+    rcListeners.forEach((listener) => listener(rcStatus));
+}
+function onConnection(listener) {
+    rcListeners.add(listener);
+    listener(rcStatus);
+}
+function connectionStatus() {
+    return rcStatus;
+}
+function rcSend(message) {
+    if (rcSocket?.readyState !== WebSocket.OPEN)
+        return false;
+    rcSocket.send(JSON.stringify(message));
+    return true;
+}
+function rcClear() {
+    window.clearTimeout(rcRetryTimer);
+    window.clearInterval(rcHeartbeat);
+    rcRetryTimer = 0;
+    rcHeartbeat = 0;
+}
+function rcScheduleRetry() {
+    if (!rcWanted || rcRetryTimer)
+        return;
+    const delay = RECONNECT_DELAYS[Math.min(rcAttempt, RECONNECT_DELAYS.length - 1)];
+    rcAttempt++;
+    rcRetryTimer = window.setTimeout(() => {
+        rcRetryTimer = 0;
+        rcOpen();
+    }, delay);
+}
+function rcOpen() {
+    const room = storedRoom();
+    const base = relayUrl();
+    if (!rcWanted || !room || !base)
+        return;
+    if (rcSocket && (rcSocket.readyState === WebSocket.OPEN || rcSocket.readyState === WebSocket.CONNECTING))
+        return;
+    rcEmit({ state: rcStatus.state === 'online' ? 'offline' : 'connecting', unpaired: false });
+    const socket = new WebSocket(`${base.replace(/^http/, 'ws')}/rooms/${encodeURIComponent(room.roomId)}/ws`);
+    rcSocket = socket;
+    socket.addEventListener('open', () => {
+        const device = thisDevice();
+        socket.send(JSON.stringify({ type: 'hello', protocol: 1, deviceId: device.id, name: device.name, secret: room.secret }));
+        window.clearInterval(rcHeartbeat);
+        rcHeartbeat = window.setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN)
+                socket.send('ping');
+        }, HEARTBEAT_MS);
+    });
+    socket.addEventListener('message', (event) => {
+        if (typeof event.data !== 'string' || event.data === 'pong')
+            return;
+        let msg;
+        try {
+            msg = JSON.parse(event.data);
+        }
+        catch {
+            return;
+        }
+        if (msg.type === 'welcome') {
+            rcAttempt = 0;
+            rcEmit({ state: 'online', devices: msg.devices ?? [] });
+        }
+        else if (msg.type === 'devices') {
+            rcEmit({ devices: msg.devices ?? [] });
+        }
+    });
+    socket.addEventListener('close', (event) => {
+        if (rcSocket !== socket)
+            return;
+        rcSocket = null;
+        window.clearInterval(rcHeartbeat);
+        if (event.code === 4001) {
+            // The room no longer knows this device: it was unpaired elsewhere.
+            saveRoom(null);
+            rcWanted = false;
+            rcEmit({ state: 'off', devices: [], unpaired: true });
+            return;
+        }
+        if (event.code === 4000 || !rcWanted) {
+            // Replaced by a newer connection from this device, or closed on purpose.
+            if (!rcWanted)
+                rcEmit({ state: 'off', devices: [] });
+            return;
+        }
+        rcEmit({ state: 'offline' });
+        rcScheduleRetry();
+    });
+}
+/** Connect to the stored room (if any) and stay connected. */
+function connectRoom() {
+    if (!storedRoom() || !relayUrl())
+        return;
+    rcWanted = true;
+    rcAttempt = 0;
+    rcClear();
+    rcOpen();
+}
+/** Close the connection (after unpairing). */
+function disconnectRoom() {
+    rcWanted = false;
+    rcClear();
+    const socket = rcSocket;
+    rcSocket = null;
+    socket?.close(1000, 'bye');
+    rcEmit({ state: 'off', devices: [], unpaired: false });
+}
+/** Reconnect from scratch (after the room's secret changed). */
+function reconnectRoom() {
+    disconnectRoom();
+    connectRoom();
+}
+function sendRename(name) {
+    rcSend({ type: 'rename', name });
+}
+/** Tell the room this device is leaving it (unpair). */
+function sendLeave() {
+    rcSend({ type: 'leave' });
+}
+/** Retry straight away when the page comes back or the network returns. */
+function setupReconnectTriggers() {
+    const retryNow = () => {
+        if (!rcWanted || rcSocket)
+            return;
+        rcAttempt = 0;
+        rcClear();
+        rcOpen();
+    };
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible')
+            retryNow();
+    });
+    window.addEventListener('online', retryNow);
+}
+
+
+// ===== qr.js =====
+/**
+ * A small QR code encoder: byte mode, error correction level M, versions 1–10
+ * (up to 213 bytes), drawn as SVG. Enough for pairing links.
+ *
+ * Follows the QR code specification (ISO/IEC 18004); the structure mirrors
+ * Project Nayuki's reference implementation (MIT): data and error correction
+ * codewords, function patterns, zig-zag placement, one fixed mask.
+ */
+/** Error correction codewords per block and number of blocks, level M, by version (index 0 unused). */
+const QR_ECC_PER_BLOCK = [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+const QR_BLOCKS = [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+/** Format information for level M is 0b00. */
+const QR_LEVEL_BITS = 0;
+const QR_MASK = 0;
+function qrRawModules(ver) {
+    let result = (16 * ver + 128) * ver + 64;
+    if (ver >= 2) {
+        const align = Math.floor(ver / 7) + 2;
+        result -= (25 * align - 10) * align - 55;
+        if (ver >= 7)
+            result -= 36;
+    }
+    return result;
+}
+function qrDataCodewords(ver) {
+    return Math.floor(qrRawModules(ver) / 8) - QR_ECC_PER_BLOCK[ver] * QR_BLOCKS[ver];
+}
+function qrMultiply(x, y) {
+    let z = 0;
+    for (let i = 7; i >= 0; i--) {
+        z = (z << 1) ^ ((z >>> 7) * 0x11d);
+        z ^= ((y >>> i) & 1) * x;
+    }
+    return z;
+}
+function qrDivisor(degree) {
+    const result = new Array(degree).fill(0);
+    result[degree - 1] = 1;
+    let root = 1;
+    for (let i = 0; i < degree; i++) {
+        for (let j = 0; j < result.length; j++) {
+            result[j] = qrMultiply(result[j], root);
+            if (j + 1 < result.length)
+                result[j] ^= result[j + 1];
+        }
+        root = qrMultiply(root, 0x02);
+    }
+    return result;
+}
+function qrRemainder(data, divisor) {
+    const result = new Array(divisor.length).fill(0);
+    for (const b of data) {
+        const factor = b ^ result.shift();
+        result.push(0);
+        divisor.forEach((coef, i) => (result[i] ^= qrMultiply(coef, factor)));
+    }
+    return result;
+}
+/** The modules of a QR code for `text` (true is dark), or null if it is too long. */
+function qrEncode(text) {
+    const bytes = Array.from(new TextEncoder().encode(text));
+    // Smallest version that fits: mode (4 bits) + count (8 or 16 bits) + data.
+    let ver = 1;
+    for (; ver <= 10; ver++) {
+        const countBits = ver <= 9 ? 8 : 16;
+        if (4 + countBits + bytes.length * 8 <= qrDataCodewords(ver) * 8)
+            break;
+    }
+    if (ver > 10)
+        return null;
+    const capacity = qrDataCodewords(ver) * 8;
+    // Data bits, terminator, padding.
+    const bits = [];
+    const push = (value, length) => {
+        for (let i = length - 1; i >= 0; i--)
+            bits.push((value >>> i) & 1);
+    };
+    push(0b0100, 4);
+    push(bytes.length, ver <= 9 ? 8 : 16);
+    bytes.forEach((b) => push(b, 8));
+    push(0, Math.min(4, capacity - bits.length));
+    push(0, (8 - (bits.length % 8)) % 8);
+    for (let pad = 0xec; bits.length < capacity; pad ^= 0xec ^ 0x11)
+        push(pad, 8);
+    const data = [];
+    for (let i = 0; i < bits.length; i += 8)
+        data.push(parseInt(bits.slice(i, i + 8).join(''), 2));
+    // Error correction, split into blocks and interleaved.
+    const numBlocks = QR_BLOCKS[ver];
+    const eccLen = QR_ECC_PER_BLOCK[ver];
+    const rawCodewords = Math.floor(qrRawModules(ver) / 8);
+    const numShort = numBlocks - (rawCodewords % numBlocks);
+    const shortLen = Math.floor(rawCodewords / numBlocks);
+    const divisor = qrDivisor(eccLen);
+    const blocks = [];
+    for (let i = 0, k = 0; i < numBlocks; i++) {
+        const dat = data.slice(k, k + shortLen - eccLen + (i < numShort ? 0 : 1));
+        k += dat.length;
+        const ecc = qrRemainder(dat, divisor);
+        if (i < numShort)
+            dat.push(0);
+        blocks.push(dat.concat(ecc));
+    }
+    const codewords = [];
+    for (let i = 0; i < blocks[0].length; i++) {
+        blocks.forEach((block, j) => {
+            if (i !== shortLen - eccLen || j >= numShort)
+                codewords.push(block[i]);
+        });
+    }
+    // The grid.
+    const size = ver * 4 + 17;
+    const modules = Array.from({ length: size }, () => new Array(size).fill(false));
+    const isFunction = Array.from({ length: size }, () => new Array(size).fill(false));
+    const set = (x, y, dark) => {
+        modules[y][x] = dark;
+        isFunction[y][x] = true;
+    };
+    // Timing patterns.
+    for (let i = 0; i < size; i++) {
+        set(6, i, i % 2 === 0);
+        set(i, 6, i % 2 === 0);
+    }
+    // Finder patterns.
+    for (const [cx, cy] of [[3, 3], [size - 4, 3], [3, size - 4]]) {
+        for (let dy = -4; dy <= 4; dy++) {
+            for (let dx = -4; dx <= 4; dx++) {
+                const dist = Math.max(Math.abs(dx), Math.abs(dy));
+                const x = cx + dx;
+                const y = cy + dy;
+                if (x >= 0 && x < size && y >= 0 && y < size)
+                    set(x, y, dist !== 2 && dist !== 4);
+            }
+        }
+    }
+    // Alignment patterns.
+    const align = [];
+    if (ver > 1) {
+        const count = Math.floor(ver / 7) + 2;
+        const step = Math.ceil((ver * 4 + 4) / (count * 2 - 2)) * 2;
+        align.push(6);
+        for (let pos = size - 7; align.length < count; pos -= step)
+            align.splice(1, 0, pos);
+    }
+    align.forEach((ay, i) => align.forEach((ax, j) => {
+        const corner = (i === 0 && j === 0) || (i === 0 && j === align.length - 1) || (i === align.length - 1 && j === 0);
+        if (corner)
+            return;
+        for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++)
+                set(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+        }
+    }));
+    // Format information (level and mask), twice, plus the dark module.
+    const formatData = (QR_LEVEL_BITS << 3) | QR_MASK;
+    let rem = formatData;
+    for (let i = 0; i < 10; i++)
+        rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    const format = ((formatData << 10) | rem) ^ 0x5412;
+    const bit = (value, i) => ((value >>> i) & 1) !== 0;
+    for (let i = 0; i <= 5; i++)
+        set(8, i, bit(format, i));
+    set(8, 7, bit(format, 6));
+    set(8, 8, bit(format, 7));
+    set(7, 8, bit(format, 8));
+    for (let i = 9; i < 15; i++)
+        set(14 - i, 8, bit(format, i));
+    for (let i = 0; i < 8; i++)
+        set(size - 1 - i, 8, bit(format, i));
+    for (let i = 8; i < 15; i++)
+        set(8, size - 15 + i, bit(format, i));
+    set(8, size - 8, true);
+    // Version information (version 7 and up).
+    if (ver >= 7) {
+        let vrem = ver;
+        for (let i = 0; i < 12; i++)
+            vrem = (vrem << 1) ^ ((vrem >>> 11) * 0x1f25);
+        const versionBits = (ver << 12) | vrem;
+        for (let i = 0; i < 18; i++) {
+            const dark = bit(versionBits, i);
+            const a = size - 11 + (i % 3);
+            const b = Math.floor(i / 3);
+            set(a, b, dark);
+            set(b, a, dark);
+        }
+    }
+    // Data, in the zig-zag order, then the mask.
+    let index = 0;
+    for (let right = size - 1; right >= 1; right -= 2) {
+        if (right === 6)
+            right = 5;
+        for (let vert = 0; vert < size; vert++) {
+            for (let j = 0; j < 2; j++) {
+                const x = right - j;
+                const upward = ((right + 1) & 2) === 0;
+                const y = upward ? size - 1 - vert : vert;
+                if (!isFunction[y][x] && index < codewords.length * 8) {
+                    modules[y][x] = bit(codewords[index >>> 3], 7 - (index & 7));
+                    index++;
+                }
+            }
+        }
+    }
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            if (!isFunction[y][x] && (x + y) % 2 === 0)
+                modules[y][x] = !modules[y][x];
+        }
+    }
+    return modules;
+}
+/** An SVG QR code for `text`: dark modules in `currentColor`, with the quiet zone. */
+function qrSvg(text, label) {
+    const modules = qrEncode(text);
+    if (!modules)
+        return '';
+    const size = modules.length;
+    const quiet = 4;
+    let path = '';
+    modules.forEach((row, y) => row.forEach((dark, x) => {
+        if (dark)
+            path += `M${x + quiet} ${y + quiet}h1v1h-1z`;
+    }));
+    const full = size + quiet * 2;
+    return `<svg viewBox="0 0 ${full} ${full}" role="img" aria-label="${label}" shape-rendering="crispEdges"><rect width="${full}" height="${full}" fill="#fff"/><path d="${path}" fill="#08090A"/></svg>`;
+}
+
+
+// ===== devices.js =====
+/**
+ * The Devices section (last panel): pairing devices for remote control
+ * (docs/remote-control-plan.md, phase 2).
+ *
+ * - Connect a device: creates the room if this device has none, then shows
+ *   a single-use pairing code and a QR code of its link for 10 minutes.
+ * - Join: a code typed here, a #pair= link opened in the browser, or a
+ *   pairing link pasted into Import pairs this device into that room.
+ * - Paired: the device list (online or last seen), renaming this device,
+ *   unpairing it, and forgetting all devices (a new room secret).
+ */
+
+
+
+const dvById = (id) => document.getElementById(id);
+let dvExpiryTimer = 0;
+let dvKnownIds = new Set();
+function dvMessage(text, ok = false) {
+    const el = dvById('devicesMessage');
+    el.textContent = text;
+    el.classList.toggle('is-ok', ok);
+}
+function dvEsc(value) {
+    return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+function dvSeen(device) {
+    if (device.online)
+        return 'Online';
+    const minutes = Math.round((Date.now() - device.lastSeen) / 60000);
+    if (minutes < 1)
+        return 'Seen just now';
+    if (minutes < 60)
+        return `Seen ${minutes} min ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24)
+        return `Seen ${hours} h ago`;
+    return `Seen ${Math.round(hours / 24)} d ago`;
+}
+function dvHidePairBox() {
+    window.clearInterval(dvExpiryTimer);
+    dvExpiryTimer = 0;
+    dvById('pairBox').hidden = true;
+}
+function dvRender(status) {
+    const paired = !!storedRoom();
+    const configured = !!relayUrl();
+    const me = thisDevice();
+    const pill = dvById('devicesState');
+    const intro = dvById('devicesIntro');
+    const list = dvById('deviceList');
+    const manage = dvById('devicesManage');
+    const connect = dvById('connectDevice');
+    const join = dvById('joinButton');
+    const joinInput = dvById('joinCode');
+    // While disconnected, nobody is known to be online.
+    const live = status.state === 'online';
+    const devices = status.devices.map((d) => ({ ...d, online: live && d.online }));
+    const others = devices.filter((d) => d.id !== me.id);
+    const onlineOthers = others.filter((d) => d.online).length;
+    let label = 'Not paired';
+    let tone = 'idle';
+    if (paired) {
+        if (status.state === 'online') {
+            label = onlineOthers ? `${onlineOthers + 1} online` : 'Paired';
+            tone = onlineOthers ? 'live' : 'idle';
+        }
+        else if (status.state === 'connecting') {
+            label = 'Connecting';
+            tone = 'busy';
+        }
+        else {
+            label = 'Offline';
+            tone = 'warn';
+        }
+    }
+    pill.textContent = label;
+    pill.className = `pill tone-${tone}`;
+    intro.textContent = !configured
+        ? "Remote control isn't set up on this copy of the player yet."
+        : paired
+            ? others.length
+                ? 'Paired devices. Open Ambient Player on any of them to use it as a remote.'
+                : 'Paired. Connect another device to use it as a remote.'
+            : 'Pair another device, such as your phone, to control this player from it like a remote.';
+    list.hidden = !paired || devices.length === 0;
+    list.innerHTML = devices
+        .slice()
+        .sort((a, b) => (a.id === me.id ? -1 : b.id === me.id ? 1 : Number(b.online) - Number(a.online)))
+        .map((d) => `
+      <li class="device${d.online ? ' is-online' : ''}">
+        <span class="device__dot" aria-hidden="true"></span>
+        <span>
+          <span class="device__name">${dvEsc(d.name)}</span>
+          <span class="device__seen">${dvSeen(d)}</span>
+        </span>
+        ${d.id === me.id ? '<span class="device__tag">This device</span>' : ''}
+      </li>`)
+        .join('');
+    manage.hidden = !paired;
+    connect.textContent = paired ? 'Connect another device' : 'Connect a device';
+    connect.disabled = !configured;
+    join.disabled = !configured;
+    joinInput.disabled = !configured;
+    const nameInput = dvById('deviceName');
+    if (document.activeElement !== nameInput)
+        nameInput.value = me.name;
+    // A device that just joined while the code was showing: done.
+    const ids = new Set(status.devices.map((d) => d.id));
+    const newcomer = status.devices.find((d) => !dvKnownIds.has(d.id) && d.id !== me.id && d.online);
+    if (newcomer && dvKnownIds.size > 0 && !dvById('pairBox').hidden) {
+        dvHidePairBox();
+        dvMessage(`${newcomer.name} is paired.`, true);
+    }
+    if (status.state === 'online')
+        dvKnownIds = ids;
+    if (status.unpaired)
+        dvMessage('This device was unpaired from another device.');
+}
+/** Show a fresh pairing code and its QR code, counting down to expiry. */
+async function dvShowCode() {
+    let room = storedRoom();
+    if (!room) {
+        room = await createRoom();
+        saveRoom(room);
+        connectRoom();
+    }
+    const { code, expiresAt } = await requestPairingCode(room);
+    const box = dvById('pairBox');
+    dvById('pairQr').innerHTML = qrSvg(pairingLink(code), `QR code for pairing code ${code}`);
+    dvById('pairCode').textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
+    const expiry = dvById('pairExpiry');
+    const tick = () => {
+        const left = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+        if (left === 0) {
+            dvHidePairBox();
+            dvMessage('The pairing code expired. Connect again for a new one.');
+            return;
+        }
+        expiry.textContent = `Works once · expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    };
+    window.clearInterval(dvExpiryTimer);
+    dvExpiryTimer = window.setInterval(tick, 1000);
+    tick();
+    box.hidden = false;
+}
+/**
+ * Pair this device using a code (typed, from a #pair= link, or pasted into
+ * Import). Resolves to an error message, or null when paired.
+ */
+async function joinWithCode(code) {
+    if (!relayUrl())
+        return "Remote control isn't set up on this copy of the player yet.";
+    const current = storedRoom();
+    try {
+        const room = await redeemPairingCode(code);
+        if (current && current.roomId === room.roomId) {
+            dvMessage('This device is already paired with them.', true);
+            return null;
+        }
+        if (current)
+            sendLeave();
+        disconnectRoom();
+        saveRoom(room);
+        connectRoom();
+        dvMessage('Paired. Your other devices are listed above.', true);
+        return null;
+    }
+    catch (error) {
+        const message = error.message;
+        dvMessage(message);
+        return message;
+    }
+}
+function setupDevicesPanel() {
+    const connect = dvById('connectDevice');
+    const joinInput = dvById('joinCode');
+    const join = dvById('joinButton');
+    onConnection(dvRender);
+    connect.addEventListener('click', async () => {
+        dvMessage('');
+        connect.disabled = true;
+        try {
+            await dvShowCode();
+        }
+        catch (error) {
+            dvMessage(error.message);
+        }
+        finally {
+            connect.disabled = !relayUrl();
+        }
+    });
+    dvById('pairCancel').addEventListener('click', dvHidePairBox);
+    const submitJoin = async () => {
+        const code = pairCodeFromText(joinInput.value);
+        if (!code) {
+            dvMessage('Enter the 6-character code shown on the other device.');
+            joinInput.focus();
+            return;
+        }
+        join.disabled = true;
+        const error = await joinWithCode(code);
+        join.disabled = false;
+        if (!error)
+            joinInput.value = '';
+    };
+    join.addEventListener('click', () => void submitJoin());
+    joinInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')
+            void submitJoin();
+    });
+    const nameInput = dvById('deviceName');
+    const rename = () => {
+        const device = renameThisDevice(nameInput.value);
+        nameInput.value = device.name;
+        sendRename(device.name);
+        dvMessage('Renamed.', true);
+    };
+    dvById('renameDevice').addEventListener('click', rename);
+    nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')
+            rename();
+    });
+    dvById('unpairDevice').addEventListener('click', () => {
+        if (!confirm('Unpair this device? It stops being a remote, and pairing again needs a new code.'))
+            return;
+        sendLeave();
+        window.setTimeout(() => {
+            disconnectRoom();
+            saveRoom(null);
+            dvHidePairBox();
+            dvKnownIds = new Set();
+            dvRender({ state: 'off', devices: [], unpaired: false });
+            dvMessage('This device is unpaired.', true);
+        }, 150);
+    });
+    dvById('forgetDevices').addEventListener('click', async () => {
+        const room = storedRoom();
+        if (!room)
+            return;
+        if (!confirm('Forget all devices? Every other device is unpaired and needs a new code to pair again. This cannot be undone.'))
+            return;
+        try {
+            saveRoom(await rotateRoom(room));
+            dvHidePairBox();
+            reconnectRoom();
+            dvMessage('All other devices are unpaired.', true);
+        }
+        catch (error) {
+            dvMessage(error.message);
+        }
+    });
+    // Last seen times move on even when nothing else changes.
+    window.setInterval(() => {
+        if (storedRoom())
+            dvRender(connectionStatus());
+    }, 60000);
+}
+
+
 // ===== layoutPref.js =====
 /**
  * Layout choice: Auto (the layout follows the screen) or Stacked (the
@@ -2313,6 +3168,9 @@ function setupStageResize() {
  * "focused": it fills the centre of the screen and the deck controls it.
  * Every channel stays playable from the channel list.
  */
+
+
+
 
 
 
@@ -3196,6 +4054,19 @@ function initializeEventListeners() {
             importInput.focus();
             return;
         }
+        // A pairing link (the installed app has no address bar to open it in).
+        const pairCode = text.includes('#pair=') ? pairCodeFromText(text) : null;
+        if (pairCode) {
+            const error = await joinWithCode(pairCode);
+            if (error)
+                showError(mixesMessage, error);
+            else {
+                mixesMessage.textContent = '';
+                importInput.value = '';
+                flash(importButton, 'Paired');
+            }
+            return;
+        }
         const urls = decodePlaylistFromText(text);
         if (!urls) {
             showError(mixesMessage, 'That is not a share link or a YouTube link, so there is nothing to import.');
@@ -3397,8 +4268,26 @@ function setupScreenEffect() {
         repaint();
     });
 }
+/** Remote control: the Devices section and the connection to the paired room. */
+async function setupRemoteControl() {
+    takeRelayOverride();
+    setupDevicesPanel();
+    setupReconnectTriggers();
+    // A pairing link opened while the app is already open on this page.
+    window.addEventListener('hashchange', () => {
+        const code = takePairCodeFromLocation();
+        if (code)
+            void joinWithCode(code);
+    });
+    const pairCode = takePairCodeFromLocation();
+    if (pairCode)
+        await joinWithCode(pairCode);
+    else
+        connectRoom();
+}
 async function initialize() {
     setCommandRunner(runCommand);
+    void setupRemoteControl();
     setupScreenTakeover();
     setupScreenEffect();
     setupLayout();

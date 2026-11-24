@@ -47,6 +47,8 @@
   <title>Ambient Player — multi-channel YouTube audio mixer</title>
   <meta name="description" content="Mix several YouTube streams as audio, each with its own volume and repeat, and save or share the mix.">
   <meta name="theme-color" content="#08090A">
+  <!-- The remote control relay (worker/). Empty until it's deployed. -->
+  <meta name="ambient-relay" content="">
   <link rel="icon" href="assets/favicon.png">
   <!-- Installable as a fullscreen app (Add to Home screen / Install app). -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -58,7 +60,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7439dd2bd9">
+  <link rel="stylesheet" href="styles.css?v=338caff7c3">
 </head>
 
 <body>
@@ -275,6 +277,48 @@
                 <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
               </div>
             </section>
+          <!-- Devices: pair another device to use as a remote (src/devices.ts). -->
+          <section class="panel devices" aria-labelledby="devicesTitle">
+            <header class="panel__head">
+              <h2 id="devicesTitle" class="panel__title">Devices</h2>
+              <span id="devicesState" class="pill tone-idle">Not paired</span>
+            </header>
+            <p id="devicesIntro" class="devices__intro">Pair another device, such as your phone, to control this player from it like a remote.</p>
+            <ul id="deviceList" class="device-list" aria-label="Paired devices" hidden></ul>
+            <div id="pairBox" class="pair" hidden>
+              <div id="pairQr" class="pair__qr"></div>
+              <div class="pair__text">
+                <p class="pair__label">Scan with the other device's camera, or open Ambient Player there and enter</p>
+                <p id="pairCode" class="pair__code">——— ———</p>
+                <p id="pairExpiry" class="pair__expiry">Works once, for 10 minutes</p>
+                <button id="pairCancel" class="btn btn--quiet btn--small" type="button">Done</button>
+              </div>
+            </div>
+            <div class="devices__actions">
+              <button id="connectDevice" class="btn" type="button">Connect a device</button>
+              <div class="field-row devices__join">
+                <label class="field">
+                  <span class="visually-hidden">Pairing code from another device</span>
+                  <input id="joinCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="Pairing code" />
+                </label>
+                <button id="joinButton" class="btn btn--quiet" type="button">Join</button>
+              </div>
+            </div>
+            <div id="devicesManage" class="devices__manage" hidden>
+              <div class="field-row">
+                <label class="field">
+                  <span class="visually-hidden">This device's name</span>
+                  <input id="deviceName" type="text" autocomplete="off" maxlength="40" placeholder="This device's name" />
+                </label>
+                <button id="renameDevice" class="btn btn--quiet" type="button">Rename</button>
+              </div>
+              <div class="devices__leave">
+                <button id="unpairDevice" class="text-btn" type="button">Unpair this device</button>
+                <button id="forgetDevices" class="text-btn text-btn--danger" type="button">Forget all devices</button>
+              </div>
+            </div>
+            <p id="devicesMessage" class="status-msg devices__msg" role="status" aria-live="polite"></p>
+          </section>
           <!-- Screen effect over the artwork (src/screenFx.ts, drawn by src/crt.ts). -->
           <section class="panel screen" aria-labelledby="screenTitle">
             <header class="panel__head">
@@ -330,7 +374,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=84eaa43dea"></script>
+  <script src="app.js?v=e596897720"></script>
 </body>
 
 </html>

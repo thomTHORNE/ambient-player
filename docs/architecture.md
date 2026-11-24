@@ -40,6 +40,10 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `crt.ts` | The screen effect: renders the artwork and thumbnails as phosphor cells on a canvas. |
 | `screenFx.ts` | The Screen effect panel: style dial, Mix and fine-tune, saved on the device. |
 | `commands.ts` | The command layer: every change to playback or the mix as a `Command`, applied through `dispatch()`. |
+| `pairing.ts` | This device's ID and name, the room it's paired into, the relay's address and its HTTP calls, pairing links. |
+| `remote.ts` | The WebSocket to the paired room: `hello`, the device list, heartbeat, reconnecting. |
+| `devices.ts` | The Devices section: connect (code and QR code), join, the device list, rename, unpair, forget all. |
+| `qr.ts` | A small QR code encoder (byte mode, level M, versions 1–10), drawn as SVG. |
 | `screen.ts` | Fullscreen (with the WebKit fallback), installed-app detection and the screen wake lock. |
 | `scale.ts` | The UI scale setting: reads, applies and stores it. |
 | `layoutPref.ts` | The Layout setting (Auto or Stacked), kept per screen. |
@@ -150,6 +154,61 @@ stays visible underneath. Changing it never re-renders.
   or the style is reset.
 - **Saved:** in `localStorage` under `ambient-player:screen` as
   `{ style, mix, tuned }`.
+
+## Pairing and the relay (remote control, phase 2)
+
+Remote control is being built in phases (`docs/remote-control-plan.md`).
+Phase 2 pairs devices and shows who's online; controlling playback comes in
+phase 3.
+
+**The relay** (`worker/`) is a Cloudflare Worker with two SQLite-backed
+Durable Objects:
+
+- **Room:** one per set of paired devices. It holds the connections, the
+  device list, and a hash of the room secret.
+- **Pairing:** holds pairing codes, which last 10 minutes and work once.
+
+The routes and messages are listed in `worker/README.md`.
+
+**Where it's configured.**
+
+- **Address:** the app reads the relay's address from
+  `<meta name="ambient-relay">` in `index.html`, which is empty until it's
+  deployed. With no address, the Devices section says remote control isn't
+  set up and nothing connects.
+- **Development:** `?relay=http://127.0.0.1:8787` points one browser at a
+  local relay. Only localhost addresses are accepted that way, so a link
+  can't redirect a device to someone else's relay.
+
+**Pairing.**
+
+1. **Connect a device:** creates a room the first time. The relay returns a
+   room ID and a long random secret, kept in `localStorage` under
+   `ambient-player:room`.
+2. **The code:** the device asks for a pairing code and shows it with a QR
+   code of `…/#pair=<code>`.
+3. **Joining:** the other device swaps the code for the room ID and secret.
+   It does that from a typed code, from the link (on load or on
+   `hashchange`), or from the link pasted into **Import**.
+4. **What a link carries:** the code is single use and short lived; the
+   secret itself is never in a link.
+
+**The connection** (`remote.ts`).
+
+- **Joining the room:** a paired device opens one WebSocket to its room and
+  sends `hello` with its device ID, name and the secret. It gets `welcome`
+  with the device list, then `devices` whenever someone joins, leaves,
+  renames or disconnects.
+- **Heartbeat:** a plain-text `ping` every 20 seconds, answered by the relay
+  without waking the room.
+- **Reconnecting:** after 1, 2, 5, 10, then every 30 seconds, and straight
+  away when the page becomes visible or the network returns.
+- **Unpaired elsewhere:** close code 4001 means **Forget all devices** was
+  used on another device. This device then forgets the room and says so.
+
+**This device** (`ambient-player:device`) has a random ID and a generated
+name such as "Brave on Android", which can be renamed in the Devices
+section.
 
 ## Artwork and accent
 
@@ -365,6 +424,9 @@ inline script in `index.html` applies it before the first paint.
 | `localStorage["yt_audio_playlists"]` | `{ playlists: [{ name, urls[] }], lastPlaylistName? }`. Saving a mix makes it the last one; it reopens on the next visit. An unsaved mix is not kept. |
 | `localStorage["ambient-player:ui-scale"]` | The UI scale (0.7–1.3), removed at 100%. |
 | `localStorage["ambient-player:layout"]` | The Layout setting per screen: `{ "<min>x<max>": "stacked" }`. Auto removes the screen's entry. |
+| `localStorage["ambient-player:room"]` | The paired room: `{ roomId, secret }`. |
+| `localStorage["ambient-player:device"]` | This device: `{ id, name }`. |
+| `localStorage["ambient-player:relay"]` | Development only: a localhost relay address set with `?relay=`. |
 | `localStorage["ambient-player:screen"]` | The screen effect: `{ style, mix, tuned }` (style name, 0–1, overridden `--crt-*` values). |
 | `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
 | Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. **Import** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |

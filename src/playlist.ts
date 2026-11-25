@@ -33,6 +33,11 @@ export interface Track {
   volume: number;
   isMuted: boolean;
   loop: boolean;
+  /**
+   * Marked for Resume: the channels that were playing last. Set when a
+   * channel starts playing, kept through Pause all, and changeable by hand.
+   */
+  selected: boolean;
 }
 
 export interface PlaylistState {
@@ -59,6 +64,7 @@ export class PlaylistManager {
       volume: 1,
       isMuted: false,
       loop: true,
+      selected: false,
     };
     this.state.tracks.push(track);
     return track;
@@ -131,6 +137,18 @@ export class PlaylistManager {
   replaceTracks(tracks: Track[]): void {
     this.clearTracks();
     this.state.tracks = tracks.map((t) => ({ ...t }));
+  }
+
+  /**
+   * Move the selected channels to the top, each group keeping its order.
+   * True when the order changed.
+   */
+  sortSelectedFirst(): boolean {
+    const before = this.state.tracks;
+    const sorted = [...before.filter((t) => t.selected), ...before.filter((t) => !t.selected)];
+    if (sorted.every((t, i) => t === before[i])) return false;
+    this.state.tracks = sorted;
+    return true;
   }
 
   /**

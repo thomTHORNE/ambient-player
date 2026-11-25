@@ -17,6 +17,7 @@ import {
 import type { YouTubePlayerFactory } from './youtubePlayer.js';
 import {
   saveOrUpdatePlaylist,
+  saveMixResume,
   deletePlaylist,
   getLastPlaylist,
   getAllPlaylists,
@@ -115,6 +116,7 @@ const mixesMessage = $<HTMLElement>('mixesMessage');
 const importInput = $<HTMLInputElement>('importInput');
 const importButton = $<HTMLButtonElement>('importButton');
 const globalPlayPauseButton = $<HTMLButtonElement>('globalPlayPause');
+const resumeButton = $<HTMLButtonElement>('resumeButton');
 const loopSwitch = $<HTMLButtonElement>('loopSwitch');
 const shareButton = $<HTMLButtonElement>('shareButton');
 const playlistNameInput = $<HTMLInputElement>('playlistNameInput');
@@ -327,6 +329,15 @@ function renderStatus(): void {
 
   globalPlayPauseButton.textContent = live > 0 ? 'Pause all' : 'Play all';
   globalPlayPauseButton.disabled = tracks.length === 0;
+  // Resume: while nothing plays, the channels that were playing last.
+  const picked = tracks.filter((t) => t.selected).length;
+  resumeButton.hidden = live > 0 || picked === 0;
+  resumeButton.disabled = !tracks.some((t) => t.selected && (t.state === 'paused' || t.state === 'loading'));
+  resumeButton.textContent = `Resume ${picked}`;
+  resumeButton.setAttribute(
+    'aria-label',
+    `Resume the ${picked === 1 ? 'channel' : `${picked} channels`} played last`
+  );
   shareButton.disabled = tracks.length === 0;
   scheduleBroadcast();
 }
@@ -655,6 +666,95 @@ function stopPolling(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Resume: the channels played last
+//
+// Each channel carries `selected`, the mark Resume plays. It follows what
+// plays: a channel that starts playing is marked; playing one channel while
+// nothing plays starts a new set (the others lose the mark); pausing one
+// while others keep playing drops it. Pause all keeps the marks, so they are
+// exactly what was playing. The mark can also be set by hand on each row.
+//
+// The marked channels move to the top of the list when playback comes to
+// rest through Pause all or Resume, when a mix loads, and when the app comes
+// back into view with nothing playing: never while you tap a row, so a row
+// can't jump away under your finger.
+//
+// The marks travel in the room snapshot (so remotes, the relay and a device
+// taking over see them) and are kept with the saved mix on this device.
+// ---------------------------------------------------------------------------
+
+/** Mark or unmark one channel for Resume; true when it changed. */
+function setSelected(id: TrackId, on: boolean): boolean {
+  const track = playlistManager.getTrack(id);
+  if (!track || track.selected === on) return false;
+  playlistManager.updateTrack(id, { selected: on });
+  const row = rowFor(id);
+  if (row) patchChannelRow(row, track);
+  return true;
+}
+
+/** Mark only this channel (playing it while nothing plays starts a new set). */
+function selectOnly(id: TrackId): boolean {
+  let changed = false;
+  for (const t of playlistManager.getTracks()) changed = setSelected(t.id, t.id === id) || changed;
+  return changed;
+}
+
+/** The links Resume plays, in mix order. */
+function resumeUrls(): string[] {
+  return playlistManager.getTracks().filter((t) => t.selected).map((t) => t.url);
+}
+
+let resumeSaveTimer = 0;
+
+/** The marks changed: update the header and, soon, the saved mix. */
+function selectionChanged(): void {
+  renderStatus();
+  // A remote mirrors the main device's mix; only the device that plays it
+  // keeps its marks with the saved mix.
+  if (mcRole === 'remote' || resumeSaveTimer) return;
+  resumeSaveTimer = window.setTimeout(saveResumeNow, 400);
+}
+
+function saveResumeNow(): void {
+  window.clearTimeout(resumeSaveTimer);
+  resumeSaveTimer = 0;
+  if (mcRole !== 'remote' && mixName) saveMixResume(mixName, resumeUrls());
+}
+
+/** Put the marked channels at the top of the list. Not on a remote (the main device orders the mix). */
+function sortResumeFirst(): void {
+  if (mcRole === 'remote' || !playlistManager.sortSelectedFirst()) return;
+  renderAll(false);
+}
+
+/** Mark the channels of a saved mix that Resume plays, by link (a link listed twice marks two). */
+function applyResumeUrls(urls: string[]): void {
+  const wanted = new Map<string, number>();
+  for (const url of urls) wanted.set(url, (wanted.get(url) ?? 0) + 1);
+  for (const t of playlistManager.getTracks()) {
+    const left = wanted.get(t.url) ?? 0;
+    playlistManager.updateTrack(t.id, { selected: left > 0 });
+    if (left > 0) wanted.set(t.url, left - 1);
+  }
+}
+
+/** Resume: play the marked channels, now if ready or as soon as their player is. */
+function resumeSelected(): boolean {
+  const picked = playlistManager.getTracks().filter((t) => t.selected);
+  if (!picked.some((t) => t.state === 'paused' || t.state === 'loading')) return false;
+  for (const t of picked) {
+    if (t.state === 'paused') playlistManager.getController(t.id)?.play();
+    else if (t.state === 'loading') mcAutoplay.add(t.id);
+  }
+  startPolling();
+  sortResumeFirst();
+  // Show a channel that is about to play on the main display.
+  if (!focusedTrack()?.selected) setFocus(picked[0].id);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Channels
 // ---------------------------------------------------------------------------
 
@@ -707,10 +807,14 @@ function onTrackState(id: TrackId, state: TrackState): void {
   const controller = playlistManager.getController(id);
   if (controller) playlistManager.updateTrack(id, { currentTime: controller.getCurrentTime() });
   const track = playlistManager.getTrack(id)!;
+  // Whatever starts playing is part of what Resume picks up later.
+  const marked = state === 'playing' && !track.selected;
+  if (marked) playlistManager.updateTrack(id, { selected: true });
 
   const row = rowFor(id);
   if (row) patchChannelRow(row, track);
   if (prevState !== track.state) renderStrip();
+  if (marked) selectionChanged();
   renderStatus();
   if (id === focusedId) renderStage(false);
 
@@ -804,6 +908,10 @@ function playAll(): boolean {
 
 function pauseAll(): boolean {
   playlistManager.getTracks().forEach((t) => t.state === 'playing' && playlistManager.getController(t.id)?.pause());
+  // Channels still loading that were asked to start (Resume, Play here) stay paused too.
+  mcAutoplay.clear();
+  // What was playing keeps its mark: bring it to the top, ready for Resume.
+  sortResumeFirst();
   return true;
 }
 
@@ -844,23 +952,41 @@ function addChannel(url: string): boolean {
 }
 
 /** Replace the mix with these links (taking `name`) or add them to it. */
-function loadMix(urls: string[], name: string | null, mode: 'replace' | 'append'): boolean {
+function loadMix(urls: string[], name: string | null, mode: 'replace' | 'append', resume?: string[]): boolean {
+  // Keep the marks of the mix that's open now before it goes.
+  if (resumeSaveTimer) saveResumeNow();
   if (mode === 'replace') mixName = name;
-  loadTracksFromUrls(urls, mode);
+  loadTracksFromUrls(urls, mode, mode === 'replace' && Array.isArray(resume) ? resume : undefined);
   return true;
 }
 
 /** Every command, applied on this device. Registered with src/commands.ts. */
 function runCommand(command: Command): boolean {
   switch (command.type) {
-    case 'play':
-      return playTrack(command.trackId);
-    case 'pause':
-      return pauseTrack(command.trackId);
+    case 'play': {
+      const fresh = liveCount() === 0;
+      if (!playTrack(command.trackId)) return false;
+      // From silence, this channel starts a new set for Resume.
+      if (fresh ? selectOnly(command.trackId) : setSelected(command.trackId, true)) selectionChanged();
+      return true;
+    }
+    case 'pause': {
+      const others = othersPlaying(command.trackId);
+      if (!pauseTrack(command.trackId)) return false;
+      // Paused while the mix plays on: no longer part of what Resume plays.
+      if (others && setSelected(command.trackId, false)) selectionChanged();
+      return true;
+    }
     case 'play_all':
       return playAll();
     case 'pause_all':
       return pauseAll();
+    case 'resume':
+      return resumeSelected();
+    case 'select':
+      if (!playlistManager.getTrack(command.trackId)) return false;
+      if (setSelected(command.trackId, command.on === true)) selectionChanged();
+      return true;
     case 'focus':
       if (!playlistManager.getTrack(command.trackId)) return false;
       setFocus(command.trackId);
@@ -870,8 +996,12 @@ function runCommand(command: Command): boolean {
       return true;
     case 'seek':
       return seekTrack(command.trackId, command.time);
-    case 'stop':
-      return stopTrack(command.trackId);
+    case 'stop': {
+      const others = othersPlaying(command.trackId) && playlistManager.getTrack(command.trackId)?.state === 'playing';
+      if (!stopTrack(command.trackId)) return false;
+      if (others && setSelected(command.trackId, false)) selectionChanged();
+      return true;
+    }
     case 'volume':
       if (!playlistManager.getTrack(command.trackId)) return false;
       setVolume(command.trackId, Math.min(1, Math.max(0, command.volume)));
@@ -887,8 +1017,13 @@ function runCommand(command: Command): boolean {
     case 'relink':
       return reloadTrack(command.trackId, command.url);
     case 'load_mix':
-      return loadMix(command.urls, command.name, command.mode);
+      return loadMix(command.urls, command.name, command.mode, command.resume);
   }
+}
+
+/** Whether any channel other than this one is playing. */
+function othersPlaying(id: TrackId): boolean {
+  return playlistManager.getTracks().some((t) => t.id !== id && t.state === 'playing');
 }
 
 /** Play or pause a channel, from what this device shows (UI helper). */
@@ -907,7 +1042,7 @@ function setVolume(id: TrackId, volume: number): void {
   if (id === focusedId) renderVolume();
 }
 
-function loadTracksFromUrls(urls: string[], mode: 'replace' | 'append'): void {
+function loadTracksFromUrls(urls: string[], mode: 'replace' | 'append', resume?: string[]): void {
   if (mode === 'replace') {
     playlistManager.clearTracks();
     openDrawers.clear();
@@ -915,18 +1050,24 @@ function loadTracksFromUrls(urls: string[], mode: 'replace' | 'append'): void {
     focusedId = null;
   }
   for (const url of urls) addTrackFromUrl(url);
+  if (resume) {
+    // A saved mix: mark the channels played last and start the list with them.
+    applyResumeUrls(resume);
+    playlistManager.sortSelectedFirst();
+    focusedId = playlistManager.getTracks()[0]?.id ?? null;
+  }
   renderAll(true);
 }
 
 /** Load a mix, asking to replace or add when channels are open. False if cancelled. */
-async function handleLoadPlaylist(urls: string[], name: string | null): Promise<boolean> {
+async function handleLoadPlaylist(urls: string[], name: string | null, resume?: string[]): Promise<boolean> {
   const open = playlistManager.getTracks().length;
-  if (open === 0) return dispatch({ type: 'load_mix', urls, name, mode: 'replace' });
+  if (open === 0) return dispatch({ type: 'load_mix', urls, name, mode: 'replace', resume });
   const choice = await showReplaceAppendModal(
     `This mix has ${urls.length} channel${urls.length === 1 ? '' : 's'}. Replace the ${open} you have open, or add them to the current mix?`
   );
   if (choice === 'cancel') return false;
-  return dispatch({ type: 'load_mix', urls, name, mode: choice });
+  return dispatch({ type: 'load_mix', urls, name, mode: choice, resume: choice === 'replace' ? resume : undefined });
 }
 
 /** Briefly swap a button's label; a second flash restarts it, never sticks. */
@@ -970,6 +1111,16 @@ function initializeEventListeners(): void {
   globalPlayPauseButton.addEventListener('click', () => {
     dispatch({ type: playlistManager.hasPlayingTracks() ? 'pause_all' : 'play_all' });
   });
+  resumeButton.addEventListener('click', () => dispatch({ type: 'resume' }));
+  // Coming back to the app with nothing playing: the channels played last on top.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      if (liveCount() === 0) sortResumeFirst();
+    } else if (resumeSaveTimer) {
+      saveResumeNow();
+    }
+  });
+  window.addEventListener('pagehide', () => resumeSaveTimer && saveResumeNow());
 
   loopSwitch.addEventListener('click', () => {
     const track = focusedTrack();
@@ -994,7 +1145,7 @@ function initializeEventListeners(): void {
     const urls = playlistManager.getTrackUrls();
     if (urls.length === 0) return showError(mixesMessage, 'Add a channel before saving a mix.');
     mixesMessage.textContent = '';
-    saveOrUpdatePlaylist(name, urls);
+    saveOrUpdatePlaylist(name, urls, resumeUrls());
     mixName = name;
     playlistNameInput.value = '';
     renderMixList();
@@ -1048,7 +1199,7 @@ function initializeEventListeners(): void {
     if (!button || !name) return;
     const playlist = getAllPlaylists().find((p) => p.name === name);
     if (button.dataset.mixAction === 'load' && playlist) {
-      await handleLoadPlaylist(playlist.urls, playlist.name);
+      await handleLoadPlaylist(playlist.urls, playlist.name, playlist.resume ?? []);
     } else if (button.dataset.mixAction === 'delete' && confirm(`Delete the mix "${name}"? This cannot be undone.`)) {
       deletePlaylist(name);
       if (mixName === name) mixName = null;
@@ -1064,6 +1215,10 @@ function initializeEventListeners(): void {
     if (!el || !id) return;
     if (el.dataset.action === 'focus') dispatch({ type: 'focus', trackId: id });
     else if (el.dataset.action === 'toggle') togglePlay(id);
+    else if (el.dataset.action === 'pick') {
+      const track = playlistManager.getTrack(id);
+      if (track) dispatch({ type: 'select', trackId: id, on: !track.selected });
+    }
     else if (el.dataset.action === 'drawer') {
       const open = !openDrawers.has(id);
       if (open) openDrawers.add(id);
@@ -1246,7 +1401,7 @@ const mcAutoplay = new Set<TrackId>();
 /** Every command run on this device goes through here (registered with src/commands.ts). */
 function runLocalCommand(command: Command): boolean {
   const ok = !!runCommand(command);
-  if (ok && (command.type === 'play' || command.type === 'play_all')) {
+  if (ok && (command.type === 'play' || command.type === 'play_all' || command.type === 'resume')) {
     maybeClaimMain();
     if (mcResumeIds.size) {
       mcResumeIds.clear();
@@ -1276,6 +1431,8 @@ interface MirroredTrack {
   duration?: number;
   volume: number;
   loop: boolean;
+  /** Marked for Resume (missing from devices without Resume: false). */
+  selected?: boolean;
 }
 
 interface RoomState {
@@ -1308,6 +1465,7 @@ function buildRoomState(): RoomState {
         duration: t.duration,
         volume: t.volume,
         loop: t.loop,
+        selected: t.selected,
       };
     }),
   };
@@ -1409,7 +1567,7 @@ function applyRoomState(raw: unknown, ageMs: number): void {
     mcBases.set(t.id, { t: t.currentTime, at: now - ageMs });
     const elapsed = t.state === 'playing' ? ageMs / 1000 : 0;
     const currentTime = t.duration ? Math.min(t.duration, t.currentTime + elapsed) : t.currentTime + elapsed;
-    return { ...t, currentTime, isMuted: false };
+    return { ...t, currentTime, isMuted: false, selected: t.selected === true };
   });
   playlistManager.replaceTracks(tracks);
   mixName = state.mixName;
@@ -1469,7 +1627,9 @@ function routeToMain(command: Command): boolean {
   if (command.type === 'focus') setFocus(command.trackId);
   else if (command.type === 'step') stepFocus(command.dir);
   else if (command.type === 'volume') setVolume(command.trackId, command.volume);
-  else if (command.type === 'seek') {
+  else if (command.type === 'select') {
+    if (setSelected(command.trackId, command.on)) renderStatus();
+  } else if (command.type === 'seek') {
     playlistManager.updateTrack(command.trackId, { currentTime: command.time });
     mcBases.set(command.trackId, { t: command.time, at: performance.now() });
     renderTime();
@@ -1694,7 +1854,13 @@ async function initialize(): Promise<void> {
   // This device's own last mix: restored here only, never sent to a main
   // device (a remote that connected quickly shows the main device's mix).
   if (lastPlaylist && lastPlaylist.urls.length > 0 && mcRole !== 'remote') {
-    runLocalCommand({ type: 'load_mix', urls: lastPlaylist.urls, name: lastPlaylist.name, mode: 'replace' });
+    runLocalCommand({
+      type: 'load_mix',
+      urls: lastPlaylist.urls,
+      name: lastPlaylist.name,
+      mode: 'replace',
+      resume: lastPlaylist.resume ?? [],
+    });
   }
 }
 

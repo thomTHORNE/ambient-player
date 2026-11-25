@@ -159,6 +159,7 @@ interface RoomState {
     duration?: number;
     volume: number;           // 0–1
     loop: boolean;
+    selected?: boolean;       // ticked for Resume (missing from older clients: false)
   }>;
 }
 ```
@@ -166,7 +167,7 @@ interface RoomState {
 **When it's sent.**
 
 - **On every change:** play or pause, volume, focus, add, remove, link
-  change, repeat. Changes inside one moment are debounced and sent together.
+  change, repeat, Resume ticks and the order they give the list. Changes inside one moment are debounced and sent together.
 - **Every 15 seconds while something plays:** so drift stays small.
 
 **Positions.** These aren't streamed four times a second. A remote advances
@@ -188,6 +189,8 @@ Every command carries an `id`; the main device answers with `ack` (or
 | --- | --- |
 | `play` / `pause` | `trackId` |
 | `play_all` / `pause_all` | none |
+| `resume` | none (plays the ticked channels) |
+| `select` | `trackId`, `on` (tick or untick for Resume) |
 | `focus` | `trackId` |
 | `step` | `dir: 1 \| -1` |
 | `seek` | `trackId`, `time` |
@@ -197,7 +200,7 @@ Every command carries an `id`; the main device answers with `ack` (or
 | `add` | `url` |
 | `remove` | `trackId` |
 | `relink` | `trackId`, `url` |
-| `load_mix` | `urls[]`, `name \| null`, `mode: 'replace' \| 'append'` |
+| `load_mix` | `urls[]`, `name \| null`, `mode: 'replace' \| 'append'`, `resume?: string[]` (a saved mix's ticked links; replace only) |
 
 The **replace-or-add question** is asked on the remote (the person holding
 it decides), and the answer is sent as `mode`.

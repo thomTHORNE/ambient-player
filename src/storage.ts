@@ -5,6 +5,11 @@
 export interface PersistedPlaylist {
   name: string;
   urls: string[];
+  /**
+   * The links of the channels marked for Resume (the ones last played).
+   * Missing in mixes saved before Resume existed.
+   */
+  resume?: string[];
 }
 
 export interface StoredData {
@@ -37,16 +42,30 @@ export function saveStoredData(data: StoredData): void {
 /**
  * Save or update a playlist
  */
-export function saveOrUpdatePlaylist(name: string, urls: string[]): void {
+export function saveOrUpdatePlaylist(name: string, urls: string[], resume: string[] = []): void {
   const data = loadStoredData();
   const existing = data.playlists.find(p => p.name === name);
   if (existing) {
     existing.urls = urls;
+    existing.resume = resume;
   } else {
-    data.playlists.push({ name, urls });
+    data.playlists.push({ name, urls, resume });
   }
   data.lastPlaylistName = name;
   saveStoredData(data);
+}
+
+/**
+ * Remember which channels of a saved mix Resume plays. Only updates a mix
+ * that is saved on this device; false when there is none by that name.
+ */
+export function saveMixResume(name: string, resume: string[]): boolean {
+  const data = loadStoredData();
+  const existing = data.playlists.find(p => p.name === name);
+  if (!existing) return false;
+  existing.resume = resume;
+  saveStoredData(data);
+  return true;
 }
 
 /**

@@ -92,6 +92,7 @@ export const icons = {
   volume: line('<path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
   source: line('<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/>'),
   bookmark: line('<path d="M18 20.5 12 16l-6 4.5V5.5A2 2 0 0 1 8 3.5h8a2 2 0 0 1 2 2z"/>'),
+  check: line('<path d="m5.5 12.5 4 4 9-9"/>'),
   hourglass: line('<path d="M6.5 3h11M6.5 21h11"/><path d="M7.5 3c0 5 9 5 9 9s-9 4-9 9M16.5 3c0 5-9 5-9 9s9 4 9 9"/>'),
 };
 
@@ -138,8 +139,9 @@ export function channelRowHtml(track: Track, index: number, focused: boolean, dr
   const id = esc(track.id);
 
   return `
-    <li class="ch is-${track.state}${focused ? ' is-focus' : ''}${drawerOpen ? ' is-open' : ''}" data-track-id="${id}">
+    <li class="ch is-${track.state}${focused ? ' is-focus' : ''}${drawerOpen ? ' is-open' : ''}${track.selected ? ' is-picked' : ''}" data-track-id="${id}">
       <div class="ch__main">
+        ${pickButtonHtml(track)}
         <button class="ch__focus" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Show ${title} in the player">
           ${thumb}
           <span class="ch__text">
@@ -178,6 +180,12 @@ export function channelRowHtml(track: Track, index: number, focused: boolean, dr
         </div>
       </div>
     </li>`;
+}
+
+/** The mark for Resume at the start of a row: ticked for the channels last played. */
+function pickButtonHtml(track: Track): string {
+  const title = esc(trackTitle(track));
+  return `<button class="ch__pick" type="button" data-action="pick" aria-pressed="${track.selected}" aria-label="Resume ${title}" title="${track.selected ? 'Resume plays this channel' : 'Add to Resume'}"><span class="ch__pick-box" aria-hidden="true">${icons.check}</span></button>`;
 }
 
 /** One number in the strip: jumps to that channel; marks playing and selected. */
@@ -225,6 +233,13 @@ export function patchChannelRow(li: HTMLElement, track: Track): void {
     const { label, tone } = stateInfo(track);
     state.textContent = label;
     state.className = `ch__state tone-${tone}`;
+  }
+
+  li.classList.toggle('is-picked', track.selected);
+  const pick = li.querySelector<HTMLButtonElement>('.ch__pick');
+  if (pick && pick.getAttribute('aria-pressed') !== String(track.selected)) {
+    pick.setAttribute('aria-pressed', String(track.selected));
+    pick.title = track.selected ? 'Resume plays this channel' : 'Add to Resume';
   }
 
   const toggle = li.querySelector<HTMLButtonElement>('.ch__toggle');

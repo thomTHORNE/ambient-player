@@ -58,7 +58,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 
 | Piece | What it holds |
 | --- | --- |
-| `playlistManager` | The tracks: URL, video ID, metadata, state (`loading`, `playing`, `paused`, `error`), time, duration, volume, loop. |
+| `playlistManager` | The tracks: URL, video ID, metadata, state (`loading`, `playing`, `paused`, `error`), time, duration, volume, loop, and `selected` (ticked for Resume). |
 | `focusedId` | The channel on the main display; the deck acts on it. |
 | `mixName` | The saved mix's name, if any. |
 | `openDrawers` | Which channel rows have their settings drawer open. |
@@ -67,8 +67,8 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 
 - **dispatch():** every change to playback or the mix goes through
   `dispatch()` in `commands.ts` as a `Command`. The commands are play, pause,
-  play all, pause all, focus, step, seek, stop, volume, repeat, add, remove,
-  change link and load mix.
+  play all, pause all, resume, select (tick for Resume), focus, step, seek,
+  stop, volume, repeat, add, remove, change link and load mix.
 - **Where they run:** `runCommand()` in `main.ts` applies them on this
   device. Remote control will add a route that sends them to the main device
   instead (see `docs/remote-control-plan.md`).
@@ -78,6 +78,22 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 - **Not commands:** purely local actions, such as a row's drawer, the remove
   confirmation, saving mixes on this device, share links, and the layout,
   scale and screen settings.
+
+**Resume.** Each track's `selected` flag is what Resume plays (the
+section "Resume: the channels played last" in `main.ts`):
+
+- **Following playback:** a channel that starts playing is ticked (in
+  `onTrackState`, so autoplay and handovers count too). A `play` command
+  while nothing plays unticks the rest; a `pause` or `stop` while other
+  channels play unticks that one. Pause all changes nothing, so the ticks
+  are exactly what was playing.
+- **Order:** `sortSelectedFirst()` moves the ticked channels to the top,
+  each group keeping its order. It runs on Pause all, Resume, loading a
+  saved mix, and `visibilitychange` with nothing playing; never on a row
+  tap. Only the device that plays sorts; remotes take the order from the
+  snapshot.
+- **Kept:** in the room snapshot (`selected` on each track), and as the
+  saved mix's `resume` links on this device, written shortly after a change.
 
 **Rendering.**
 
@@ -488,7 +504,7 @@ inline script in `index.html` applies it before the first paint.
 
 | Store | Shape |
 | --- | --- |
-| `localStorage["yt_audio_playlists"]` | `{ playlists: [{ name, urls[] }], lastPlaylistName? }`. Saving a mix makes it the last one; it reopens on the next visit. An unsaved mix is not kept. |
+| `localStorage["yt_audio_playlists"]` | `{ playlists: [{ name, urls[], resume?[] }], lastPlaylistName? }`. Saving a mix makes it the last one; it reopens on the next visit. An unsaved mix is not kept. `resume` holds the links ticked for Resume; it is updated by itself while that mix is open, and the ticked channels open at the top. Mixes saved before Resume have none. |
 | `localStorage["ambient-player:ui-scale"]` | The UI scale (0.7–1.3), removed at 100%. |
 | `localStorage["ambient-player:layout"]` | The Layout setting per screen: `{ "<min>x<max>": "stacked" }`. Auto removes the screen's entry. |
 | `localStorage["ambient-player:room"]` | The paired room: `{ roomId, secret }`. |

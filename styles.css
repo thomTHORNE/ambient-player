@@ -601,6 +601,17 @@ input[type="range"] {
   gap: 10px;
 }
 
+/* Resume, Play all and the count: on a narrow panel they drop below the
+   title rather than run past the edge. */
+.channels .panel__head {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.channels .panel__tools {
+  margin-left: auto;
+}
+
 .panel__count {
   min-width: 26px;
   padding: 1px 7px;
@@ -2008,6 +2019,52 @@ input[type="range"] {
   gap: 10px;
 }
 
+/* The mark for Resume: a small square, ticked for the channels played last. */
+.ch__pick {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 40px;
+  margin: 0 -2px 0 -4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+}
+
+.ch__pick-box {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  transition: background-color 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease);
+}
+
+.ch__pick-box svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.2;
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+
+.ch__pick:hover .ch__pick-box {
+  border-color: var(--text-2);
+}
+
+.ch__pick[aria-pressed="true"] .ch__pick-box {
+  border-color: var(--accent);
+  background: var(--accent-fill);
+  color: var(--accent);
+}
+
+.ch__pick[aria-pressed="true"] .ch__pick-box svg {
+  opacity: 1;
+}
+
 .ch__focus {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
@@ -2130,7 +2187,8 @@ input[type="range"] {
   display: grid;
   gap: 10px;
   margin-top: 8px;
-  padding: 10px 0 2px 76px;
+  /* Lined up with the title: the mark, the thumbnail and their gaps. */
+  padding: 10px 0 2px 102px;
   border-top: 1px dashed rgba(255, 255, 255, 0.12);
   animation: fade-in 160ms var(--ease);
 }
@@ -3419,6 +3477,29 @@ html[data-merged="true"] .thumbs {
   }
 }
 
+/* Narrow phones: a smaller thumbnail leaves the title room beside the
+   Resume mark; on the narrowest the title takes the thumbnail's place. */
+@media (max-width: 360px) {
+  .ch__focus {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .ch__thumb {
+    width: 40px;
+  }
+}
+
+@media (max-width: 330px) {
+  .ch__focus {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ch__thumb {
+    display: none;
+  }
+}
+
 @media (pointer: coarse) {
   .icon-btn,
   .btn--small {
@@ -3429,6 +3510,13 @@ html[data-merged="true"] .thumbs {
   .round-btn,
   .vol-toggle {
     height: var(--tap);
+  }
+
+  /* A wider hit area for the Resume mark; it still looks the same size. */
+  .ch__pick {
+    width: 30px;
+    height: var(--tap);
+    margin: 0 -6px 0 -8px;
   }
 
   .strip {

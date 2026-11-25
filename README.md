@@ -14,6 +14,20 @@ API); only the sound and the artwork are shown.
 
 - **Many channels at once.** Each one plays, pauses and sets its volume on
   its own. **Play all / Pause all** sits in the Channels panel header.
+- **Resume where you left off.** The channels that were playing last are
+  ticked in the channel list. **Pause all** moves them to the top, and
+  **Resume** in the Channels header plays only those, from where they
+  stopped.
+  - **What gets ticked:** a channel is ticked when it starts playing. Playing
+    one channel while nothing plays starts a new set; pausing one while
+    others play unticks it. Tap the square at the start of a row to tick or
+    untick it yourself.
+  - **When the list reorders:** on Pause all and Resume, when a mix loads,
+    and when you come back to the app with nothing playing. Never while you
+    tap a row, so rows don't jump under your finger.
+  - **Kept:** with the saved mix on this device, so the next visit opens
+    with the same channels ticked and on top. With remote control, the ticks
+    and order are part of the mix every paired device sees.
 - **Main display.** One channel at a time fills the screen with its artwork,
   title and channel name. The deck (previous, play, next, stop, timeline and
   volume) controls that channel. Tap the artwork to play or pause it.

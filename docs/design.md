@@ -82,7 +82,7 @@ The artwork's brackets sit inside the frame like a viewfinder.
 The panels are, in order:
 
 1. **Deck:** transport, timeline, channel volume.
-2. **Channels:** add a link, Play all / Pause all, the channel rows.
+2. **Channels:** add a link, Resume, Play all / Pause all, the channel rows.
 3. **Saved mixes, then mix status:** duration, repeat, layout, UI scale,
    share link.
 4. **Devices, then the screen effect:** pairing and the device list; the
@@ -122,6 +122,12 @@ changing the layout.
   control. Each row's own volume, its link and **Remove channel** sit behind
   the row's settings toggle, so scrolling a long list can't change them by
   accident.
+- **Rows don't move under a tap.** The list reorders (channels played last
+  to the top, for Resume) only on Pause all, Resume, loading a mix or
+  coming back to the app, never in response to a tap on a row.
+- **Resume ticks.** The square at the start of a row is ticked, in the
+  accent, for the channels Resume plays. On narrow phones the row thumbnail
+  shrinks (and below 330px goes) so the title keeps its room.
 - **Destructive actions confirm.** Removing a channel asks inline, in the
   danger colour. Deleting a mix asks in the browser's confirm dialog.
 

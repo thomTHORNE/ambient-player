@@ -50,6 +50,7 @@ import {
 import type { StateTone } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
 import { setupArtCrt, paintCrtThumbs, clearCrtThumbs, FX_CHANGE_EVENT } from './crt.js';
+import { setBackdrop } from './backdrop.js';
 import { setupScreenControl } from './screenFx.js';
 import { dispatch, setCommandRunner, setCommandRoute } from './commands.js';
 import { takeRelayOverride, takePairCodeFromLocation, pairCodeFromText } from './pairing.js';
@@ -128,7 +129,6 @@ const statusCode = $<HTMLElement>('statusCode');
 const statusLine = $<HTMLElement>('statusLine');
 const statDur = $<HTMLElement>('statDur');
 
-const backdropImg = $<HTMLImageElement>('backdropImg');
 const stage = $<HTMLElement>('stage');
 const art = $<HTMLElement>('art');
 const artImg = $<HTMLImageElement>('artImg');
@@ -496,13 +496,11 @@ function renderStage(changed: boolean): void {
     artImg.dataset.src = src;
     artImg.dataset.fallback = track?.meta?.thumbnailUrl || '';
     artImg.classList.remove('is-letterboxed');
-    backdropImg.classList.remove('is-letterboxed');
+    setBackdrop(src);
     if (src) {
       artImg.src = src;
-      backdropImg.src = src;
     } else {
       artImg.removeAttribute('src');
-      backdropImg.removeAttribute('src');
       setAccent(null);
       setArtShape(false);
     }
@@ -1123,9 +1121,8 @@ function initializeEventListeners(): void {
     const fallback = artImg.dataset.fallback;
     if (fallback && !artImg.classList.contains('is-letterboxed')) {
       artImg.classList.add('is-letterboxed');
-      backdropImg.classList.add('is-letterboxed');
       artImg.src = fallback;
-      backdropImg.src = fallback;
+      setBackdrop(fallback, true);
       return true;
     }
     return false;

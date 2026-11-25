@@ -19,6 +19,7 @@ const files = [
   'ui.js',
   'accent.js',
   'crt.js',
+  'backdrop.js',
   'screenFx.js',
   'screen.js',
   'commands.js',

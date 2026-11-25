@@ -60,7 +60,8 @@ The artwork's brackets sit inside the frame like a viewfinder.
 
 1. **The artwork.** It is blurred, desaturated and dimmed, and oversized so
    its edges never show. It drifts slowly (a gentle rotate, skew and zoom
-   over 45 s).
+   over 45 s), at 10 frames a second, which looks the same as 60 at that
+   speed and blur.
 2. **Grain.**
 3. **A still tactical grid** (`--grid`): lines every 128px, dots every 32px
    and crosses where the lines meet, under a vignette.

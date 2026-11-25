@@ -38,6 +38,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `youtubePlayer.ts` | Wraps the YouTube IFrame API: waits for it to load, creates hidden players, reports state, metadata and errors through callbacks, and parses YouTube URLs. |
 | `accent.ts` | Samples the artwork on a canvas for the accent colour, and detects square (album) art. |
 | `crt.ts` | The screen effect: renders the artwork and thumbnails as phosphor cells on a canvas. |
+| `backdrop.ts` | The backdrop: blurs and grades the artwork once onto a small canvas, and steps the drift at 10 frames a second (see Backdrop cost). |
 | `screenFx.ts` | The Screen effect panel: style dial, Mix and fine-tune, saved on the device. |
 | `commands.ts` | The command layer: every change to playback or the mix as a `Command`, applied through `dispatch()`. |
 | `pairing.ts` | This device's ID and name, the room it's paired into, the relay's address and its HTTP calls, pairing links. |
@@ -276,6 +277,23 @@ section.
   the sides; on horizontal screens it is zoomed to fill the 4:3 frame.
 - **Cache.** Results are cached per image URL, so switching back to a channel
   doesn't sample again.
+
+## Backdrop cost (`backdrop.ts`)
+
+The drift is the only thing that animates all the time, and every frame of
+it redraws the whole screen, including each `backdrop-filter` panel over it.
+Two things keep that cheap:
+
+- **No CSS filter on the moving layer.** The artwork is blurred, desaturated
+  and dimmed once, onto a canvas about 320px wide, when the picture or the
+  window's size changes. A `filter: blur()` on the drifting element would be
+  redone by the GPU on every frame, on a surface larger than the screen.
+- **10 frames a second.** The CSS animation is paused and its clock is
+  advanced every 100 ms. The keyframes and easing stay in `styles.css`.
+
+Measured in headless Chromium at 1920×1080 with software GL, the GPU
+process went from a full core (dropping frames) to about 70% of one. On a
+real GPU both numbers are far smaller, but the ratio is what matters.
 
 ## Layout (`layout.ts` with `styles.css`)
 

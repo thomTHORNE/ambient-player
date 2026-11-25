@@ -220,7 +220,9 @@ svg {
 }
 
 /* The artwork drifts very slowly: a gentle rotate, skew and zoom. It is
-   oversized so its edges never show; the grid above it stays still. */
+   oversized so its edges never show; the grid above it stays still.
+   It is a small canvas, already blurred and dimmed by src/backdrop.ts: no
+   CSS filter here, which the GPU would redo on every frame of the drift. */
 .backdrop__img {
   --bd-scale: 1.45;
   position: absolute;
@@ -229,7 +231,7 @@ svg {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: blur(26px) saturate(0.7) brightness(0.6);
+  opacity: 0;
   transform: scale(var(--bd-scale));
   transform-origin: 50% 50%;
   will-change: transform;
@@ -257,8 +259,8 @@ svg {
   }
 }
 
-.backdrop__img:not([src]) {
-  opacity: 0;
+.backdrop__img.is-ready {
+  opacity: 1;
 }
 
 .backdrop::before {

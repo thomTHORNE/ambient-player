@@ -3,6 +3,7 @@
  * This allows the app to run without a server (no CORS issues)
  */
 
+import { execFileSync } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -88,3 +89,42 @@ fs.writeFileSync('./index.html', html);
 
 console.log(`✓ Stamped index.html: ${stamped.join(', ')}, app.js?v=${jsVersion}`);
 
+
+// Version: every change to the app gets the next patch number. The build
+// counts as a change when the app's files differ from the last commit; then
+// the version is that commit's version plus one patch. Rebuilding the same
+// change keeps the same number, and a build of an unchanged commit keeps its
+// own. To start a new minor or major series, set it in package.json by hand:
+// a version higher than the last commit's is kept as it is.
+const APP_PATHS = ['src', 'index.html', 'styles.css', 'skins', 'assets', 'manifest.webmanifest', 'bundle.js'];
+const git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+const parse = (v) => (/^(\d+)\.(\d+)\.(\d+)$/.exec(v || '') || []).slice(1).map(Number);
+const newer = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+
+const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+let version = pkg.version;
+try {
+  const committed = JSON.parse(git('show', 'HEAD:package.json')).version;
+  let changed = false;
+  try {
+    git('diff', '--quiet', 'HEAD', '--', ...APP_PATHS);
+  } catch {
+    changed = true;
+  }
+  const base = parse(committed);
+  const own = parse(pkg.version);
+  const ahead = own.length > 0 && base.length > 0 && newer(own, base) > 0;
+  if (base.length && changed && !ahead) version = `${base[0]}.${base[1]}.${base[2] + 1}`;
+  // Behind the last commit (an older package.json): catch up.
+  else if (base.length && !ahead && !changed) version = committed;
+} catch {
+  // No git here (a downloaded copy): keep package.json's version.
+}
+if (version !== pkg.version) {
+  pkg.version = version;
+  fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
+}
+const page = fs.readFileSync('./index.html', 'utf8');
+const versioned = page.replace(/(<span class="app-version"[^>]*>)v[^<]*(<\/span>)/g, `$1v${version}$2`);
+if (versioned !== page) fs.writeFileSync('./index.html', versioned);
+console.log(`✓ Version ${version}`);

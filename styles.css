@@ -579,6 +579,15 @@ input[type="range"] {
   color: var(--text);
 }
 
+/* The app's version, at the right of the Settings heading. */
+.app-version {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
 /* A small square marker, like a map key. */
 .panel__title::before {
   content: "";

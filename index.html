@@ -72,10 +72,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=4254e5ab9d">
+  <link rel="stylesheet" href="styles.css?v=6b9b44b5e2">
   <!-- Skins (src/skin.ts): each one is scoped to html[data-skin], so loading
        them all keeps switching instant. -->
-  <link rel="stylesheet" href="skins/xp.css?v=b069d940b5">
+  <link rel="stylesheet" href="skins/xp.css?v=0f9b5fe13d">
 </head>
 
 <body>
@@ -305,6 +305,8 @@
           <section class="panel settings" aria-labelledby="settingsTitle">
             <header class="panel__head">
               <h2 id="settingsTitle" class="panel__title">Settings</h2>
+              <!-- The app's version, stamped by bundle.js. -->
+              <span class="app-version" title="App version">v1.0.1</span>
             </header>
             <div class="tabs" role="tablist" aria-label="Settings" data-tabs="settings">
               <button class="tab" type="button" role="tab" id="settingsTabDevices" aria-controls="devicesPanel" aria-selected="true">Devices</button>
@@ -397,6 +399,8 @@
             <section class="panel skins tabpanel" id="skinsPanel" aria-labelledby="skinsTitle">
               <header class="panel__head">
                 <h2 id="skinsTitle" class="panel__title">Skins</h2>
+                <!-- Windows XP shows the version here (the Settings head stays out). -->
+                <span class="app-version" title="App version">v1.0.1</span>
               </header>
               <p class="skins__intro">The look of the player on this device. Each device keeps its own, so a remote can wear a different skin from the player it controls.</p>
               <div class="skin-groups">

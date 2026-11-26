@@ -3158,3 +3158,13 @@
 [data-skin="xp"] .ch.is-focus.is-playing .ch__clock {
   color: #FFFFFF;
 }
+
+/* The version, at the right of the Skins group's heading (before its toggle). */
+[data-skin="xp"] .app-version {
+  margin-left: auto;
+  font-family: var(--xp-font);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: inherit;
+  opacity: 0.75;
+}

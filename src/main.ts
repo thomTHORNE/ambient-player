@@ -75,6 +75,7 @@ import type { Command } from './commands.js';
 import { setupLayout } from './layout.js';
 import { setupSkinPanel, SKIN_EVENT } from './skin.js';
 import { setupSkinLayout } from './skinLayout.js';
+import { setupTabs, showTab } from './tabs.js';
 import { storedScale, applyScale, appZoom, SCALE_MIN, SCALE_MAX, SCALE_STEP } from './scale.js';
 import { setupStageResize } from './resize.js';
 import { layoutChoice, setLayoutChoice, LAYOUT_CHOICE_EVENT } from './layoutPref.js';
@@ -1821,17 +1822,24 @@ async function setupRemoteControl(): Promise<void> {
   setupDevicesPanel();
   setupReconnectTriggers();
   // A pairing link opened while the app is already open on this page.
+  // Pairing shows its result in the Devices tab: bring it forward.
   window.addEventListener('hashchange', () => {
     const code = takePairCodeFromLocation();
-    if (code) void joinWithCode(code);
+    if (code) {
+      showTab('settingsTabDevices');
+      void joinWithCode(code);
+    }
   });
   const pairCode = takePairCodeFromLocation();
+  if (pairCode) showTab('settingsTabDevices');
   if (pairCode) await joinWithCode(pairCode);
   else connectRoom();
 }
 
 async function initialize(): Promise<void> {
   setCommandRunner(runLocalCommand);
+  // Before remote control: a pairing link opens the Devices tab.
+  setupTabs();
   void setupRemoteControl();
   setupScreenTakeover();
   setupScreenEffect();

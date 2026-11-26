@@ -3064,6 +3064,119 @@ function setupSkinPanel() {
 }
 
 
+// ===== tabs.js =====
+/**
+ * Tabs: a tab list that shows one of its panels at a time (the Settings
+ * page: Devices, Screen effect, Skins, Layout).
+ *
+ * Markup (index.html): a [role="tablist"][data-tabs="<name>"] of
+ * [role="tab"] buttons, each with aria-controls naming a .tabpanel that is
+ * a sibling of the tab list. styles.css hides the panels that aren't
+ * .is-active, only while they sit in the tab list's parent, so a skin that
+ * moves them elsewhere (Windows XP's task pane, src/skinLayout.ts) shows
+ * them all; syncTabs() then drops their tab panel semantics, and puts them
+ * back when the panels return.
+ *
+ * Keyboard: Left / Right move between tabs (and show them), Home / End go
+ * to the first and last. The chosen tab is kept on this device.
+ */
+const TABS_KEY = (name) => `ambient-player:tabs:${name}`;
+const tabSets = [];
+function tabPanel(tab) {
+    const id = tab.getAttribute('aria-controls');
+    return id ? document.getElementById(id) : null;
+}
+function selectTab(set, chosen, save = true) {
+    set.tabs.forEach((tab) => {
+        const on = tab === chosen;
+        tab.setAttribute('aria-selected', String(on));
+        tab.tabIndex = on ? 0 : -1;
+        tabPanel(tab)?.classList.toggle('is-active', on);
+    });
+    if (save) {
+        try {
+            localStorage.setItem(TABS_KEY(set.name), chosen.id);
+        }
+        catch {
+            // Not kept; it still shows for this visit.
+        }
+    }
+}
+/**
+ * Tab panel semantics for the panels that sit with their tab list; none for
+ * those a skin has moved elsewhere (their own heading labels them then).
+ */
+function syncTabs() {
+    for (const set of tabSets) {
+        const host = set.list.parentElement;
+        for (const tab of set.tabs) {
+            const panel = tabPanel(tab);
+            if (!panel)
+                continue;
+            if (panel.dataset.ownLabel === undefined)
+                panel.dataset.ownLabel = panel.getAttribute('aria-labelledby') ?? '';
+            if (panel.parentElement === host) {
+                panel.setAttribute('role', 'tabpanel');
+                panel.setAttribute('aria-labelledby', tab.id);
+            }
+            else {
+                panel.removeAttribute('role');
+                if (panel.dataset.ownLabel)
+                    panel.setAttribute('aria-labelledby', panel.dataset.ownLabel);
+                else
+                    panel.removeAttribute('aria-labelledby');
+            }
+        }
+    }
+}
+function setupTabs() {
+    document.querySelectorAll('[role="tablist"][data-tabs]').forEach((list) => {
+        const set = {
+            name: list.dataset.tabs,
+            list,
+            tabs: Array.from(list.querySelectorAll('[role="tab"]')),
+        };
+        if (!set.tabs.length)
+            return;
+        tabSets.push(set);
+        set.tabs.forEach((tab) => tab.addEventListener('click', () => selectTab(set, tab)));
+        list.addEventListener('keydown', (e) => {
+            const i = set.tabs.indexOf(document.activeElement);
+            if (i < 0)
+                return;
+            const last = set.tabs.length - 1;
+            const next = e.key === 'ArrowRight' ? (i + 1) % set.tabs.length
+                : e.key === 'ArrowLeft' ? (i - 1 + set.tabs.length) % set.tabs.length
+                    : e.key === 'Home' ? 0
+                        : e.key === 'End' ? last
+                            : -1;
+            if (next < 0)
+                return;
+            e.preventDefault();
+            selectTab(set, set.tabs[next]);
+            set.tabs[next].focus();
+        });
+        let saved = null;
+        try {
+            saved = localStorage.getItem(TABS_KEY(set.name));
+        }
+        catch {
+            // The first tab, then.
+        }
+        selectTab(set, set.tabs.find((t) => t.id === saved) ?? set.tabs[0], false);
+    });
+    syncTabs();
+}
+/** Show a tab by its id (for links into a section). */
+function showTab(tabId) {
+    for (const set of tabSets) {
+        const tab = set.tabs.find((t) => t.id === tabId);
+        if (tab)
+            selectTab(set, tab);
+    }
+}
+
+
 // ===== skinLayout.js =====
 /**
  * Window layout for skins that arrange the page as a desktop window
@@ -3075,8 +3188,9 @@ function setupSkinPanel() {
  *
  *   toolbar     the deck's transport buttons, the repeat switch, the volume
  *   task pane   "Mix tasks" (links to the main actions), then the saved
- *               mixes, mix status, devices, screen effect and skins panels,
- *               each a group that collapses (kept on this device)
+ *               mixes and mix status, and the Settings page's sections
+ *               (devices, screen effect, layout, skins), each a group that
+ *               collapses (kept on this device)
  *   main view   the stage (artwork beside "Now playing", the timeline and
  *               "Playing now", the thumbnails in a box of their own) and
  *               the channel list
@@ -3085,6 +3199,7 @@ function setupSkinPanel() {
  * collapsing stage. skins/xp.css lays it all out, wide (toolbar on top, the
  * task pane beside the main view) or narrow (one column, as on a phone).
  */
+
 
 const slById = (id) => document.getElementById(id);
 /** Where each moved node lives in the base layout (a comment at that spot). */
@@ -3230,11 +3345,12 @@ function slArrange() {
         playing.hidden = false;
     slMove(document.querySelector('.panel.channels'), main);
     // Task pane: after Mix tasks, the other panels as groups.
-    for (const selector of ['.panel.mixes', '.panel.status', '.panel.devices', '.panel.screen', '.panel.skins']) {
+    for (const selector of ['.panel.mixes', '.panel.status', '.panel.devices', '.panel.screen', '.panel.display', '.panel.skins']) {
         slMove(document.querySelector(selector), pane);
     }
     pane.querySelectorAll(':scope > .panel').forEach(slPrepareGroup);
     shell.hidden = false;
+    syncTabs();
 }
 function slUnarrange() {
     const shell = slById('xpShell');
@@ -3244,6 +3360,7 @@ function slUnarrange() {
     if (playing)
         playing.hidden = true;
     slRestoreAll();
+    syncTabs();
 }
 function slApply() {
     if (slArranged())
@@ -3269,7 +3386,7 @@ function setupSkinLayout() {
  * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
  * pinned to the top of the scroller and shrinks as you scroll, from its full
  * size down to a minimum height; after that the panels (deck, channels,
- * mixes + status, devices + screen effect, skins) scroll up under it and snap one at a time, like the
+ * library: saved mixes + mix status, settings) scroll up under it and snap one at a time, like the
  * horizontal layout's pages.
  *
  * Horizontal screens (landscape): the stage stays still on the left and the
@@ -3400,7 +3517,7 @@ function portraitTop(index) {
     const pinned = lStageWrap.offsetHeight - range;
     return Math.max(0, Math.round(top - pinned));
 }
-/** Show a panel: 0 deck, 1 channels, 2 saved mixes and status, 3 devices and screen effect, 4 skins. */
+/** Show a panel: 0 deck, 1 channels, 2 library (saved mixes and mix status), 3 settings. */
 function goToSlide(index) {
     const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
     if (isStacked()) {
@@ -3785,6 +3902,7 @@ function setupStageResize() {
  * "focused": it fills the centre of the screen and the deck controls it.
  * Every channel stays playable from the channel list.
  */
+
 
 
 
@@ -5522,12 +5640,17 @@ async function setupRemoteControl() {
     setupDevicesPanel();
     setupReconnectTriggers();
     // A pairing link opened while the app is already open on this page.
+    // Pairing shows its result in the Devices tab: bring it forward.
     window.addEventListener('hashchange', () => {
         const code = takePairCodeFromLocation();
-        if (code)
+        if (code) {
+            showTab('settingsTabDevices');
             void joinWithCode(code);
+        }
     });
     const pairCode = takePairCodeFromLocation();
+    if (pairCode)
+        showTab('settingsTabDevices');
     if (pairCode)
         await joinWithCode(pairCode);
     else
@@ -5535,6 +5658,8 @@ async function setupRemoteControl() {
 }
 async function initialize() {
     setCommandRunner(runLocalCommand);
+    // Before remote control: a pairing link opens the Devices tab.
+    setupTabs();
     void setupRemoteControl();
     setupScreenTakeover();
     setupScreenEffect();

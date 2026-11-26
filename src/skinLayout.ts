@@ -8,8 +8,9 @@
  *
  *   toolbar     the deck's transport buttons, the repeat switch, the volume
  *   task pane   "Mix tasks" (links to the main actions), then the saved
- *               mixes, mix status, devices, screen effect and skins panels,
- *               each a group that collapses (kept on this device)
+ *               mixes and mix status, and the Settings page's sections
+ *               (devices, screen effect, layout, skins), each a group that
+ *               collapses (kept on this device)
  *   main view   the stage (artwork beside "Now playing", the timeline and
  *               "Playing now", the thumbnails in a box of their own) and
  *               the channel list
@@ -20,6 +21,7 @@
  */
 
 import { SKIN_EVENT } from './skin.js';
+import { syncTabs } from './tabs.js';
 
 const slById = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
 
@@ -171,12 +173,13 @@ function slArrange(): void {
   slMove(document.querySelector('.panel.channels'), main);
 
   // Task pane: after Mix tasks, the other panels as groups.
-  for (const selector of ['.panel.mixes', '.panel.status', '.panel.devices', '.panel.screen', '.panel.skins']) {
+  for (const selector of ['.panel.mixes', '.panel.status', '.panel.devices', '.panel.screen', '.panel.display', '.panel.skins']) {
     slMove(document.querySelector(selector), pane);
   }
   pane.querySelectorAll<HTMLElement>(':scope > .panel').forEach(slPrepareGroup);
 
   shell.hidden = false;
+  syncTabs();
 }
 
 function slUnarrange(): void {
@@ -185,6 +188,7 @@ function slUnarrange(): void {
   const playing = slById('xpPlaying');
   if (playing) playing.hidden = true;
   slRestoreAll();
+  syncTabs();
 }
 
 function slApply(): void {

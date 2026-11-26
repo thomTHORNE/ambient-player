@@ -51,7 +51,8 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `layoutPref.ts` | The Layout setting (Auto or Stacked), kept per screen. |
 | `resize.ts` | The divider that resizes the artwork column on large screens with a mouse. |
 | `storage.ts` | Saved mixes in `localStorage` under `yt_audio_playlists`. |
-| `skin.ts` | Skins: the list of skins, the Skins panel, applying and saving the choice on this device, and `ambient:skin-change`. |
+| `skin.ts` | Skins: the list of skins, the Skins tab, applying and saving the choice on this device, and `ambient:skin-change`. |
+| `tabs.ts` | Tabs: the Settings page's tab list, one section at a time, keyboard, the chosen tab kept per device; tab panel semantics only while the sections sit with their tab list. |
 | `skinLayout.ts` | The window layout for skins that arrange the page themselves (Windows XP): moves the panels into the window and back, the task pane's collapsible groups, and the Mix tasks links. |
 | `shareLinks.ts` | Encodes a mix's URLs into `#pl=<base64url JSON>`, reads it back from the page URL, and finds a mix in pasted text for Import. |
 
@@ -158,8 +159,10 @@ instant and never touches playback.
   - **Toolbar:** the deck's transport, the repeat switch and the volume.
   - **Main view:** the stage, with the timeline under Now playing and the
     thumbnails in `#xpPlaying`, then the channels panel.
-  - **Task pane:** Mix tasks (static markup), then the saved mixes, mix
-    status, devices, screen effect and skins panels as groups.
+  - **Task pane:** Mix tasks (static markup), then the saved mixes and mix
+    status, and the Settings page's sections (devices, screen effect,
+    layout, skins) as groups. Out of their tab list the sections show at
+    once, and `tabs.ts` drops their tab panel semantics until they return.
   - **Moving back:** nodes are moved, never copied, so listeners and ids
     stay; a comment marks each one's place, and leaving the skin puts them
     back. `layout.ts` stands aside while arranged (no pages, merge moves or
@@ -186,7 +189,7 @@ instant and never touches playback.
   - **Icons:** from the kit's icon sheet, in `assets/skins/xp/icons` at 16
     and 32px (`image-set()` with a plain `url()` fallback).
 - **Adding a skin:** add it to `SKINS` in `skin.ts`, a radio button to the
-  Skins panel in `index.html`, the id to the inline script, and a
+  Skins tab in `index.html`, the id to the inline script, and a
   stylesheet under `skins/` scoped to its `data-skin`, linked in
   `index.html`.
 
@@ -428,7 +431,7 @@ the screen directly.
 **Stacked (vertical) layout.**
 
 - **One scroller.** `#scroller` scrolls everything: the stage (artwork,
-  numbered strip, title) and the five panels below it.
+  numbered strip, title) and the four pages below it.
 - **Collapsing stage.** The stage is `position: sticky` with a fixed height
   and a negative `top` equal to its collapse range, so the content under it
   never moves out of step. While scrolling through that range only two
@@ -575,6 +578,7 @@ inline script in `index.html` applies it before the first paint.
 | `localStorage["ambient-player:relay"]` | Development only: a localhost relay address set with `?relay=`. |
 | `localStorage["ambient-player:screen"]` | The screen effect: `{ style, mix, tuned }` (style name, 0–1, overridden `--crt-*` values). |
 | `localStorage["ambient-player:skin"]` | The skin on this device: `xp`. Removed for Modern Warfare, the default. |
+| `localStorage["ambient-player:tabs:settings"]` | The Settings tab last opened on this device (its tab's id). |
 | `localStorage["ambient-player:xp-groups"]` | Windows XP's task pane: which groups are collapsed, `{ "<heading id>": true }`. Screen effect starts collapsed. |
 | `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
 | Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. **Import** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |

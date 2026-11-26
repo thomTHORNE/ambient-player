@@ -74,7 +74,7 @@ These change the plan; the recommended option is listed first.
 ## Pairing and rooms
 
 **Creating a room.** On the first device, open the new **Devices** section
-of the fourth panel and tap **Connect a device**. The app:
+of **Settings › Devices** and tap **Connect a device**. The app:
 
 1. asks the Worker to create a room and gets back a room ID and a room
    secret (128 random bits, base64url);
@@ -340,7 +340,7 @@ The relay's address is a constant in `remote.ts`, for example
   Laptop** with a small live dot. It turns to **Main device offline** with a
   **Play here** button when the main device is gone.
 - **On the main device:** the header says **Playing here · 2 remotes**.
-- **Devices section** in the fourth panel:
+- **Devices section** in **Settings › Devices**:
   - **Not paired:** **Connect a device** (shows the QR code and short code)
     and **Join with a code**.
   - **Paired:** the device list (name, role, online or last seen),

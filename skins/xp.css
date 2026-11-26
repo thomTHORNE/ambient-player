@@ -1875,8 +1875,8 @@
   margin-top: 10px;
 }
 
-/* Repeat lives on the toolbar now. */
-[data-skin="xp"] .xp-pane #repeatRow {
+/* Repeat lives on the toolbar: its label beside the timeline stays out. */
+[data-skin="xp"] .timeline__repeat {
   display: none;
 }
 

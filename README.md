@@ -12,6 +12,12 @@ API); only the sound and the artwork are shown.
 
 ## Features
 
+- **Pages.** Four, one swipe each (tap a pager bar to jump): **Deck**
+  (transport, timeline with repeat, volume), **Channels**, **Library**
+  (saved mixes, import, mix status and the share link) and **Settings**,
+  whose tabs hold Devices, Screen effect, Skins and Layout (layout and UI
+  scale). The tab you pick is kept per device. On large horizontal screens
+  the deck and channels share a page.
 - **Many channels at once.** Each one plays, pauses and sets its volume on
   its own. **Play all / Pause all** sits in the Channels panel header.
 - **Resume where you left off.** The channels that were playing last are
@@ -38,7 +44,7 @@ API); only the sound and the artwork are shown.
 - **Per-channel settings.** The volume button on a channel row opens its
   drawer: a volume slider, its YouTube link (paste a new one and press **Load
   link**) and **Remove channel**, which asks for confirmation first.
-- **Remote control.** Pair devices in the Devices panel (the fourth).
+- **Remote control.** Pair devices in **Settings › Devices**.
   - **Pairing:** **Connect a device** shows a QR code and a 6-character code.
     Scan or enter it on the other device.
   - **Main and remote:** the device that starts playing becomes the main
@@ -56,10 +62,10 @@ API); only the sound and the artwork are shown.
   See `docs/remote-control-plan.md`.
 - **Screen effect.** The cover art and the thumbnail strip are drawn as if
   on a CRT or LED wall: phosphor cells, colour fringe, glow. The Screen
-  effect panel (the fourth, under Devices) has a dial for the style (Slot mask, Hero,
+  effect tab (**Settings › Screen**) has a dial for the style (Slot mask, Hero,
   Close-up, LED wall, Photographed), a **Mix** slider from the plain picture
   to the full effect, and **Fine-tune** for every setting. Kept per device.
-- **Skins.** The Skins panel (the last one) changes the whole look, at any
+- **Skins.** **Settings › Skins** changes the whole look, at any
   time, without interrupting playback:
   - **Modern › Modern Warfare:** the tactical console (dark glass, corner
     brackets, the artwork's colour). The default.
@@ -90,10 +96,10 @@ API); only the sound and the artwork are shown.
   something plays there the screen stays awake. The button at the top right leaves or
   re-enters fullscreen. Installed from the home screen (*Add to Home screen* /
   *Install app*), it always opens fullscreen.
-- **UI scale.** The Status panel has a 70–130% setting for the whole
+- **UI scale.** **Settings › Layout** has a 70–130% setting for the whole
   interface, kept per device. The line under it shows the size the app lays
   out at and which layout that gives.
-- **Layout choice.** The Status panel's **Layout** setting picks **Auto**
+- **Layout choice.** The **Layout** setting (**Settings › Layout**) picks **Auto**
   (follow the screen) or **Stacked**, the vertical phone layout on any
   screen, just because you prefer it. It's remembered per screen, so Stacked
   on a Fold's cover display leaves the inner display on Auto.
@@ -108,7 +114,7 @@ API); only the sound and the artwork are shown.
 
 | Screen | Layout |
 | --- | --- |
-| Vertical (phones, a Fold's cover display) | Artwork at full width above the panels. The first swipe up shrinks it; after that each swipe moves one panel: deck, channels, saved mixes with status, devices with the screen effect, then skins. |
+| Vertical (phones, a Fold's cover display) | Artwork at full width above the panels. The first swipe up shrinks it; after that each swipe moves one panel: deck, channels, the library (saved mixes and mix status), then settings. |
 | Horizontal | The artwork and title in a column on the left; the panels page vertically on the right. |
 | Large horizontal (960 × 680 and up: a Fold's inner display, laptops) | A wider left column with bigger artwork and the thumbnail strip; the deck and the channel list share the first panel. |
 | Large horizontal with a mouse (1280 × 680 and up) | As above, with a draggable divider that sets the artwork column's width. |
@@ -183,7 +189,8 @@ src/
   layoutPref.ts       Layout setting (Auto or Stacked), kept per screen
   resize.ts           Draggable divider for the artwork column
   storage.ts          Saved mixes in localStorage
-  skin.ts             Skins: the list, the Skins panel, kept per device
+  skin.ts             Skins: the list, the Skins tab, kept per device
+  tabs.ts             Tabs (the Settings page): one section at a time
   skinLayout.ts       Window layout for skins that need one (Windows XP)
   shareLinks.ts       Encode, decode and import share links
 assets/               Favicon, app icons and the logo artwork

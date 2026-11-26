@@ -81,16 +81,23 @@ The artwork's brackets sit inside the frame like a viewfinder.
 
 The panels are, in order:
 
-1. **Deck:** transport, timeline, channel volume.
+1. **Deck:** transport, timeline (with the channel's repeat switch),
+   channel volume.
 2. **Channels:** add a link, Resume, Play all / Pause all, the channel rows.
-3. **Saved mixes, then mix status:** duration, repeat, layout, UI scale,
+3. **Library:** saved mixes and import, then mix status: duration and the
    share link.
-4. **Devices, then the screen effect:** pairing and the device list; the
-   style dial, Mix and fine-tune.
-5. **Skins:** the whole look, per device.
+4. **Settings:** one panel with tabs: Devices (pairing and the device
+   list), Screen (style dial, Mix, fine-tune), Skins, and Layout (the
+   Layout setting and UI scale).
 
 On large horizontal screens the deck and channels share the first page, so
-there are four.
+there are three.
+
+**Tabs.** Framed chips in a row that share its width; the open one is
+filled with the accent, like the Layout setting's choice. The sections sit
+flat in the Settings panel, one at a time; the tab names them, so their
+own headings are for screen readers (Devices keeps its status chip). Left /
+Right, Home and End move between tabs.
 
 ## Interaction rules
 

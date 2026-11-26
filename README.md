@@ -150,13 +150,23 @@ Then open http://localhost:8000.
 
 | Script | What it does |
 | --- | --- |
-| `npm run build` | Compiles `src/` to `dist/` with `tsc`, bundles it into `app.js` and stamps cache-busting versions into `index.html`. Run it after every change. |
+| `npm run build` | Compiles `src/` to `dist/` with `tsc`, bundles it into `app.js` and stamps cache-busting versions into `index.html`. It also sets the app's version (below). Run it after every change. |
 | `npm run watch` | Recompiles `src/` on save (run `npm run bundle` to refresh `app.js`). |
 | `npm run bundle` | Rebuilds `app.js` and the version stamps from `dist/`. |
 | `npm run serve` | Serves the folder at http://localhost:8000. |
 
 `app.js` is a classic script, so `index.html` also works opened straight from
 disk once it is built.
+
+**Version.** Every change to the app gets the next patch number, shown at
+the right of the Settings heading (Windows XP: on the Skins group). The
+build compares the app's files (`src/`, `index.html`, `styles.css`,
+`skins/`, `assets/`, the manifest, `bundle.js`) with the last commit. If
+they differ, the version is that commit's plus one patch (`1.0.1` →
+`1.0.2`), however often you rebuild; if not, it stays. Docs alone don't
+bump it. For a new minor or major series, set it in `package.json` by
+hand: a version higher than the last commit's is kept. The build writes it
+to `package.json` and into `index.html`.
 
 ## Deployment
 

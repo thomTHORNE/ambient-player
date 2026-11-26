@@ -581,7 +581,7 @@ inline script in `index.html` applies it before the first paint.
 | `localStorage["ambient-player:tabs:settings"]` | The Settings tab last opened on this device (its tab's id). |
 | `localStorage["ambient-player:xp-groups"]` | Windows XP's task pane: which groups are collapsed, `{ "<heading id>": true }`. Screen effect starts collapsed. |
 | `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
-| Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. **Import** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |
+| Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. Each mix in the Saved mixes panel copies its own link (`data-mix-action="share"`; the open unsaved mix uses `#shareButton`). **Import a link** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |
 
 ## Page flags
 

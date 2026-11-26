@@ -4,7 +4,7 @@
  * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
  * pinned to the top of the scroller and shrinks as you scroll, from its full
  * size down to a minimum height; after that the panels (deck, channels,
- * library: saved mixes + mix status, settings) scroll up under it and snap one at a time, like the
+ * library: saved mixes, settings) scroll up under it and snap one at a time, like the
  * horizontal layout's pages.
  *
  * Horizontal screens (landscape): the stage stays still on the left and the
@@ -146,7 +146,7 @@ function portraitTop(index: number): number {
   return Math.max(0, Math.round(top - pinned));
 }
 
-/** Show a panel: 0 deck, 1 channels, 2 library (saved mixes and mix status), 3 settings. */
+/** Show a panel: 0 deck, 1 channels, 2 library (saved mixes), 3 settings. */
 function goToSlide(index: number): void {
   const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
   if (isStacked()) {

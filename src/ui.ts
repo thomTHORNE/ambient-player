@@ -113,12 +113,12 @@ export function trackTitle(track: Track): string {
   return track.meta?.title || 'Untitled video';
 }
 
-/** Elapsed and remaining time, shown faintly under each channel. */
+/** Elapsed time and the channel's length, shown faintly under each channel. */
 function rowClock(track: Track): string {
   const t = track.currentTime;
   const d = track.duration || 0;
   if (!d) return formatTime(t);
-  return `${formatTime(t)} <span class="ch__clock-sep">/</span> −${formatTime(Math.max(0, d - t))}`;
+  return `${formatTime(t)} <span class="ch__clock-sep">/</span> ${formatTime(d)}`;
 }
 
 /**
@@ -287,7 +287,10 @@ export function setRowConfirm(li: HTMLElement, open: boolean): void {
   confirm.hidden = !open;
 }
 
-/** Render the saved mixes list. */
+/** The share button's icons: a link, and a check while "copied" shows. */
+export const shareIcons = `${icons.link.replace('<svg ', '<svg class="share__icon" ')}${icons.check.replace('<svg ', '<svg class="share__done" ')}`;
+
+/** Render the saved mixes list: each mix loads, shares its link, or goes. */
 export function renderSavedPlaylists(playlists: PersistedPlaylist[], container: HTMLElement): void {
   if (playlists.length === 0) {
     container.innerHTML = '<li class="mix mix--empty">Saved mixes appear here.</li>';
@@ -303,10 +306,32 @@ export function renderSavedPlaylists(playlists: PersistedPlaylist[], container: 
             <span class="mix__count">${p.urls.length} channel${p.urls.length === 1 ? '' : 's'}<span class="mix__tag"> · Current</span></span>
           </span>
           <button class="btn btn--quiet btn--small" type="button" data-mix-action="load" data-playlist-name="${name}" aria-label="Load mix ${name}">Load</button>
-          <button class="icon-btn" type="button" data-mix-action="delete" data-playlist-name="${name}" aria-label="Delete mix ${name}">${icons.trash}</button>
+          <button class="icon-btn share-btn" type="button" data-mix-action="share" data-playlist-name="${name}" aria-label="Copy share link for mix ${name}" title="Copy share link"><span class="visually-hidden share__label">Copy share link</span>${shareIcons}</button>
+          <button class="icon-btn mix__delete" type="button" data-mix-action="delete" data-playlist-name="${name}" aria-label="Delete mix ${name}">${icons.trash}</button>
         </li>`;
     })
     .join('');
+}
+
+/**
+ * Show that a share button copied its link: a check for a moment, and the
+ * news for screen readers (its label stays, its icons stay).
+ */
+const copiedTimers = new WeakMap<HTMLButtonElement, number>();
+export function markCopied(button: HTMLButtonElement): void {
+  const label = button.querySelector<HTMLElement>('.share__label');
+  const running = copiedTimers.get(button);
+  if (running !== undefined) clearTimeout(running);
+  button.classList.add('is-copied');
+  if (label) label.textContent = 'Link copied';
+  copiedTimers.set(
+    button,
+    window.setTimeout(() => {
+      button.classList.remove('is-copied');
+      if (label) label.textContent = 'Copy share link';
+      copiedTimers.delete(button);
+    }, 1800)
+  );
 }
 
 /** Ask whether a loaded mix replaces or joins the current channels. */

@@ -14,7 +14,7 @@ API); only the sound and the artwork are shown.
 
 - **Pages.** Four, one swipe each (tap a pager bar to jump): **Deck**
   (transport, timeline with repeat, volume), **Channels**, **Library**
-  (saved mixes, import, mix status and the share link) and **Settings**,
+  (saved mixes: save, import, and a share link on each) and **Settings**,
   whose tabs hold Devices, Screen effect, Skins and Layout (layout and UI
   scale). The tab you pick is kept per device. On large horizontal screens
   the deck and channels share a page.
@@ -72,7 +72,7 @@ API); only the sound and the artwork are shown.
   - **Frutiger Aero › Windows XP:** the player as a desktop window. A blue
     title bar (its button is fullscreen), a toolbar with the transport,
     repeat and volume, a task pane of collapsible groups (Mix tasks, Saved
-    mixes, Mix status, Devices, Screen effect, Skins), the artwork beside
+    mixes, Devices, Screen effect, Skins), the artwork beside
     Now playing, the timeline and Playing now, the channels as a details
     list, and a status bar. On a phone it is one column: artwork, transport,
     channels, then the task pane.
@@ -82,13 +82,15 @@ API); only the sound and the artwork are shown.
 - **Accent from the artwork.** The interface's highlight colour comes from
   the current channel's thumbnail. It falls back to amber when the thumbnail
   is too dark or grey. (Windows XP keeps its own selection blue.)
-- **Saved mixes.** Name a mix and save it on this device. The last saved mix
-  reopens next time. Loading a mix while channels are open asks whether to
+- **Saved mixes.** **Save this mix** opens a name field; save the mix on
+  this device. The last saved mix reopens next time. While the open mix
+  isn't saved, it heads the list as **Unsaved mix**. Loading a mix while channels are open asks whether to
   replace them or add to them.
-- **Share links.** **Copy share link** puts the whole mix in a URL. Opening
-  it loads that mix.
+- **Share links.** Every mix in the list (and the unsaved one) has a share
+  button that copies the mix as a URL; it shows a check for a moment. Opening
+  the link loads that mix.
 - **Import.** In the installed app there's no address bar to open a share
-  link in. Instead, paste the link into **Import** in the Saved mixes panel.
+  link in. Instead, choose **Import a link** in the Saved mixes panel and paste it.
   Plain YouTube links work too (one or several, separated by spaces, commas
   or new lines). If channels are open, it asks whether to replace them or
   add to them.
@@ -114,7 +116,7 @@ API); only the sound and the artwork are shown.
 
 | Screen | Layout |
 | --- | --- |
-| Vertical (phones, a Fold's cover display) | Artwork at full width above the panels. The first swipe up shrinks it; after that each swipe moves one panel: deck, channels, the library (saved mixes and mix status), then settings. |
+| Vertical (phones, a Fold's cover display) | Artwork at full width above the panels. The first swipe up shrinks it; after that each swipe moves one panel: deck, channels, the library (saved mixes), then settings. |
 | Horizontal | The artwork and title in a column on the left; the panels page vertically on the right. |
 | Large horizontal (960 × 680 and up: a Fold's inner display, laptops) | A wider left column with bigger artwork and the thumbnail strip; the deck and the channel list share the first panel. |
 | Large horizontal with a mouse (1280 × 680 and up) | As above, with a draggable divider that sets the artwork column's width. |

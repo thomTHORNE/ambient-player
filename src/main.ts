@@ -47,6 +47,7 @@ import {
   prefersReducedMotion,
   stateInfo,
   trackTitle,
+  markCopied,
 } from './ui.js';
 import type { StateTone } from './ui.js';
 import { extractAccent, isSquareArt, FALLBACK_ACCENT } from './accent.js';
@@ -125,6 +126,11 @@ const shareButton = $<HTMLButtonElement>('shareButton');
 const playlistNameInput = $<HTMLInputElement>('playlistNameInput');
 const savePlaylistButton = $<HTMLButtonElement>('savePlaylistButton');
 const savedPlaylistsList = $<HTMLElement>('savedPlaylistsList');
+const saveChoice = $<HTMLButtonElement>('saveChoice');
+const importChoice = $<HTMLButtonElement>('importChoice');
+const currentMix = $<HTMLElement>('currentMix');
+const currentMixCount = $<HTMLElement>('currentMixCount');
+const currentMixSave = $<HTMLButtonElement>('currentMixSave');
 const channelList = $<HTMLOListElement>('playlist');
 const channelCount = $<HTMLElement>('channelCount');
 const playerBay = $<HTMLElement>('playerBay');
@@ -132,7 +138,6 @@ const playerBay = $<HTMLElement>('playerBay');
 const fullscreenButton = $<HTMLButtonElement>('fullscreenButton');
 const statusCode = $<HTMLElement>('statusCode');
 const statusLine = $<HTMLElement>('statusLine');
-const statDur = $<HTMLElement>('statDur');
 
 const stage = $<HTMLElement>('stage');
 const art = $<HTMLElement>('art');
@@ -342,6 +347,9 @@ function renderStatus(): void {
     `Resume the ${picked === 1 ? 'channel' : `${picked} channels`} played last`
   );
   shareButton.disabled = tracks.length === 0;
+  // The open mix, while it isn't one of the saved ones.
+  currentMix.hidden = !!mixName || tracks.length === 0;
+  currentMixCount.firstChild!.textContent = `${tracks.length} channel${tracks.length === 1 ? '' : 's'}`;
   scheduleBroadcast();
 }
 
@@ -556,7 +564,6 @@ function renderTime(): void {
   const d = track?.duration || 0;
   const p = d > 0 ? Math.min(1, t / d) : 0;
 
-  statDur.textContent = d ? formatHMS(d) : '—';
   scrubTime.textContent = d ? `${formatHMS(t)} / ${formatHMS(d)}` : '— / —';
   scrubTicks.forEach((el) => {
     el.textContent = d ? formatHMS(d * Number(el.dataset.tick)) : '—';
@@ -1073,6 +1080,37 @@ async function handleLoadPlaylist(urls: string[], name: string | null, resume?: 
   return dispatch({ type: 'load_mix', urls, name, mode: choice, resume: choice === 'replace' ? resume : undefined });
 }
 
+/** Copy a mix's share link, and say so on the button that asked. */
+async function shareLink(button: HTMLButtonElement, urls: string[]): Promise<void> {
+  if (await copyToClipboard(encodePlaylistToUrl(urls))) {
+    mixesMessage.textContent = '';
+    markCopied(button);
+  } else showError(mixesMessage, 'The browser blocked the clipboard, so the link was not copied.');
+}
+
+/** The field a Save / Import choice reveals. */
+function entryField(choice: HTMLButtonElement): HTMLElement {
+  return document.getElementById(choice.getAttribute('aria-controls')!)!;
+}
+
+/** Reveal one choice's field (closing the other) and focus its input. */
+function openEntry(choice: HTMLButtonElement): void {
+  for (const other of [saveChoice, importChoice]) if (other !== choice) closeEntry(other);
+  choice.setAttribute('aria-expanded', 'true');
+  const field = entryField(choice);
+  field.classList.add('is-open');
+  const input = field.querySelector('input')!;
+  // Saving again: start from the open mix's name.
+  if (choice === saveChoice && !input.value && mixName) input.value = mixName;
+  input.focus();
+  input.select();
+}
+
+function closeEntry(choice: HTMLButtonElement): void {
+  choice.setAttribute('aria-expanded', 'false');
+  entryField(choice).classList.remove('is-open');
+}
+
 /** Briefly swap a button's label; a second flash restarts it, never sticks. */
 const flashTimers = new WeakMap<HTMLButtonElement, number>();
 function flash(button: HTMLButtonElement, text: string): void {
@@ -1133,9 +1171,7 @@ function initializeEventListeners(): void {
   shareButton.addEventListener('click', async () => {
     const urls = playlistManager.getTrackUrls();
     if (urls.length === 0) return showError(inputError, 'Add a channel before sharing the mix.');
-    const ok = await copyToClipboard(encodePlaylistToUrl(urls));
-    if (ok) flash(shareButton, 'Link copied');
-    else showError(inputError, 'The browser blocked the clipboard, so the link was not copied.');
+    await shareLink(shareButton, urls);
   });
 
   savePlaylistButton.addEventListener('click', () => {
@@ -1154,10 +1190,28 @@ function initializeEventListeners(): void {
     renderMixList();
     renderStatus();
     flash(savePlaylistButton, 'Saved');
+    window.setTimeout(() => {
+      if (!playlistNameInput.value) closeEntry(saveChoice);
+    }, 1200);
   });
   playlistNameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') savePlaylistButton.click();
   });
+
+  // Save / Import: two choices of one entry; each reveals its own field.
+  for (const choice of [saveChoice, importChoice]) {
+    choice.addEventListener('click', () => {
+      if (choice.getAttribute('aria-expanded') === 'true') closeEntry(choice);
+      else openEntry(choice);
+    });
+    entryField(choice).addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      closeEntry(choice);
+      choice.focus();
+    });
+  }
+  currentMixSave.addEventListener('click', () => openEntry(saveChoice));
 
   // Import: a share link (or plain YouTube links) pasted in, for the
   // installed app, which has no address bar to open the link in.
@@ -1190,6 +1244,9 @@ function initializeEventListeners(): void {
     if (!(await handleLoadPlaylist(urls, null))) return;
     importInput.value = '';
     flash(importButton, urls.length === 1 ? 'Imported 1' : `Imported ${urls.length}`);
+    window.setTimeout(() => {
+      if (!importInput.value) closeEntry(importChoice);
+    }, 1200);
   };
   importButton.addEventListener('click', () => void importMix());
   importInput.addEventListener('keydown', (e) => {
@@ -1203,6 +1260,8 @@ function initializeEventListeners(): void {
     const playlist = getAllPlaylists().find((p) => p.name === name);
     if (button.dataset.mixAction === 'load' && playlist) {
       await handleLoadPlaylist(playlist.urls, playlist.name, playlist.resume ?? []);
+    } else if (button.dataset.mixAction === 'share' && playlist) {
+      await shareLink(button, playlist.urls);
     } else if (button.dataset.mixAction === 'delete' && confirm(`Delete the mix "${name}"? This cannot be undone.`)) {
       deletePlaylist(name);
       if (mixName === name) mixName = null;

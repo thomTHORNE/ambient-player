@@ -591,13 +591,13 @@ function trackTitle(track) {
         return 'Loading channel';
     return track.meta?.title || 'Untitled video';
 }
-/** Elapsed and remaining time, shown faintly under each channel. */
+/** Elapsed time and the channel's length, shown faintly under each channel. */
 function rowClock(track) {
     const t = track.currentTime;
     const d = track.duration || 0;
     if (!d)
         return formatTime(t);
-    return `${formatTime(t)} <span class="ch__clock-sep">/</span> −${formatTime(Math.max(0, d - t))}`;
+    return `${formatTime(t)} <span class="ch__clock-sep">/</span> ${formatTime(d)}`;
 }
 /**
  * Markup for one channel row. Its settings drawer (volume, change link,
@@ -758,7 +758,9 @@ function setRowConfirm(li, open) {
     ask.hidden = open;
     confirm.hidden = !open;
 }
-/** Render the saved mixes list. */
+/** The share button's icons: a link, and a check while "copied" shows. */
+const shareIcons = `${icons.link.replace('<svg ', '<svg class="share__icon" ')}${icons.check.replace('<svg ', '<svg class="share__done" ')}`;
+/** Render the saved mixes list: each mix loads, shares its link, or goes. */
 function renderSavedPlaylists(playlists, container) {
     if (playlists.length === 0) {
         container.innerHTML = '<li class="mix mix--empty">Saved mixes appear here.</li>';
@@ -774,10 +776,31 @@ function renderSavedPlaylists(playlists, container) {
             <span class="mix__count">${p.urls.length} channel${p.urls.length === 1 ? '' : 's'}<span class="mix__tag"> · Current</span></span>
           </span>
           <button class="btn btn--quiet btn--small" type="button" data-mix-action="load" data-playlist-name="${name}" aria-label="Load mix ${name}">Load</button>
-          <button class="icon-btn" type="button" data-mix-action="delete" data-playlist-name="${name}" aria-label="Delete mix ${name}">${icons.trash}</button>
+          <button class="icon-btn share-btn" type="button" data-mix-action="share" data-playlist-name="${name}" aria-label="Copy share link for mix ${name}" title="Copy share link"><span class="visually-hidden share__label">Copy share link</span>${shareIcons}</button>
+          <button class="icon-btn mix__delete" type="button" data-mix-action="delete" data-playlist-name="${name}" aria-label="Delete mix ${name}">${icons.trash}</button>
         </li>`;
     })
         .join('');
+}
+/**
+ * Show that a share button copied its link: a check for a moment, and the
+ * news for screen readers (its label stays, its icons stay).
+ */
+const copiedTimers = new WeakMap();
+function markCopied(button) {
+    const label = button.querySelector('.share__label');
+    const running = copiedTimers.get(button);
+    if (running !== undefined)
+        clearTimeout(running);
+    button.classList.add('is-copied');
+    if (label)
+        label.textContent = 'Link copied';
+    copiedTimers.set(button, window.setTimeout(() => {
+        button.classList.remove('is-copied');
+        if (label)
+            label.textContent = 'Copy share link';
+        copiedTimers.delete(button);
+    }, 1800));
 }
 /** Ask whether a loaded mix replaces or joins the current channels. */
 function showReplaceAppendModal(message) {
@@ -3188,7 +3211,7 @@ function showTab(tabId) {
  *
  *   toolbar     the deck's transport buttons, the repeat switch, the volume
  *   task pane   "Mix tasks" (links to the main actions), then the saved
- *               mixes and mix status, and the Settings page's sections
+ *               mixes, and the Settings page's sections
  *               (devices, screen effect, layout, skins), each a group that
  *               collapses (kept on this device)
  *   main view   the stage (artwork beside "Now playing", the timeline and
@@ -3345,7 +3368,7 @@ function slArrange() {
         playing.hidden = false;
     slMove(document.querySelector('.panel.channels'), main);
     // Task pane: after Mix tasks, the other panels as groups.
-    for (const selector of ['.panel.mixes', '.panel.status', '.panel.devices', '.panel.screen', '.panel.display', '.panel.skins']) {
+    for (const selector of ['.panel.mixes', '.panel.devices', '.panel.screen', '.panel.display', '.panel.skins']) {
         slMove(document.querySelector(selector), pane);
     }
     pane.querySelectorAll(':scope > .panel').forEach(slPrepareGroup);
@@ -3386,7 +3409,7 @@ function setupSkinLayout() {
  * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
  * pinned to the top of the scroller and shrinks as you scroll, from its full
  * size down to a minimum height; after that the panels (deck, channels,
- * library: saved mixes + mix status, settings) scroll up under it and snap one at a time, like the
+ * library: saved mixes, settings) scroll up under it and snap one at a time, like the
  * horizontal layout's pages.
  *
  * Horizontal screens (landscape): the stage stays still on the left and the
@@ -3517,7 +3540,7 @@ function portraitTop(index) {
     const pinned = lStageWrap.offsetHeight - range;
     return Math.max(0, Math.round(top - pinned));
 }
-/** Show a panel: 0 deck, 1 channels, 2 library (saved mixes and mix status), 3 settings. */
+/** Show a panel: 0 deck, 1 channels, 2 library (saved mixes), 3 settings. */
 function goToSlide(index) {
     const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
     if (isStacked()) {
@@ -3952,13 +3975,17 @@ const shareButton = $('shareButton');
 const playlistNameInput = $('playlistNameInput');
 const savePlaylistButton = $('savePlaylistButton');
 const savedPlaylistsList = $('savedPlaylistsList');
+const saveChoice = $('saveChoice');
+const importChoice = $('importChoice');
+const currentMix = $('currentMix');
+const currentMixCount = $('currentMixCount');
+const currentMixSave = $('currentMixSave');
 const channelList = $('playlist');
 const channelCount = $('channelCount');
 const playerBay = $('playerBay');
 const fullscreenButton = $('fullscreenButton');
 const statusCode = $('statusCode');
 const statusLine = $('statusLine');
-const statDur = $('statDur');
 const stage = $('stage');
 const art = $('art');
 const artImg = $('artImg');
@@ -4147,6 +4174,9 @@ function renderStatus() {
     resumeButton.textContent = `Resume ${picked}`;
     resumeButton.setAttribute('aria-label', `Resume the ${picked === 1 ? 'channel' : `${picked} channels`} played last`);
     shareButton.disabled = tracks.length === 0;
+    // The open mix, while it isn't one of the saved ones.
+    currentMix.hidden = !!mixName || tracks.length === 0;
+    currentMixCount.firstChild.textContent = `${tracks.length} channel${tracks.length === 1 ? '' : 's'}`;
     scheduleBroadcast();
 }
 // ---------------------------------------------------------------------------
@@ -4350,7 +4380,6 @@ function renderTime() {
     const t = track ? track.currentTime : 0;
     const d = track?.duration || 0;
     const p = d > 0 ? Math.min(1, t / d) : 0;
-    statDur.textContent = d ? formatHMS(d) : '—';
     scrubTime.textContent = d ? `${formatHMS(t)} / ${formatHMS(d)}` : '— / —';
     scrubTicks.forEach((el) => {
         el.textContent = d ? formatHMS(d * Number(el.dataset.tick)) : '—';
@@ -4879,6 +4908,38 @@ async function handleLoadPlaylist(urls, name, resume) {
         return false;
     return dispatch({ type: 'load_mix', urls, name, mode: choice, resume: choice === 'replace' ? resume : undefined });
 }
+/** Copy a mix's share link, and say so on the button that asked. */
+async function shareLink(button, urls) {
+    if (await copyToClipboard(encodePlaylistToUrl(urls))) {
+        mixesMessage.textContent = '';
+        markCopied(button);
+    }
+    else
+        showError(mixesMessage, 'The browser blocked the clipboard, so the link was not copied.');
+}
+/** The field a Save / Import choice reveals. */
+function entryField(choice) {
+    return document.getElementById(choice.getAttribute('aria-controls'));
+}
+/** Reveal one choice's field (closing the other) and focus its input. */
+function openEntry(choice) {
+    for (const other of [saveChoice, importChoice])
+        if (other !== choice)
+            closeEntry(other);
+    choice.setAttribute('aria-expanded', 'true');
+    const field = entryField(choice);
+    field.classList.add('is-open');
+    const input = field.querySelector('input');
+    // Saving again: start from the open mix's name.
+    if (choice === saveChoice && !input.value && mixName)
+        input.value = mixName;
+    input.focus();
+    input.select();
+}
+function closeEntry(choice) {
+    choice.setAttribute('aria-expanded', 'false');
+    entryField(choice).classList.remove('is-open');
+}
 /** Briefly swap a button's label; a second flash restarts it, never sticks. */
 const flashTimers = new WeakMap();
 function flash(button, text) {
@@ -4938,11 +4999,7 @@ function initializeEventListeners() {
         const urls = playlistManager.getTrackUrls();
         if (urls.length === 0)
             return showError(inputError, 'Add a channel before sharing the mix.');
-        const ok = await copyToClipboard(encodePlaylistToUrl(urls));
-        if (ok)
-            flash(shareButton, 'Link copied');
-        else
-            showError(inputError, 'The browser blocked the clipboard, so the link was not copied.');
+        await shareLink(shareButton, urls);
     });
     savePlaylistButton.addEventListener('click', () => {
         const name = playlistNameInput.value.trim();
@@ -4961,11 +5018,32 @@ function initializeEventListeners() {
         renderMixList();
         renderStatus();
         flash(savePlaylistButton, 'Saved');
+        window.setTimeout(() => {
+            if (!playlistNameInput.value)
+                closeEntry(saveChoice);
+        }, 1200);
     });
     playlistNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter')
             savePlaylistButton.click();
     });
+    // Save / Import: two choices of one entry; each reveals its own field.
+    for (const choice of [saveChoice, importChoice]) {
+        choice.addEventListener('click', () => {
+            if (choice.getAttribute('aria-expanded') === 'true')
+                closeEntry(choice);
+            else
+                openEntry(choice);
+        });
+        entryField(choice).addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape')
+                return;
+            e.stopPropagation();
+            closeEntry(choice);
+            choice.focus();
+        });
+    }
+    currentMixSave.addEventListener('click', () => openEntry(saveChoice));
     // Import: a share link (or plain YouTube links) pasted in, for the
     // installed app, which has no address bar to open the link in.
     const importMix = async () => {
@@ -4999,6 +5077,10 @@ function initializeEventListeners() {
             return;
         importInput.value = '';
         flash(importButton, urls.length === 1 ? 'Imported 1' : `Imported ${urls.length}`);
+        window.setTimeout(() => {
+            if (!importInput.value)
+                closeEntry(importChoice);
+        }, 1200);
     };
     importButton.addEventListener('click', () => void importMix());
     importInput.addEventListener('keydown', (e) => {
@@ -5013,6 +5095,9 @@ function initializeEventListeners() {
         const playlist = getAllPlaylists().find((p) => p.name === name);
         if (button.dataset.mixAction === 'load' && playlist) {
             await handleLoadPlaylist(playlist.urls, playlist.name, playlist.resume ?? []);
+        }
+        else if (button.dataset.mixAction === 'share' && playlist) {
+            await shareLink(button, playlist.urls);
         }
         else if (button.dataset.mixAction === 'delete' && confirm(`Delete the mix "${name}"? This cannot be undone.`)) {
             deletePlaylist(name);

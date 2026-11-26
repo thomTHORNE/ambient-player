@@ -72,10 +72,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=d4c514b5aa">
+  <link rel="stylesheet" href="styles.css?v=4254e5ab9d">
   <!-- Skins (src/skin.ts): each one is scoped to html[data-skin], so loading
        them all keeps switching instant. -->
-  <link rel="stylesheet" href="skins/xp.css?v=f351327e7f">
+  <link rel="stylesheet" href="skins/xp.css?v=b069d940b5">
 </head>
 
 <body>
@@ -149,7 +149,7 @@
            column (src/resize.ts). Hidden everywhere else. -->
       <div id="stageSplitter" class="splitter" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="stageWrap" aria-label="Artwork column width" aria-valuemin="0" aria-valuemax="100" aria-valuenow="42" title="Drag to resize the artwork; double-click to reset"></div>
 
-      <!-- ============ Panels: swipe between deck, channels, library (saved mixes + mix status), settings ============ -->
+      <!-- ============ Panels: swipe between deck, channels, library (saved mixes), settings ============ -->
       <div id="slides" class="slides" aria-label="Panels">
         <div class="slide slide--deck" id="slideDeck" aria-label="Playback">
           <section class="deck" aria-label="Playback">
@@ -251,43 +251,52 @@
               <p class="channel-empty">No channels yet. Paste a link above; each one plays alongside the others.</p>
             </section>
         </div>
-        <div class="slide slide--info" id="slideInfo" aria-label="Library: saved mixes and mix status">
+        <div class="slide slide--info" id="slideInfo" aria-label="Library: saved mixes">
+          <!-- Library: one panel. Save and Import are two choices of one entry
+               control: each reveals its own field, drawn like "Paste a YouTube
+               link" (src/main.ts). Every mix shares its own link. -->
           <section class="panel mixes" aria-labelledby="mixesTitle">
               <header class="panel__head">
                 <h2 id="mixesTitle" class="panel__title">Saved mixes</h2>
               </header>
-              <div class="field-row">
-                <label class="field">
-                  <span class="visually-hidden">Mix name</span>
+              <div class="entry">
+                <div class="entry__choices">
+                  <button id="saveChoice" class="tab entry__choice" type="button" aria-expanded="false" aria-controls="saveEntry">
+                    <span class="entry__choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20.5 12 16l-6 4.5V5.5A2 2 0 0 1 8 3.5h8a2 2 0 0 1 2 2z"/></svg></span>Save this mix
+                  </button>
+                  <button id="importChoice" class="tab entry__choice" type="button" aria-expanded="false" aria-controls="importEntry">
+                    <span class="entry__choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5"/><path d="M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5"/></svg></span>Import a link
+                  </button>
+                </div>
+                <div id="saveEntry" class="add entry__field">
+                  <label class="visually-hidden" for="playlistNameInput">Mix name</label>
+                  <span class="add__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20.5 12 16l-6 4.5V5.5A2 2 0 0 1 8 3.5h8a2 2 0 0 1 2 2z"/></svg>
+                  </span>
                   <input id="playlistNameInput" type="text" autocomplete="off" placeholder="Name this mix" />
-                </label>
-                <button id="savePlaylistButton" class="btn" type="button">Save</button>
-              </div>
-              <!-- Import: the installed app has no address bar to open a share link in. -->
-              <div class="field-row field-row--import">
-                <label class="field">
-                  <span class="visually-hidden">Share link or YouTube links to import</span>
+                  <button id="savePlaylistButton" class="add__btn add__btn--text" type="button">Save</button>
+                </div>
+                <!-- Import: the installed app has no address bar to open a share link in. -->
+                <div id="importEntry" class="add entry__field">
+                  <label class="visually-hidden" for="importInput">Share link or YouTube links to import</label>
+                  <span class="add__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5"/><path d="M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5"/></svg>
+                  </span>
                   <input id="importInput" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Paste a share link to import" />
-                </label>
-                <button id="importButton" class="btn btn--quiet" type="button">Import</button>
+                  <button id="importButton" class="add__btn add__btn--text" type="button">Import</button>
+                </div>
               </div>
               <p id="mixesMessage" class="status-msg mixes__msg" role="status" aria-live="polite"></p>
-              <ul id="savedPlaylistsList" class="mix-list"></ul>
-            </section>
-          <!-- Mix status: how long the mix runs, and its share link. -->
-          <section class="panel status" aria-labelledby="statusTitle">
-              <header class="panel__head panel__head--quiet">
-                <h2 id="statusTitle" class="panel__title">Mix status</h2>
-              </header>
-              <dl class="rows">
-                <div class="row">
-                  <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11M6.5 21h11"/><path d="M7.5 3c0 5 9 5 9 9s-9 4-9 9M16.5 3c0 5-9 5-9 9s9 4 9 9"/></svg>Duration</dt>
-                  <dd id="statDur">—</dd>
-                </div>
-              </dl>
-              <div class="status__actions">
-                <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
+              <!-- The open mix while it isn't saved: save it or share it. -->
+              <div id="currentMix" class="mix mix--unsaved" hidden>
+                <span class="mix__text">
+                  <span class="mix__name">Unsaved mix</span>
+                  <span id="currentMixCount" class="mix__count">0 channels<span class="mix__tag"> · Current</span></span>
+                </span>
+                <button id="currentMixSave" class="btn btn--quiet btn--small" type="button">Save</button>
+                <button id="shareButton" class="icon-btn share-btn" type="button" disabled aria-label="Copy share link for the open mix" title="Copy share link"><span class="visually-hidden share__label">Copy share link</span><svg class="share__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5"/><path d="M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5"/></svg><svg class="share__done" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5.5 12.5 4 4 9-9"/></svg></button>
               </div>
+              <ul id="savedPlaylistsList" class="mix-list"></ul>
             </section>
         </div>
         <div class="slide slide--settings" id="slideSettings" aria-label="Settings">
@@ -476,7 +485,7 @@
     <nav id="pager" class="pager" aria-label="Panels">
       <button class="pager__bar" type="button" data-slide="0" aria-label="Playback controls" aria-current="true"></button>
       <button class="pager__bar" type="button" data-slide="1" aria-label="Channels" aria-current="false"></button>
-      <button class="pager__bar" type="button" data-slide="2" aria-label="Saved mixes and mix status" aria-current="false"></button>
+      <button class="pager__bar" type="button" data-slide="2" aria-label="Library" aria-current="false"></button>
       <button class="pager__bar" type="button" data-slide="3" aria-label="Settings" aria-current="false"></button>
     </nav>
   </div>
@@ -485,7 +494,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=80229c4f79"></script>
+  <script src="app.js?v=d4392fee59"></script>
 </body>
 
 </html>

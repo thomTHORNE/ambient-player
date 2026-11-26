@@ -84,8 +84,12 @@ The panels are, in order:
 1. **Deck:** transport, timeline (with the channel's repeat switch),
    channel volume.
 2. **Channels:** add a link, Resume, Play all / Pause all, the channel rows.
-3. **Library:** saved mixes and import, then mix status: duration and the
-   share link.
+3. **Library:** one panel. Two tiles, Save this mix and Import a link,
+   each reveal their own field, drawn like "Paste a YouTube link" (the open
+   tile glows like the open tab; Escape closes it). Then the mixes: the
+   open one first while unsaved, each with Load, a share button (link icon,
+   a check once copied) and Delete. A channel's length sits in its row
+   (elapsed / length).
 4. **Settings:** one panel with tabs: Devices (pairing and the device
    list), Screen (style dial, Mix, fine-tune), Skins, and Layout (the
    Layout setting and UI scale).
@@ -227,8 +231,8 @@ Everything stays in view at once instead of paging:
   the far end.
 - **Task pane.** On the left, on the blue pane: collapsible groups. Mix
   tasks first, the primary group (dark header): Resume, Play all / Pause
-  all, Save this mix, Copy share link, Import a link. Then Saved mixes, Mix
-  status, Devices, Screen effect (collapsed at first) and Skins.
+  all, Save this mix, Copy share link, Import a link. Then Saved mixes (both
+  fields shown, no tiles), Devices, Screen effect (collapsed at first) and Skins.
 - **Main view.** The artwork in a sunken frame beside three groupboxes:
   Now playing, Timeline and Playing now (thumbnails, hidden on short
   screens). Under them the channels: their name, the link field, Resume or

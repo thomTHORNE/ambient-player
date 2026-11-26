@@ -6,7 +6,7 @@
      the foot (the mix, what's playing, remote control);
    - a toolbar with the transport buttons, repeat and volume;
    - a task pane on the left: "Mix tasks" (links to the main actions), then
-     the saved mixes, mix status, devices, screen effect and skins, each a
+     the saved mixes, devices, screen effect and skins, each a
      group that collapses;
    - the main view: the artwork beside "Now playing", the timeline and
      what's playing, over the channels as a details list.
@@ -1262,7 +1262,7 @@
   stroke-width: 3;
 }
 
-[data-skin="xp"] .add__btn::after {
+[data-skin="xp"] #addButton::after {
   content: "Add";
 }
 
@@ -1867,12 +1867,45 @@
   padding: 0 8px;
 }
 
-[data-skin="xp"] .xp-pane .field-row--import {
-  margin-top: 6px;
+/* Save and Import: both fields at once (the Mix tasks links reach them);
+   the choice tiles stay out. Share buttons carry the link icon only. */
+[data-skin="xp"] .entry__choices {
+  display: none;
 }
 
-[data-skin="xp"] .xp-pane .status__actions {
-  margin-top: 10px;
+[data-skin="xp"] .entry__field {
+  display: flex;
+  margin: 0 0 6px;
+}
+
+[data-skin="xp"] .share-btn .share__done,
+[data-skin="xp"] .share-btn.is-copied .share__icon {
+  display: none;
+}
+
+[data-skin="xp"] .share-btn.is-copied .share__done {
+  display: block;
+  color: #2C9A2C;
+}
+
+[data-skin="xp"] .mix--unsaved {
+  margin-top: 8px;
+  padding-left: 4px;
+  box-shadow: none;
+  background: none;
+}
+
+[data-skin="xp"] .mix--unsaved[hidden] {
+  display: none;
+}
+
+[data-skin="xp"] .mix--unsaved .mix__name {
+  color: #000000;
+  font-style: italic;
+}
+
+[data-skin="xp"] .mix--unsaved .mix__tag {
+  display: inline;
 }
 
 /* Repeat lives on the toolbar: its label beside the timeline stays out. */
@@ -2528,7 +2561,7 @@
   color: var(--xp-shadow);
 }
 
-[data-skin="xp"] .mix .icon-btn:hover {
+[data-skin="xp"] .mix .mix__delete:hover {
   color: var(--danger);
 }
 

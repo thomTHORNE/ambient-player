@@ -67,6 +67,8 @@ declare global {
       getCurrentTime(): number;
       getDuration(): number;
       getVideoData(): VideoData;
+      mute(): void;
+      unMute(): void;
       destroy(): void;
     }
 
@@ -122,6 +124,51 @@ export function waitForYouTubeAPI(): Promise<void> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Warming up: each channel plays once, muted, while the page is visible
+// ---------------------------------------------------------------------------
+//
+// Chromium holds back media in a hidden page from a frame that has never
+// played anything: it loads only once the page is visible again. Each channel
+// is its own YouTube frame, so with the screen off (a phone controlled from
+// another device) a channel that has never played would not start until the
+// screen came on, while channels that had played kept working. So each new
+// player plays for a moment, muted, while the page is visible, then goes back
+// to where it was, paused. One at a time, so a mix's loading stays light.
+
+const warmQueue: Array<() => Promise<void>> = [];
+let warming = false;
+
+function whenVisible(): Promise<void> {
+  if (document.visibilityState === 'visible') return Promise.resolve();
+  return new Promise((resolve) => {
+    const on = () => {
+      if (document.visibilityState !== 'visible') return;
+      document.removeEventListener('visibilitychange', on);
+      resolve();
+    };
+    document.addEventListener('visibilitychange', on);
+  });
+}
+
+async function drainWarmQueue(): Promise<void> {
+  if (warming) return;
+  warming = true;
+  while (warmQueue.length) {
+    await whenVisible();
+    await warmQueue.shift()!();
+  }
+  warming = false;
+}
+
+function queueWarmUp(job: () => Promise<void>): void {
+  warmQueue.push(job);
+  void drainWarmQueue();
+}
+
+/** Give up on a warm-up that doesn't start playing within this long. */
+const WARM_TIMEOUT_MS = 8000;
+
 /**
  * Create a YouTube player controller
  */
@@ -139,19 +186,76 @@ export function createYouTubePlayerFactory(): YouTubePlayerFactory {
       let player: YT.Player | null = null;
       let isReady = false;
       let timeoutId: number | null = null;
+      /** Played at least once (warm-up or for real): this frame can start while hidden. */
+      let warmed = false;
+      /** The warm-up in progress: what it does with the player's next events. */
+      let warm: {
+        stage: 'starting' | 'stopping';
+        /** Asked to play meanwhile: keep playing, with the sound on. */
+        wantPlay: boolean;
+        from: number;
+        finish: () => void;
+      } | null = null;
+
+      const endWarmUp = () => {
+        const w = warm;
+        if (!w) return;
+        warm = null;
+        warmed = true;
+        w.finish();
+      };
+
+      const warmUp = (): Promise<void> =>
+        new Promise((resolve) => {
+          if (!player || warmed || warm) return resolve();
+          const p = player;
+          const timer = window.setTimeout(() => {
+            // Never started: leave it paused, sound on; it can still play when asked.
+            if (!warm) return;
+            const keep = warm.wantPlay;
+            warm = null;
+            p.unMute();
+            if (!keep) p.pauseVideo();
+            resolve();
+          }, WARM_TIMEOUT_MS);
+          warm = {
+            stage: 'starting',
+            wantPlay: false,
+            from: p.getCurrentTime() || startSeconds || 0,
+            finish: () => {
+              clearTimeout(timer);
+              resolve();
+            },
+          };
+          p.mute();
+          p.playVideo();
+        });
 
       const controller: YouTubePlayerController = {
         play() {
+          if (warm) {
+            // Taken up when the warm-up's playback starts (or stops).
+            warm.wantPlay = true;
+            return;
+          }
           if (isReady && player) {
+            // Playing for real: no warm-up needed (or wanted) after this.
+            warmed = true;
             player.playVideo();
           }
         },
         pause() {
+          if (warm) {
+            warm.wantPlay = false;
+            return;
+          }
           if (isReady && player) {
             player.pauseVideo();
           }
         },
         seekTo(seconds: number) {
+          // Warming up: it goes back here once it has stopped.
+          if (warm) warm.from = seconds;
           if (isReady && player) {
             player.seekTo(seconds, true);
           }
@@ -184,6 +288,7 @@ export function createYouTubePlayerFactory(): YouTubePlayerFactory {
           return '';
         },
         destroy() {
+          endWarmUp();
           if (timeoutId !== null) {
             clearTimeout(timeoutId);
             timeoutId = null;
@@ -240,6 +345,7 @@ export function createYouTubePlayerFactory(): YouTubePlayerFactory {
 
                 onMeta(trackId, meta);
                 onState(trackId, 'paused');
+                queueWarmUp(warmUp);
               } catch (error) {
                 onError(trackId, {
                   code: 'METADATA_ERROR',
@@ -250,7 +356,31 @@ export function createYouTubePlayerFactory(): YouTubePlayerFactory {
             onStateChange(event) {
               const state = event.data;
 
+              // Warming up: the page hears nothing of it, unless asked to play meanwhile.
+              if (warm) {
+                const p = event.target;
+                if (state === YT.PlayerState.PLAYING && warm.stage === 'starting') {
+                  if (warm.wantPlay) {
+                    p.unMute();
+                    endWarmUp();
+                    onState(trackId, 'playing');
+                  } else {
+                    warm.stage = 'stopping';
+                    p.pauseVideo();
+                  }
+                } else if (state === YT.PlayerState.PAUSED && warm.stage === 'stopping') {
+                  const w = warm;
+                  p.seekTo(w.from, true);
+                  p.unMute();
+                  endWarmUp();
+                  // Asked to play while it stopped: start for real now.
+                  if (w.wantPlay) p.playVideo();
+                }
+                return;
+              }
+
               if (state === YT.PlayerState.PLAYING) {
+                warmed = true;
                 onState(trackId, 'playing');
               } else if (state === YT.PlayerState.PAUSED) {
                 onState(trackId, 'paused');

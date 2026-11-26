@@ -36,7 +36,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `layout.ts` | Layout behaviour CSS can't do alone: the collapsing artwork on vertical screens, the pager, moving between panels, snap sizes, and merging the deck and channel list on large horizontal screens. |
 | `ui.ts` | Pure helpers: HTML templates for channel rows, strip items and saved mixes, in-place row patches, time / dB formatting, icons, the replace-or-append dialog. |
 | `playlist.ts` | The `Track` model and `PlaylistManager`, which owns the track list and each track's player controller. |
-| `youtubePlayer.ts` | Wraps the YouTube IFrame API: waits for it to load, creates hidden players, reports state, metadata and errors through callbacks, and parses YouTube URLs. |
+| `youtubePlayer.ts` | Wraps the YouTube IFrame API: waits for it to load, creates hidden players, reports state, metadata and errors through callbacks, and parses YouTube URLs. Each new player warms up once: it plays for a moment, muted and unseen by the page, while the page is visible, then goes back to its start, paused. Chromium won't start media in a hidden page from a frame that has never played, so without this a channel started remotely on a phone with its screen off would wait until the screen came on. |
 | `accent.ts` | Samples the artwork on a canvas for the accent colour, and detects square (album) art. |
 | `crt.ts` | The screen effect: renders the artwork and thumbnails as phosphor cells on a canvas. |
 | `backdrop.ts` | The backdrop: blurs and grades the artwork once onto a small canvas, and steps the drift at 10 frames a second (see Backdrop cost). |

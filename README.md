@@ -97,7 +97,8 @@ API); only the sound and the artwork are shown.
 - **Fullscreen takeover.** The first tap enters fullscreen, and while
   something plays there the screen stays awake. The button at the top right leaves or
   re-enters fullscreen. Installed from the home screen (*Add to Home screen* /
-  *Install app*), it always opens fullscreen.
+  *Install app*), it always opens fullscreen. If Android keeps the status
+  bar's space after the notification shade goes, the next tap takes it back.
 - **UI scale.** **Settings › Layout** has a 70–130% setting for the whole
   interface, kept per device. The line under it shows the size the app lays
   out at and which layout that gives.

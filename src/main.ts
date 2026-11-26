@@ -90,6 +90,7 @@ import {
   exitFullscreen,
   onFullscreenChange,
   setKeepAwake,
+  setupReclaimSpace,
 } from './screen.js';
 
 // ---------------------------------------------------------------------------
@@ -390,8 +391,11 @@ function setupScreenTakeover(): void {
     updateKeepAwake();
   });
 
-  // The installed app already runs without browser UI; where the browser
-  // can't do fullscreen (iPhone Safari), there is nothing to offer.
+  // The installed app already runs without browser UI (though the browser
+  // may keep the status bar's space after the notification shade: reclaim
+  // it on a tap); where the browser can't do fullscreen (iPhone Safari),
+  // there is nothing to offer.
+  setupReclaimSpace();
   if (!fullscreenSupported() || runningAsFullscreenApp()) return;
   fullscreenButton.hidden = false;
 

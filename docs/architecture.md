@@ -559,6 +559,12 @@ inline script in `index.html` applies it before the first paint.
     leaves and re-enters fullscreen.
   - **Installed app.** In the installed app (`display: fullscreen` in the
     manifest) the button stays hidden.
+  - **Reclaiming space (installed app).** On Android the browser can shrink
+    the window by the status bar's height when the notification shade comes
+    down, and not give it back. `setupReclaimSpace()` remembers the tallest
+    the window has been per width and viewport setting; when it is 20px or
+    more shorter, the next tap (not one on a field, nor while typing) asks
+    for fullscreen, which hides the bars and restores the space.
 - **Page flag.** `html[data-fullscreen]` marks the state. On an upright touch
   screen in fullscreen, CSS keeps at least 36px clear at the top for a
   punch-hole camera, since browsers don't always report the cutout in

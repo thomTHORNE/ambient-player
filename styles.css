@@ -2925,6 +2925,20 @@ input[type="range"] {
   outline-offset: 3px;
 }
 
+/* Narrow phones: tighter type, so the four tabs still share one row. */
+@media (max-width: 360px) {
+  .tabs {
+    gap: 5px;
+    padding: 6px 4px;
+  }
+
+  .tab {
+    padding: 0 4px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+}
+
 /* The sections sit flat inside the Settings panel, one at a time. */
 .settings > .tabpanel {
   padding: 0;

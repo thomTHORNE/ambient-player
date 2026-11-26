@@ -63,10 +63,13 @@ API); only the sound and the artwork are shown.
   time, without interrupting playback:
   - **Modern › Modern Warfare:** the tactical console (dark glass, corner
     brackets, the artwork's colour). The default.
-  - **Frutiger Aero › Windows XP:** the player as a maximized window: a blue
-    title bar (its button is fullscreen), toolbox windows for the panels,
-    a toolbar deck, glossy buttons, a details list for the channels, and a
-    status bar with the mix, what's playing and remote control.
+  - **Frutiger Aero › Windows XP:** the player as a desktop window. A blue
+    title bar (its button is fullscreen), a toolbar with the transport,
+    repeat and volume, a task pane of collapsible groups (Mix tasks, Saved
+    mixes, Mix status, Devices, Screen effect, Skins), the artwork beside
+    Now playing, the timeline and Playing now, the channels as a details
+    list, and a status bar. On a phone it is one column: artwork, transport,
+    channels, then the task pane.
 
   The skin is kept per device, never shared through remote control, so a
   remote can wear a different skin from the player it controls.
@@ -181,6 +184,7 @@ src/
   resize.ts           Draggable divider for the artwork column
   storage.ts          Saved mixes in localStorage
   skin.ts             Skins: the list, the Skins panel, kept per device
+  skinLayout.ts       Window layout for skins that need one (Windows XP)
   shareLinks.ts       Encode, decode and import share links
 assets/               Favicon, app icons and the logo artwork
   skins/xp/icons/     Windows XP skin icons (16 and 32 px)

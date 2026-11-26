@@ -1,12 +1,18 @@
 /**
  * Skins: the whole look of the player, chosen per device in the Skins panel.
  *
- * A skin is a stylesheet scoped to html[data-skin="<id>"]. The markup and
- * every behaviour stay the same in all skins, so switching is instant and
- * never touches playback or the connection to the paired room.
+ * A skin is a stylesheet scoped to html[data-skin="<id>"]. Every behaviour
+ * stays the same in all skins (a skin may only move panels around), so
+ * switching is instant and never touches playback or the connection to the
+ * paired room.
  *
  *   modern  Modern Warfare: the tactical console (styles.css, the base)
- *   xp      Windows XP: blue title bars on cream windows (skins/xp.css)
+ *   xp      Windows XP: the player as a desktop window (skins/xp.css)
+ *
+ * A skin can also lay the page out differently (`arrange`): "pages" is the
+ * base layout (panels that page past the stage); "window" moves the panels
+ * into a window with a toolbar, a task pane and a main view
+ * (src/skinLayout.ts). It is marked on <html> as data-arrange.
  *
  * The choice is kept in this browser only (localStorage), like the UI scale
  * and the layout: it is never part of the mix that remote control shares,
@@ -25,11 +31,13 @@ export interface SkinInfo {
   group: string;
   /** The browser bar's colour (meta theme-color) while it is on. */
   themeColor: string;
+  /** How the page is laid out: the base pages, or a window (src/skinLayout.ts). */
+  arrange: 'pages' | 'window';
 }
 
 export const SKINS: readonly SkinInfo[] = [
-  { id: 'modern', name: 'Modern Warfare', group: 'Modern', themeColor: '#08090A' },
-  { id: 'xp', name: 'Windows XP', group: 'Frutiger Aero', themeColor: '#0054E3' },
+  { id: 'modern', name: 'Modern Warfare', group: 'Modern', themeColor: '#08090A', arrange: 'pages' },
+  { id: 'xp', name: 'Windows XP', group: 'Frutiger Aero', themeColor: '#0054E3', arrange: 'window' },
 ];
 
 export const DEFAULT_SKIN: SkinId = 'modern';
@@ -60,6 +68,7 @@ export function applySkin(id: SkinId): void {
   const info = skinInfo(id) ?? skinInfo(DEFAULT_SKIN)!;
   const changed = currentSkin() !== info.id || document.documentElement.dataset.skin !== info.id;
   document.documentElement.dataset.skin = info.id;
+  document.documentElement.dataset.arrange = info.arrange;
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', info.themeColor);
   try {
     if (info.id === DEFAULT_SKIN) localStorage.removeItem(SKIN_KEY);

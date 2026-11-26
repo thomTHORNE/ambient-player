@@ -52,6 +52,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `resize.ts` | The divider that resizes the artwork column on large screens with a mouse. |
 | `storage.ts` | Saved mixes in `localStorage` under `yt_audio_playlists`. |
 | `skin.ts` | Skins: the list of skins, the Skins panel, applying and saving the choice on this device, and `ambient:skin-change`. |
+| `skinLayout.ts` | The window layout for skins that arrange the page themselves (Windows XP): moves the panels into the window and back, the task pane's collapsible groups, and the Mix tasks links. |
 | `shareLinks.ts` | Encodes a mix's URLs into `#pl=<base64url JSON>`, reads it back from the page URL, and finds a mix in pasted text for Import. |
 
 ## State and rendering
@@ -131,10 +132,13 @@ stops itself when nothing plays.
 
 ## Skins (`skin.ts`, `skins/`)
 
-A skin is the whole look. The markup and all behaviour are shared; only
-the stylesheet differs, so switching is instant and never touches playback.
+A skin is the whole look. All behaviour is shared; the stylesheet differs,
+and a skin may also move panels into a layout of its own. Switching is
+instant and never touches playback.
 
-- **How one applies:** `html[data-skin]` names it (`modern` or `xp`).
+- **How one applies:** `html[data-skin]` names it (`modern` or `xp`), and
+  `html[data-arrange]` how it lays the page out: `pages` (the base layout)
+  or `window`.
   `styles.css` is the base and the Modern Warfare skin; `skins/xp.css` has
   every Windows XP rule, scoped to `[data-skin="xp"]`, so the base skin is
   never affected. Both stylesheets always load.
@@ -149,17 +153,33 @@ the stylesheet differs, so switching is instant and never touches playback.
   layout readout.
 - **Per device:** the skin is never in the room snapshot, so remote control
   doesn't carry it; each device wears its own.
+- **The window layout (`skinLayout.ts`):** with `data-arrange="window"`,
+  the panels move into `#xpShell` (hidden in every other skin):
+  - **Toolbar:** the deck's transport, the repeat switch and the volume.
+  - **Main view:** the stage, with the timeline under Now playing and the
+    thumbnails in `#xpPlaying`, then the channels panel.
+  - **Task pane:** Mix tasks (static markup), then the saved mixes, mix
+    status, devices, screen effect and skins panels as groups.
+  - **Moving back:** nodes are moved, never copied, so listeners and ids
+    stay; a comment marks each one's place, and leaving the skin puts them
+    back. `layout.ts` stands aside while arranged (no pages, merge moves or
+    collapsing stage).
+  - **Groups:** each gets a collapse button; collapsed groups are kept in
+    `ambient-player:xp-groups`.
+  - **Mix tasks:** links that mirror a button (label, hidden, disabled)
+    and press it, or open a group and focus one of its fields.
 - **Windows XP specifics:**
   - **Highlight colour:** `--accent` is forced to the XP selection blue
     (`!important` beats the artwork colour `main.ts` sets on `<html>`).
-  - **Window chrome from existing markup:** the brand row is the title
-    bar; its status line (`.brand__sub`) is positioned as the status bar
-    along the window's foot; panel headings become title bars, with the
-    tools under them as a toolbar strip.
-  - **Hooks in the markup:** the deck and the stage take their title bars
-    from `::before`, and the status panel's hidden heading is shown. The
-    only skin-specific markup is `.ch-head`, the channel list's column
-    headings, hidden in Modern.
+  - **Title and status bars from existing markup:** the brand row is the
+    title bar; its status line (`.brand__sub`) is positioned as the status
+    bar along the window's foot.
+  - **Wide and narrow:** horizontal screens 860px and up get the toolbar on
+    top, the task pane beside the main view, and the channel list scrolling
+    on its own; everything else is one scrolling column.
+  - **Skin-only markup:** `#xpShell` and its contents, `#xpPlaying`, and
+    `.ch-head` (the list's column headings), all hidden in Modern; the
+    status panel's heading is visible only there.
   - **Channels as a details view:** on panels at least 600px wide (a
     container query on `.channels`), each row's parts are laid out on the
     same grid columns as `.ch-head`.
@@ -555,6 +575,7 @@ inline script in `index.html` applies it before the first paint.
 | `localStorage["ambient-player:relay"]` | Development only: a localhost relay address set with `?relay=`. |
 | `localStorage["ambient-player:screen"]` | The screen effect: `{ style, mix, tuned }` (style name, 0–1, overridden `--crt-*` values). |
 | `localStorage["ambient-player:skin"]` | The skin on this device: `xp`. Removed for Modern Warfare, the default. |
+| `localStorage["ambient-player:xp-groups"]` | Windows XP's task pane: which groups are collapsed, `{ "<heading id>": true }`. Screen effect starts collapsed. |
 | `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
 | Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. **Import** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |
 

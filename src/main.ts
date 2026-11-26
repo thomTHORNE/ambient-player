@@ -74,6 +74,7 @@ import { setupDevicesPanel, joinWithCode } from './devices.js';
 import type { Command } from './commands.js';
 import { setupLayout } from './layout.js';
 import { setupSkinPanel, SKIN_EVENT } from './skin.js';
+import { setupSkinLayout } from './skinLayout.js';
 import { storedScale, applyScale, appZoom, SCALE_MIN, SCALE_MAX, SCALE_STEP } from './scale.js';
 import { setupStageResize } from './resize.js';
 import { layoutChoice, setLayoutChoice, LAYOUT_CHOICE_EVENT } from './layoutPref.js';
@@ -266,7 +267,7 @@ function rowScroller(row: HTMLElement): HTMLElement | null {
   for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
     // Moving the main scroller would scroll the whole page (and collapse the
     // artwork) whenever the channel changes; only inner panels may follow.
-    if (el.id === 'scroller') return null;
+    if (el.id === 'scroller' || el.classList.contains('xp-shell')) return null;
     const overflow = getComputedStyle(el).overflowY;
     if ((overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el;
   }
@@ -1838,6 +1839,7 @@ async function initialize(): Promise<void> {
   setupScaleControl();
   setupLayoutControl();
   setupSkinPanel();
+  setupSkinLayout();
   window.addEventListener(SKIN_EVENT, () => requestAnimationFrame(updateScaleReadout));
   setupStageResize();
   buildStaticMeters();

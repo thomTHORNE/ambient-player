@@ -2992,6 +2992,25 @@ input[type="range"] {
   display: none;
 }
 
+/* A heading for screen readers only (the status panel's); skins that
+   group panels under visible headings show it. */
+.panel__head--quiet {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Collapse buttons for panels that a skin shows as task pane groups. */
+.xp-group__toggle {
+  display: none;
+}
+
 /* ---------- Saved mixes ---------- */
 
 .mixes {

@@ -2980,12 +2980,18 @@ function setLayoutChoice(choice) {
 /**
  * Skins: the whole look of the player, chosen per device in the Skins panel.
  *
- * A skin is a stylesheet scoped to html[data-skin="<id>"]. The markup and
- * every behaviour stay the same in all skins, so switching is instant and
- * never touches playback or the connection to the paired room.
+ * A skin is a stylesheet scoped to html[data-skin="<id>"]. Every behaviour
+ * stays the same in all skins (a skin may only move panels around), so
+ * switching is instant and never touches playback or the connection to the
+ * paired room.
  *
  *   modern  Modern Warfare: the tactical console (styles.css, the base)
- *   xp      Windows XP: blue title bars on cream windows (skins/xp.css)
+ *   xp      Windows XP: the player as a desktop window (skins/xp.css)
+ *
+ * A skin can also lay the page out differently (`arrange`): "pages" is the
+ * base layout (panels that page past the stage); "window" moves the panels
+ * into a window with a toolbar, a task pane and a main view
+ * (src/skinLayout.ts). It is marked on <html> as data-arrange.
  *
  * The choice is kept in this browser only (localStorage), like the UI scale
  * and the layout: it is never part of the mix that remote control shares,
@@ -2994,8 +3000,8 @@ function setLayoutChoice(choice) {
  * before the first paint; keep its key and ids in sync with these.
  */
 const SKINS = [
-    { id: 'modern', name: 'Modern Warfare', group: 'Modern', themeColor: '#08090A' },
-    { id: 'xp', name: 'Windows XP', group: 'Frutiger Aero', themeColor: '#0054E3' },
+    { id: 'modern', name: 'Modern Warfare', group: 'Modern', themeColor: '#08090A', arrange: 'pages' },
+    { id: 'xp', name: 'Windows XP', group: 'Frutiger Aero', themeColor: '#0054E3', arrange: 'window' },
 ];
 const DEFAULT_SKIN = 'modern';
 const SKIN_KEY = 'ambient-player:skin';
@@ -3022,6 +3028,7 @@ function applySkin(id) {
     const info = skinInfo(id) ?? skinInfo(DEFAULT_SKIN);
     const changed = currentSkin() !== info.id || document.documentElement.dataset.skin !== info.id;
     document.documentElement.dataset.skin = info.id;
+    document.documentElement.dataset.arrange = info.arrange;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', info.themeColor);
     try {
         if (info.id === DEFAULT_SKIN)
@@ -3054,6 +3061,204 @@ function setupSkinPanel() {
     // couldn't read and an unknown saved value.
     applySkin(storedSkin());
     show();
+}
+
+
+// ===== skinLayout.js =====
+/**
+ * Window layout for skins that arrange the page as a desktop window
+ * (data-arrange="window"; Windows XP).
+ *
+ * The panels are moved, never copied, so every listener, id and piece of
+ * state stays with them; leaving the skin puts each one back where it was
+ * (a comment marks its place). In the window (#xpShell, index.html):
+ *
+ *   toolbar     the deck's transport buttons, the repeat switch, the volume
+ *   task pane   "Mix tasks" (links to the main actions), then the saved
+ *               mixes, mix status, devices, screen effect and skins panels,
+ *               each a group that collapses (kept on this device)
+ *   main view   the stage (artwork beside "Now playing", the timeline and
+ *               "Playing now", the thumbnails in a box of their own) and
+ *               the channel list
+ *
+ * src/layout.ts stands aside while the window is up: no pages, pager or
+ * collapsing stage. skins/xp.css lays it all out, wide (toolbar on top, the
+ * task pane beside the main view) or narrow (one column, as on a phone).
+ */
+
+const slById = (id) => document.getElementById(id);
+/** Where each moved node lives in the base layout (a comment at that spot). */
+const slHomes = new Map();
+/** Collapsed task pane groups, by the id of their heading. */
+const SL_GROUPS_KEY = 'ambient-player:xp-groups';
+/** Collapsed until opened, the first time (the longest group). */
+const SL_COLLAPSED_BY_DEFAULT = ['screenTitle'];
+function slMove(node, into, before = null) {
+    if (!node || !into)
+        return;
+    if (!slHomes.has(node)) {
+        const home = document.createComment(` home of ${node.id || node.className} `);
+        node.before(home);
+        slHomes.set(node, home);
+    }
+    into.insertBefore(node, before);
+}
+/** Put every moved node back at its place in the base layout. */
+function slRestoreAll() {
+    for (const [node, home] of [...slHomes.entries()].reverse())
+        home.replaceWith(node);
+    slHomes.clear();
+}
+function slArranged() {
+    return document.documentElement.dataset.arrange === 'window';
+}
+// ---------------------------------------------------------------------------
+// Task pane groups: collapse and expand
+// ---------------------------------------------------------------------------
+function slReadCollapsed() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(SL_GROUPS_KEY) || 'null');
+        if (saved && typeof saved === 'object')
+            return saved;
+    }
+    catch {
+        // Unreadable: the defaults.
+    }
+    return Object.fromEntries(SL_COLLAPSED_BY_DEFAULT.map((id) => [id, true]));
+}
+function slSaveCollapsed(state) {
+    try {
+        localStorage.setItem(SL_GROUPS_KEY, JSON.stringify(state));
+    }
+    catch {
+        // Not kept; it still applies for this visit.
+    }
+}
+/** The heading's id names the group. */
+function slGroupKey(panel) {
+    return panel.querySelector('.panel__title')?.id || panel.id;
+}
+function slSetCollapsed(panel, collapsed, save = true) {
+    panel.classList.toggle('is-collapsed', collapsed);
+    const toggle = panel.querySelector('.xp-group__toggle');
+    const title = panel.querySelector('.panel__title')?.textContent?.trim() || 'group';
+    if (toggle) {
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+        toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} ${title}`);
+        toggle.title = collapsed ? 'Expand' : 'Collapse';
+    }
+    if (save) {
+        const state = slReadCollapsed();
+        state[slGroupKey(panel)] = collapsed;
+        slSaveCollapsed(state);
+    }
+}
+/** Give a task pane group its collapse button (once) and its saved state. */
+function slPrepareGroup(panel) {
+    const head = panel.querySelector('.panel__head');
+    if (!head)
+        return;
+    if (!panel.id)
+        panel.id = `${slGroupKey(panel)}Group`;
+    if (!head.querySelector('.xp-group__toggle')) {
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'xp-group__toggle';
+        toggle.setAttribute('aria-controls', panel.id);
+        toggle.addEventListener('click', () => slSetCollapsed(panel, !panel.classList.contains('is-collapsed')));
+        head.appendChild(toggle);
+    }
+    slSetCollapsed(panel, slReadCollapsed()[slGroupKey(panel)] === true, false);
+}
+// ---------------------------------------------------------------------------
+// Mix tasks: links to actions that live elsewhere
+// ---------------------------------------------------------------------------
+/**
+ * A task link mirrors a button (its label, hidden and disabled) and presses
+ * it, or brings a field into view in its group and focuses it.
+ */
+function slWireTasks(pane) {
+    pane.querySelectorAll('[data-proxy]').forEach((link) => {
+        const source = slById(link.dataset.proxy);
+        if (!source) {
+            link.hidden = true;
+            return;
+        }
+        const sync = () => {
+            link.textContent = source.textContent?.trim() || '';
+            link.hidden = source.hidden;
+            link.disabled = source.disabled;
+        };
+        new MutationObserver(sync).observe(source, { attributes: true, childList: true, characterData: true, subtree: true });
+        link.addEventListener('click', () => source.click());
+        sync();
+    });
+    pane.querySelectorAll('[data-focus]').forEach((link) => {
+        link.addEventListener('click', () => {
+            const field = slById(link.dataset.focus);
+            if (!field)
+                return;
+            const group = field.closest('.xp-pane > .panel');
+            if (group?.classList.contains('is-collapsed'))
+                slSetCollapsed(group, false);
+            field.scrollIntoView({ block: 'nearest' });
+            field.focus();
+        });
+    });
+}
+// ---------------------------------------------------------------------------
+// Arranging
+// ---------------------------------------------------------------------------
+function slArrange() {
+    const shell = slById('xpShell');
+    const toolbar = slById('xpToolbar');
+    const pane = slById('xpPane');
+    const main = slById('xpMain');
+    const stage = slById('stage');
+    if (!shell || !toolbar || !pane || !main || !stage)
+        return;
+    // Toolbar: transport first, then the repeat switch and the volume.
+    slMove(document.querySelector('.deck .transport'), toolbar, toolbar.firstChild);
+    slMove(slById('loopSwitch'), slById('xpRepeat'));
+    slMove(document.querySelector('.deck .output'), toolbar);
+    // Main view: the stage, with the timeline under "Now playing", then the channels.
+    slMove(slById('stageWrap'), main);
+    slMove(slById('scrub'), stage, stage.querySelector('.now__meta')?.nextSibling ?? null);
+    const playing = slById('xpPlaying');
+    slMove(slById('thumbStrip'), playing);
+    if (playing)
+        playing.hidden = false;
+    slMove(document.querySelector('.panel.channels'), main);
+    // Task pane: after Mix tasks, the other panels as groups.
+    for (const selector of ['.panel.mixes', '.panel.status', '.panel.devices', '.panel.screen', '.panel.skins']) {
+        slMove(document.querySelector(selector), pane);
+    }
+    pane.querySelectorAll(':scope > .panel').forEach(slPrepareGroup);
+    shell.hidden = false;
+}
+function slUnarrange() {
+    const shell = slById('xpShell');
+    if (shell)
+        shell.hidden = true;
+    const playing = slById('xpPlaying');
+    if (playing)
+        playing.hidden = true;
+    slRestoreAll();
+}
+function slApply() {
+    if (slArranged())
+        slArrange();
+    else if (slHomes.size)
+        slUnarrange();
+}
+function setupSkinLayout() {
+    const pane = slById('xpPane');
+    if (pane)
+        slWireTasks(pane);
+    slApply();
+    // Runs before src/layout.ts re-measures (it waits a frame), so it measures
+    // the page as it will be.
+    window.addEventListener(SKIN_EVENT, slApply);
 }
 
 
@@ -3110,6 +3315,13 @@ let artMaxH = 0;
 let artMinH = 0;
 let collapseFrame = 0;
 const lRoot = document.documentElement;
+/**
+ * A skin that lays the page out as a window (src/skinLayout.ts) has no
+ * pages, pager or collapsing stage: this module stands aside.
+ */
+function arranged() {
+    return lRoot.dataset.arrange === 'window';
+}
 /** The vertical layout: on upright screens, or wherever Stacked is chosen. */
 function isStacked() {
     return lRoot.dataset.layout === 'stacked';
@@ -3131,7 +3343,7 @@ function applyMerge() {
     const merged = !isStacked() && mergeQuery.matches;
     lRoot.dataset.merged = String(merged);
     const home = merged ? lDeckSlide : lChannelsSlide;
-    if (lChannelsPanel.parentElement !== home)
+    if (!arranged() && lChannelsPanel.parentElement !== home)
         home.appendChild(lChannelsPanel);
     // The channels bar leads to the merged panel, like the deck's.
     lBars.forEach((bar) => {
@@ -3219,7 +3431,7 @@ function refreshLayout() {
     lStageWrap.style.height = '';
     lStageWrap.style.top = '';
     ['--deck-snap', '--pinned-h', '--page-h'].forEach((name) => lScroller.style.removeProperty(name));
-    if (!isStacked()) {
+    if (!isStacked() || arranged()) {
         artMaxH = artMinH = range = 0;
         return;
     }
@@ -3592,6 +3804,7 @@ function setupStageResize() {
 
 
 
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -3744,7 +3957,7 @@ function rowScroller(row) {
     for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
         // Moving the main scroller would scroll the whole page (and collapse the
         // artwork) whenever the channel changes; only inner panels may follow.
-        if (el.id === 'scroller')
+        if (el.id === 'scroller' || el.classList.contains('xp-shell'))
             return null;
         const overflow = getComputedStyle(el).overflowY;
         if ((overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 1)
@@ -5329,6 +5542,7 @@ async function initialize() {
     setupScaleControl();
     setupLayoutControl();
     setupSkinPanel();
+    setupSkinLayout();
     window.addEventListener(SKIN_EVENT, () => requestAnimationFrame(updateScaleReadout));
     setupStageResize();
     buildStaticMeters();

@@ -59,6 +59,14 @@ let collapseFrame = 0;
 
 const lRoot = document.documentElement;
 
+/**
+ * A skin that lays the page out as a window (src/skinLayout.ts) has no
+ * pages, pager or collapsing stage: this module stands aside.
+ */
+function arranged(): boolean {
+  return lRoot.dataset.arrange === 'window';
+}
+
 /** The vertical layout: on upright screens, or wherever Stacked is chosen. */
 function isStacked(): boolean {
   return lRoot.dataset.layout === 'stacked';
@@ -83,7 +91,7 @@ function applyMerge(): void {
   const merged = !isStacked() && mergeQuery.matches;
   lRoot.dataset.merged = String(merged);
   const home = merged ? lDeckSlide : lChannelsSlide;
-  if (lChannelsPanel.parentElement !== home) home.appendChild(lChannelsPanel);
+  if (!arranged() && lChannelsPanel.parentElement !== home) home.appendChild(lChannelsPanel);
   // The channels bar leads to the merged panel, like the deck's.
   lBars.forEach((bar) => {
     bar.hidden = merged && bar.dataset.slide === '1';
@@ -172,7 +180,7 @@ function refreshLayout(): void {
   lStageWrap.style.height = '';
   lStageWrap.style.top = '';
   ['--deck-snap', '--pinned-h', '--page-h'].forEach((name) => lScroller.style.removeProperty(name));
-  if (!isStacked()) {
+  if (!isStacked() || arranged()) {
     artMaxH = artMinH = range = 0;
     return;
   }

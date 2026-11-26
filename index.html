@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-empty="true" data-skin="modern">
+<html lang="en" data-empty="true" data-skin="modern" data-arrange="pages">
 
 <head>
   <meta charset="UTF-8">
@@ -10,7 +10,11 @@
     (function () {
       try {
         var skin = localStorage.getItem('ambient-player:skin');
-        if (skin === 'xp') document.documentElement.setAttribute('data-skin', skin);
+        if (skin === 'xp') {
+          document.documentElement.setAttribute('data-skin', skin);
+          /* Windows XP lays the page out as a window (src/skinLayout.ts). */
+          document.documentElement.setAttribute('data-arrange', 'window');
+        }
       } catch (e) {}
     })();
     /* Apply the saved UI scale and artwork column width before the first
@@ -68,10 +72,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=f2e4efce65">
+  <link rel="stylesheet" href="styles.css?v=ceb4127dcb">
   <!-- Skins (src/skin.ts): each one is scoped to html[data-skin], so loading
        them all keeps switching instant. -->
-  <link rel="stylesheet" href="skins/xp.css?v=dd6503e4ec">
+  <link rel="stylesheet" href="skins/xp.css?v=7c8821ef3c">
 </head>
 
 <body>
@@ -136,6 +140,8 @@
           </div>
           <!-- Large horizontal screens: what's playing, as thumbnails, under the title. -->
           <ol id="thumbStrip" class="thumbs" aria-label="Playing channels"></ol>
+          <!-- Windows XP: the box "Playing now" around the thumbnails (src/skinLayout.ts). -->
+          <div id="xpPlaying" class="xp-playing" hidden></div>
         </main>
       </div>
 
@@ -268,13 +274,15 @@
               <ul id="savedPlaylistsList" class="mix-list"></ul>
             </section>
           <section class="panel status" aria-labelledby="statusTitle">
-              <h2 id="statusTitle" class="visually-hidden">Mix status</h2>
+              <header class="panel__head panel__head--quiet">
+                <h2 id="statusTitle" class="panel__title">Mix status</h2>
+              </header>
               <dl class="rows">
                 <div class="row">
                   <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11M6.5 21h11"/><path d="M7.5 3c0 5 9 5 9 9s-9 4-9 9M16.5 3c0 5-9 5-9 9s9 4 9 9"/></svg>Duration</dt>
                   <dd id="statDur">—</dd>
                 </div>
-                <div class="row">
+                <div class="row" id="repeatRow">
                   <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>Repeat</dt>
                   <dd><button id="loopSwitch" class="pill pill--btn tone-idle" type="button" aria-pressed="false" aria-label="Repeat this channel" disabled>Off</button></dd>
                 </div>
@@ -419,6 +427,34 @@
       </div>
     </div>
 
+    <!-- Skins that lay the page out as a window (Windows XP; src/skinLayout.ts)
+         move the panels in here: the deck's transport, repeat and volume on
+         the toolbar, the stage and the channel list in the main view, and
+         the other panels as groups of the task pane. Empty and hidden in
+         every other skin. -->
+    <div id="xpShell" class="xp-shell" hidden>
+      <div id="xpToolbar" class="xp-toolbar" role="group" aria-label="Playback">
+        <span class="xp-toolbar__sep" aria-hidden="true"></span>
+        <span id="xpRepeat" class="xp-repeat"><span class="xp-repeat__label" aria-hidden="true">Repeat</span></span>
+        <span class="xp-toolbar__fill" aria-hidden="true"></span>
+      </div>
+      <aside id="xpPane" class="xp-pane" aria-label="Tasks">
+        <section class="panel xp-tasks" aria-labelledby="xpTasksTitle">
+          <header class="panel__head">
+            <h2 id="xpTasksTitle" class="panel__title">Mix tasks</h2>
+          </header>
+          <ul class="xp-tasks__list">
+            <li><button class="xp-task xp-task--resume" type="button" data-proxy="resumeButton"></button></li>
+            <li><button class="xp-task xp-task--all" type="button" data-proxy="globalPlayPause"></button></li>
+            <li><button class="xp-task xp-task--save" type="button" data-focus="playlistNameInput">Save this mix</button></li>
+            <li><button class="xp-task xp-task--share" type="button" data-proxy="shareButton"></button></li>
+            <li><button class="xp-task xp-task--import" type="button" data-focus="importInput">Import a link</button></li>
+          </ul>
+        </section>
+      </aside>
+      <div id="xpMain" class="xp-main"></div>
+    </div>
+
     <!-- Panel indicator: one bar per panel; tap to jump. -->
     <nav id="pager" class="pager" aria-label="Panels">
       <button class="pager__bar" type="button" data-slide="0" aria-label="Playback controls" aria-current="true"></button>
@@ -433,7 +469,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=50f5ebae6b"></script>
+  <script src="app.js?v=74b8322de8"></script>
 </body>
 
 </html>

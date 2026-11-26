@@ -29,6 +29,7 @@ const files = [
   'devices.js',
   'layoutPref.js',
   'skin.js',
+  'skinLayout.js',
   'layout.js',
   'scale.js',
   'resize.js',

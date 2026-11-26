@@ -205,18 +205,31 @@ colour and "· Current" after the channel count.
 ## Skins
 
 Everything above describes **Modern Warfare**, the default skin. **Windows
-XP** (`skins/xp.css`) keeps the same layouts and interaction rules and
-changes the surfaces, after the XP UI kit sheets:
+XP** (`skins/xp.css`, laid out by `src/skinLayout.ts`) is the player as a
+desktop window, after the XP UI kit sheets and the "task pane" mockup.
+Everything stays in view at once instead of paging:
 
-- **Window.** The app is a maximized window: the Luna title bar on top
-  ("Ambient Player", the maximize / restore button for fullscreen), the
-  cream face (`#ECE9D8`), and a status bar with sunken panes at the foot
-  (the mix, what's playing, remote control) and the resize grip.
-- **Panels.** Each panel, the deck and (side by side) the stage are toolbox
-  windows: a blue title bar with the panel's icon, a 3px blue frame. A
-  panel's tools sit on a toolbar strip under its title bar.
-- **Groups.** The deck's timeline and volume, and the skin families, are
-  groupboxes with blue legends.
+- **Window.** The Luna title bar on top ("Ambient Player", the maximize /
+  restore button for fullscreen), the cream face (`#ECE9D8`), and a status
+  bar with sunken panes at the foot (the mix, what's playing, remote
+  control) and the resize grip.
+- **Toolbar.** Under the title bar: Previous, Play / Pause, Next and Stop
+  as flat toolbar buttons, the repeat checkbox, and the volume slider at
+  the far end.
+- **Task pane.** On the left, on the blue pane: collapsible groups. Mix
+  tasks first, the primary group (dark header): Resume, Play all / Pause
+  all, Save this mix, Copy share link, Import a link. Then Saved mixes, Mix
+  status, Devices, Screen effect (collapsed at first) and Skins.
+- **Main view.** The artwork in a sunken frame beside three groupboxes:
+  Now playing, Timeline and Playing now (thumbnails, hidden on short
+  screens). Under them the channels: their name, the link field, Resume or
+  Pause all, then the details list, which fills the rest of the height and
+  scrolls on its own.
+- **Phones.** One column: the artwork edge to edge, Now playing and the
+  timeline, the four transport buttons, repeat and volume, the channels as
+  a group with a big green Resume, then the task pane's groups.
+- **Groups.** The timeline, Now playing, Playing now and the skin families
+  are groupboxes with blue legends.
 - **Controls.**
   - **Buttons:** the kit's buttons (75px minimum, orange hover, blue focus
     ring); Resume is the default button, with a green play mark.

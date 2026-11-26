@@ -69,6 +69,61 @@ export function onFullscreenChange(listener: () => void): void {
 }
 
 // ---------------------------------------------------------------------------
+// The installed app: reclaim space the browser keeps after the status bar
+// ---------------------------------------------------------------------------
+//
+// Seen on Android (Brave, a Galaxy Fold): pulling the notification shade
+// down in the fullscreen app shrinks the window by the status bar's height,
+// and when the shade goes the browser doesn't always give that space back.
+// A page can't resize its window, but asking for fullscreen again hides the
+// bars and restores it. That needs a tap, so the next tap does it, when the
+// window is shorter than it has been at this width (and this UI scale).
+
+/** Shorter than this (CSS px) is the browser holding space, not rounding. */
+const SHORT_BY_PX = 20;
+
+/** The tallest the window has been, per width and viewport setting. */
+const tallest = new Map<string, number>();
+
+function windowKey(): string {
+  const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')?.content ?? '';
+  return `${Math.round(window.innerWidth)}|${viewport}`;
+}
+
+/** Typing: the on-screen keyboard can shorten the window, and fullscreen would close it. */
+function typing(target: EventTarget | null): boolean {
+  const el = (target instanceof Element ? target : document.activeElement) as HTMLElement | null;
+  return !!el?.closest('input, textarea, select, [contenteditable="true"]');
+}
+
+/** The window is shorter than it was at this width: the browser kept the space. */
+export function windowShortened(): boolean {
+  const h = window.innerHeight;
+  const key = windowKey();
+  const most = Math.max(tallest.get(key) ?? 0, h);
+  tallest.set(key, most);
+  return most - h >= SHORT_BY_PX;
+}
+
+export function setupReclaimSpace(): void {
+  if (!runningAsFullscreenApp() || !fullscreenSupported()) return;
+  const note = () => {
+    if (!typing(null)) windowShortened();
+  };
+  note();
+  window.addEventListener('resize', note);
+  // Capture phase: the tap still reaches whatever it was aimed at.
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (isFullscreen() || typing(e.target) || typing(null)) return;
+      if (windowShortened()) void enterFullscreen();
+    },
+    true
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Keep the screen on
 // ---------------------------------------------------------------------------
 

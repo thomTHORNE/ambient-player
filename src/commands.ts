@@ -21,6 +21,10 @@ export type Command =
   | { type: 'pause'; trackId: TrackId }
   | { type: 'play_all' }
   | { type: 'pause_all' }
+  /** Play the channels marked for Resume (the ones last played). */
+  | { type: 'resume' }
+  /** Mark a channel for Resume, or unmark it. */
+  | { type: 'select'; trackId: TrackId; on: boolean }
   /** Bring a channel to the main display. */
   | { type: 'focus'; trackId: TrackId }
   /** Move the main display to the previous or next channel. */
@@ -33,8 +37,11 @@ export type Command =
   | { type: 'add'; url: string }
   | { type: 'remove'; trackId: TrackId }
   | { type: 'relink'; trackId: TrackId; url: string }
-  /** Load a list of links: replace the mix (taking `name`) or add to it. */
-  | { type: 'load_mix'; urls: string[]; name: string | null; mode: 'replace' | 'append' };
+  /**
+   * Load a list of links: replace the mix (taking `name`) or add to it.
+   * `resume` (replace only): the links to mark for Resume, from a saved mix.
+   */
+  | { type: 'load_mix'; urls: string[]; name: string | null; mode: 'replace' | 'append'; resume?: string[] };
 
 export type CommandType = Command['type'];
 

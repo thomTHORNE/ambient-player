@@ -29,17 +29,31 @@ function saveStoredData(data) {
 /**
  * Save or update a playlist
  */
-function saveOrUpdatePlaylist(name, urls) {
+function saveOrUpdatePlaylist(name, urls, resume = []) {
     const data = loadStoredData();
     const existing = data.playlists.find(p => p.name === name);
     if (existing) {
         existing.urls = urls;
+        existing.resume = resume;
     }
     else {
-        data.playlists.push({ name, urls });
+        data.playlists.push({ name, urls, resume });
     }
     data.lastPlaylistName = name;
     saveStoredData(data);
+}
+/**
+ * Remember which channels of a saved mix Resume plays. Only updates a mix
+ * that is saved on this device; false when there is none by that name.
+ */
+function saveMixResume(name, resume) {
+    const data = loadStoredData();
+    const existing = data.playlists.find(p => p.name === name);
+    if (!existing)
+        return false;
+    existing.resume = resume;
+    saveStoredData(data);
+    return true;
 }
 /**
  * Delete a playlist by name
@@ -94,6 +108,7 @@ class PlaylistManager {
             volume: 1,
             isMuted: false,
             loop: true,
+            selected: false,
         };
         this.state.tracks.push(track);
         return track;
@@ -161,6 +176,18 @@ class PlaylistManager {
         this.state.tracks = tracks.map((t) => ({ ...t }));
     }
     /**
+     * Move the selected channels to the top, each group keeping its order.
+     * True when the order changed.
+     */
+    sortSelectedFirst() {
+        const before = this.state.tracks;
+        const sorted = [...before.filter((t) => t.selected), ...before.filter((t) => !t.selected)];
+        if (sorted.every((t, i) => t === before[i]))
+            return false;
+        this.state.tracks = sorted;
+        return true;
+    }
+    /**
      * Get all track URLs in order
      */
     getTrackUrls() {
@@ -194,6 +221,48 @@ function waitForYouTubeAPI() {
         }
     });
 }
+// ---------------------------------------------------------------------------
+// Warming up: each channel plays once, muted, while the page is visible
+// ---------------------------------------------------------------------------
+//
+// Chromium holds back media in a hidden page from a frame that has never
+// played anything: it loads only once the page is visible again. Each channel
+// is its own YouTube frame, so with the screen off (a phone controlled from
+// another device) a channel that has never played would not start until the
+// screen came on, while channels that had played kept working. So each new
+// player plays for a moment, muted, while the page is visible, then goes back
+// to where it was, paused. One at a time, so a mix's loading stays light.
+const warmQueue = [];
+let warming = false;
+function whenVisible() {
+    if (document.visibilityState === 'visible')
+        return Promise.resolve();
+    return new Promise((resolve) => {
+        const on = () => {
+            if (document.visibilityState !== 'visible')
+                return;
+            document.removeEventListener('visibilitychange', on);
+            resolve();
+        };
+        document.addEventListener('visibilitychange', on);
+    });
+}
+async function drainWarmQueue() {
+    if (warming)
+        return;
+    warming = true;
+    while (warmQueue.length) {
+        await whenVisible();
+        await warmQueue.shift()();
+    }
+    warming = false;
+}
+function queueWarmUp(job) {
+    warmQueue.push(job);
+    void drainWarmQueue();
+}
+/** Give up on a warm-up that doesn't start playing within this long. */
+const WARM_TIMEOUT_MS = 8000;
 /**
  * Create a YouTube player controller
  */
@@ -203,18 +272,71 @@ function createYouTubePlayerFactory() {
             let player = null;
             let isReady = false;
             let timeoutId = null;
+            /** Played at least once (warm-up or for real): this frame can start while hidden. */
+            let warmed = false;
+            /** The warm-up in progress: what it does with the player's next events. */
+            let warm = null;
+            const endWarmUp = () => {
+                const w = warm;
+                if (!w)
+                    return;
+                warm = null;
+                warmed = true;
+                w.finish();
+            };
+            const warmUp = () => new Promise((resolve) => {
+                if (!player || warmed || warm)
+                    return resolve();
+                const p = player;
+                const timer = window.setTimeout(() => {
+                    // Never started: leave it paused, sound on; it can still play when asked.
+                    if (!warm)
+                        return;
+                    const keep = warm.wantPlay;
+                    warm = null;
+                    p.unMute();
+                    if (!keep)
+                        p.pauseVideo();
+                    resolve();
+                }, WARM_TIMEOUT_MS);
+                warm = {
+                    stage: 'starting',
+                    wantPlay: false,
+                    from: p.getCurrentTime() || startSeconds || 0,
+                    finish: () => {
+                        clearTimeout(timer);
+                        resolve();
+                    },
+                };
+                p.mute();
+                p.playVideo();
+            });
             const controller = {
                 play() {
+                    if (warm) {
+                        // Taken up when the warm-up's playback starts (or stops).
+                        warm.wantPlay = true;
+                        return;
+                    }
                     if (isReady && player) {
+                        // Playing for real: no warm-up needed (or wanted) after this.
+                        warmed = true;
                         player.playVideo();
                     }
                 },
                 pause() {
+                    if (warm) {
+                        warm.wantPlay = false;
+                        return;
+                    }
                     if (isReady && player) {
                         player.pauseVideo();
                     }
                 },
                 seekTo(seconds) {
+                    // Warming up: it goes back here once it has stopped.
+                    if (warm)
+                        warm.from = seconds;
                     if (isReady && player) {
                         player.seekTo(seconds, true);
                     }
@@ -248,6 +370,7 @@ function createYouTubePlayerFactory() {
                     return '';
                 },
                 destroy() {
+                    endWarmUp();
                     if (timeoutId !== null) {
                         clearTimeout(timeoutId);
                         timeoutId = null;
@@ -299,6 +422,7 @@ function createYouTubePlayerFactory() {
                                 };
                                 onMeta(trackId, meta);
                                 onState(trackId, 'paused');
+                                queueWarmUp(warmUp);
                             }
                             catch (error) {
                                 onError(trackId, {
@@ -309,7 +433,33 @@ function createYouTubePlayerFactory() {
                         },
                         onStateChange(event) {
                             const state = event.data;
+                            // Warming up: the page hears nothing of it, unless asked to play meanwhile.
+                            if (warm) {
+                                const p = event.target;
+                                if (state === YT.PlayerState.PLAYING && warm.stage === 'starting') {
+                                    if (warm.wantPlay) {
+                                        p.unMute();
+                                        endWarmUp();
+                                        onState(trackId, 'playing');
+                                    }
+                                    else {
+                                        warm.stage = 'stopping';
+                                        p.pauseVideo();
+                                    }
+                                }
+                                else if (state === YT.PlayerState.PAUSED && warm.stage === 'stopping') {
+                                    const w = warm;
+                                    p.seekTo(w.from, true);
+                                    p.unMute();
+                                    endWarmUp();
+                                    // Asked to play while it stopped: start for real now.
+                                    if (w.wantPlay)
+                                        p.playVideo();
+                                }
+                                return;
+                            }
                             if (state === YT.PlayerState.PLAYING) {
+                                warmed = true;
                                 onState(trackId, 'playing');
                             }
                             else if (state === YT.PlayerState.PAUSED) {
@@ -546,6 +696,7 @@ const icons = {
     volume: line('<path d="M11 5 6.5 9H3v6h3.5L11 19z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
     source: line('<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/>'),
     bookmark: line('<path d="M18 20.5 12 16l-6 4.5V5.5A2 2 0 0 1 8 3.5h8a2 2 0 0 1 2 2z"/>'),
+    check: line('<path d="m5.5 12.5 4 4 9-9"/>'),
     hourglass: line('<path d="M6.5 3h11M6.5 21h11"/><path d="M7.5 3c0 5 9 5 9 9s-9 4-9 9M16.5 3c0 5-9 5-9 9s9 4 9 9"/>'),
 };
 function stateInfo(track) {
@@ -563,13 +714,13 @@ function trackTitle(track) {
         return 'Loading channel';
     return track.meta?.title || 'Untitled video';
 }
-/** Elapsed and remaining time, shown faintly under each channel. */
+/** Elapsed time and the channel's length, shown faintly under each channel. */
 function rowClock(track) {
     const t = track.currentTime;
     const d = track.duration || 0;
     if (!d)
         return formatTime(t);
-    return `${formatTime(t)} <span class="ch__clock-sep">/</span> −${formatTime(Math.max(0, d - t))}`;
+    return `${formatTime(t)} <span class="ch__clock-sep">/</span> ${formatTime(d)}`;
 }
 /**
  * Markup for one channel row. Its settings drawer (volume, change link,
@@ -588,8 +739,9 @@ function channelRowHtml(track, index, focused, drawerOpen = false) {
     const vol = Math.round(track.volume * 100);
     const id = esc(track.id);
     return `
-    <li class="ch is-${track.state}${focused ? ' is-focus' : ''}${drawerOpen ? ' is-open' : ''}" data-track-id="${id}">
+    <li class="ch is-${track.state}${focused ? ' is-focus' : ''}${drawerOpen ? ' is-open' : ''}${track.selected ? ' is-picked' : ''}" data-track-id="${id}">
       <div class="ch__main">
+        ${pickButtonHtml(track)}
         <button class="ch__focus" type="button" data-action="focus" aria-current="${focused ? 'true' : 'false'}" aria-label="Show ${title} in the player">
           ${thumb}
           <span class="ch__text">
@@ -628,6 +780,11 @@ function channelRowHtml(track, index, focused, drawerOpen = false) {
         </div>
       </div>
     </li>`;
+}
+/** The mark for Resume at the start of a row: ticked for the channels last played. */
+function pickButtonHtml(track) {
+    const title = esc(trackTitle(track));
+    return `<button class="ch__pick" type="button" data-action="pick" aria-pressed="${track.selected}" aria-label="Resume ${title}" title="${track.selected ? 'Resume plays this channel' : 'Add to Resume'}"><span class="ch__pick-box" aria-hidden="true">${icons.check}</span></button>`;
 }
 /** One number in the strip: jumps to that channel; marks playing and selected. */
 function stripItemHtml(track, index, focused) {
@@ -672,6 +829,12 @@ function patchChannelRow(li, track) {
         const { label, tone } = stateInfo(track);
         state.textContent = label;
         state.className = `ch__state tone-${tone}`;
+    }
+    li.classList.toggle('is-picked', track.selected);
+    const pick = li.querySelector('.ch__pick');
+    if (pick && pick.getAttribute('aria-pressed') !== String(track.selected)) {
+        pick.setAttribute('aria-pressed', String(track.selected));
+        pick.title = track.selected ? 'Resume plays this channel' : 'Add to Resume';
     }
     const toggle = li.querySelector('.ch__toggle');
     if (toggle && toggle.classList.contains('is-on') !== playing) {
@@ -718,7 +881,9 @@ function setRowConfirm(li, open) {
     ask.hidden = open;
     confirm.hidden = !open;
 }
-/** Render the saved mixes list. */
+/** The share button's icons: a link, and a check while "copied" shows. */
+const shareIcons = `${icons.link.replace('<svg ', '<svg class="share__icon" ')}${icons.check.replace('<svg ', '<svg class="share__done" ')}`;
+/** Render the saved mixes list: each mix loads, shares its link, or goes. */
 function renderSavedPlaylists(playlists, container) {
     if (playlists.length === 0) {
         container.innerHTML = '<li class="mix mix--empty">Saved mixes appear here.</li>';
@@ -734,10 +899,31 @@ function renderSavedPlaylists(playlists, container) {
             <span class="mix__count">${p.urls.length} channel${p.urls.length === 1 ? '' : 's'}<span class="mix__tag"> · Current</span></span>
           </span>
           <button class="btn btn--quiet btn--small" type="button" data-mix-action="load" data-playlist-name="${name}" aria-label="Load mix ${name}">Load</button>
-          <button class="icon-btn" type="button" data-mix-action="delete" data-playlist-name="${name}" aria-label="Delete mix ${name}">${icons.trash}</button>
+          <button class="icon-btn share-btn" type="button" data-mix-action="share" data-playlist-name="${name}" aria-label="Copy share link for mix ${name}" title="Copy share link"><span class="visually-hidden share__label">Copy share link</span>${shareIcons}</button>
+          <button class="icon-btn mix__delete" type="button" data-mix-action="delete" data-playlist-name="${name}" aria-label="Delete mix ${name}">${icons.trash}</button>
         </li>`;
     })
         .join('');
+}
+/**
+ * Show that a share button copied its link: a check for a moment, and the
+ * news for screen readers (its label stays, its icons stay).
+ */
+const copiedTimers = new WeakMap();
+function markCopied(button) {
+    const label = button.querySelector('.share__label');
+    const running = copiedTimers.get(button);
+    if (running !== undefined)
+        clearTimeout(running);
+    button.classList.add('is-copied');
+    if (label)
+        label.textContent = 'Link copied';
+    copiedTimers.set(button, window.setTimeout(() => {
+        button.classList.remove('is-copied');
+        if (label)
+            label.textContent = 'Copy share link';
+        copiedTimers.delete(button);
+    }, 1800));
 }
 /** Ask whether a loaded mix replaces or joins the current channels. */
 function showReplaceAppendModal(message) {
@@ -1493,7 +1679,7 @@ function setBackdrop(src, letterboxed = false) {
 
 // ===== screenFx.js =====
 /**
- * Screen effect settings (the last panel): which style of screen the
+ * Screen effect settings (the fourth panel, under Devices): which style of screen the
  * artwork is shown on, how much of it (Mix), and the fine-tune sliders.
  *
  * - The dial is a rotary switch: each tap (or arrow key) turns it to the next
@@ -1793,6 +1979,54 @@ async function exitFullscreen() {
 function onFullscreenChange(listener) {
     document.addEventListener('fullscreenchange', listener);
     document.addEventListener('webkitfullscreenchange', listener);
+}
+// ---------------------------------------------------------------------------
+// The installed app: reclaim space the browser keeps after the status bar
+// ---------------------------------------------------------------------------
+//
+// Seen on Android (Brave, a Galaxy Fold): pulling the notification shade
+// down in the fullscreen app shrinks the window by the status bar's height,
+// and when the shade goes the browser doesn't always give that space back.
+// A page can't resize its window, but asking for fullscreen again hides the
+// bars and restores it. That needs a tap, so the next tap does it, when the
+// window is shorter than it has been at this width (and this UI scale).
+/** Shorter than this (CSS px) is the browser holding space, not rounding. */
+const SHORT_BY_PX = 20;
+/** The tallest the window has been, per width and viewport setting. */
+const tallest = new Map();
+function windowKey() {
+    const viewport = document.querySelector('meta[name="viewport"]')?.content ?? '';
+    return `${Math.round(window.innerWidth)}|${viewport}`;
+}
+/** Typing: the on-screen keyboard can shorten the window, and fullscreen would close it. */
+function typing(target) {
+    const el = (target instanceof Element ? target : document.activeElement);
+    return !!el?.closest('input, textarea, select, [contenteditable="true"]');
+}
+/** The window is shorter than it was at this width: the browser kept the space. */
+function windowShortened() {
+    const h = window.innerHeight;
+    const key = windowKey();
+    const most = Math.max(tallest.get(key) ?? 0, h);
+    tallest.set(key, most);
+    return most - h >= SHORT_BY_PX;
+}
+function setupReclaimSpace() {
+    if (!runningAsFullscreenApp() || !fullscreenSupported())
+        return;
+    const note = () => {
+        if (!typing(null))
+            windowShortened();
+    };
+    note();
+    window.addEventListener('resize', note);
+    // Capture phase: the tap still reaches whatever it was aimed at.
+    document.addEventListener('click', (e) => {
+        if (isFullscreen() || typing(e.target) || typing(null))
+            return;
+        if (windowShortened())
+            void enterFullscreen();
+    }, true);
 }
 let lock = null;
 let wanted = false;
@@ -2617,7 +2851,7 @@ function qrSvg(text, label) {
 
 // ===== devices.js =====
 /**
- * The Devices section (last panel): pairing devices for remote control
+ * The Devices section (fourth panel): pairing devices for remote control
  * (docs/remote-control-plan.md, phase 2).
  *
  * - Connect a device: creates the room if this device has none, then shows
@@ -2936,6 +3170,409 @@ function setLayoutChoice(choice) {
 }
 
 
+// ===== skin.js =====
+/**
+ * Skins: the whole look of the player, chosen per device in the Skins panel.
+ *
+ * A skin is a stylesheet scoped to html[data-skin="<id>"]. Every behaviour
+ * stays the same in all skins (a skin may only move panels around), so
+ * switching is instant and never touches playback or the connection to the
+ * paired room.
+ *
+ *   modern  Modern Warfare: the tactical console (styles.css, the base)
+ *   xp      Windows XP: the player as a desktop window (skins/xp.css)
+ *
+ * A skin can also lay the page out differently (`arrange`): "pages" is the
+ * base layout (panels that page past the stage); "window" moves the panels
+ * into a window with a toolbar, a task pane and a main view
+ * (src/skinLayout.ts). It is marked on <html> as data-arrange.
+ *
+ * The choice is kept in this browser only (localStorage), like the UI scale
+ * and the layout: it is never part of the mix that remote control shares,
+ * so a phone used as a remote can wear a different skin from the laptop it
+ * controls. A small inline script in index.html applies the saved skin
+ * before the first paint; keep its key and ids in sync with these.
+ */
+const SKINS = [
+    { id: 'modern', name: 'Modern Warfare', group: 'Modern', themeColor: '#08090A', arrange: 'pages' },
+    { id: 'xp', name: 'Windows XP', group: 'Frutiger Aero', themeColor: '#0054E3', arrange: 'window' },
+];
+const DEFAULT_SKIN = 'modern';
+const SKIN_KEY = 'ambient-player:skin';
+/** Fired on window after the skin changes (layouts re-measure, canvases repaint). */
+const SKIN_EVENT = 'ambient:skin-change';
+function skinInfo(id) {
+    return SKINS.find((s) => s.id === id);
+}
+/** The skin saved on this device, or the default. */
+function storedSkin() {
+    try {
+        return skinInfo(localStorage.getItem(SKIN_KEY))?.id ?? DEFAULT_SKIN;
+    }
+    catch {
+        return DEFAULT_SKIN;
+    }
+}
+/** The skin on screen now. */
+function currentSkin() {
+    return skinInfo(document.documentElement.dataset.skin)?.id ?? DEFAULT_SKIN;
+}
+/** Wear a skin (and keep it on this device). */
+function applySkin(id) {
+    const info = skinInfo(id) ?? skinInfo(DEFAULT_SKIN);
+    const changed = currentSkin() !== info.id || document.documentElement.dataset.skin !== info.id;
+    document.documentElement.dataset.skin = info.id;
+    document.documentElement.dataset.arrange = info.arrange;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', info.themeColor);
+    try {
+        if (info.id === DEFAULT_SKIN)
+            localStorage.removeItem(SKIN_KEY);
+        else
+            localStorage.setItem(SKIN_KEY, info.id);
+    }
+    catch {
+        // Not saved; it still applies for this visit.
+    }
+    if (changed)
+        window.dispatchEvent(new CustomEvent(SKIN_EVENT, { detail: info.id }));
+}
+/** The Skins panel: one radio button per skin, grouped by family (index.html). */
+function setupSkinPanel() {
+    const radios = Array.from(document.querySelectorAll('input[name="skin"]'));
+    const show = () => {
+        const id = currentSkin();
+        radios.forEach((r) => {
+            r.checked = r.value === id;
+            r.closest('.skin')?.classList.toggle('is-current', r.checked);
+        });
+    };
+    radios.forEach((r) => r.addEventListener('change', () => {
+        if (r.checked && skinInfo(r.value))
+            applySkin(r.value);
+        show();
+    }));
+    // The inline script set data-skin already; this also covers storage it
+    // couldn't read and an unknown saved value.
+    applySkin(storedSkin());
+    show();
+}
+
+
+// ===== tabs.js =====
+/**
+ * Tabs: a tab list that shows one of its panels at a time (the Settings
+ * page: Devices, Screen effect, Skins, Layout).
+ *
+ * Markup (index.html): a [role="tablist"][data-tabs="<name>"] of
+ * [role="tab"] buttons, each with aria-controls naming a .tabpanel that is
+ * a sibling of the tab list. styles.css hides the panels that aren't
+ * .is-active, only while they sit in the tab list's parent, so a skin that
+ * moves them elsewhere (Windows XP's task pane, src/skinLayout.ts) shows
+ * them all; syncTabs() then drops their tab panel semantics, and puts them
+ * back when the panels return.
+ *
+ * Keyboard: Left / Right move between tabs (and show them), Home / End go
+ * to the first and last. The chosen tab is kept on this device.
+ */
+const TABS_KEY = (name) => `ambient-player:tabs:${name}`;
+const tabSets = [];
+function tabPanel(tab) {
+    const id = tab.getAttribute('aria-controls');
+    return id ? document.getElementById(id) : null;
+}
+function selectTab(set, chosen, save = true) {
+    set.tabs.forEach((tab) => {
+        const on = tab === chosen;
+        tab.setAttribute('aria-selected', String(on));
+        tab.tabIndex = on ? 0 : -1;
+        tabPanel(tab)?.classList.toggle('is-active', on);
+    });
+    if (save) {
+        try {
+            localStorage.setItem(TABS_KEY(set.name), chosen.id);
+        }
+        catch {
+            // Not kept; it still shows for this visit.
+        }
+    }
+}
+/**
+ * Tab panel semantics for the panels that sit with their tab list; none for
+ * those a skin has moved elsewhere (their own heading labels them then).
+ */
+function syncTabs() {
+    for (const set of tabSets) {
+        const host = set.list.parentElement;
+        for (const tab of set.tabs) {
+            const panel = tabPanel(tab);
+            if (!panel)
+                continue;
+            if (panel.dataset.ownLabel === undefined)
+                panel.dataset.ownLabel = panel.getAttribute('aria-labelledby') ?? '';
+            if (panel.parentElement === host) {
+                panel.setAttribute('role', 'tabpanel');
+                panel.setAttribute('aria-labelledby', tab.id);
+            }
+            else {
+                panel.removeAttribute('role');
+                if (panel.dataset.ownLabel)
+                    panel.setAttribute('aria-labelledby', panel.dataset.ownLabel);
+                else
+                    panel.removeAttribute('aria-labelledby');
+            }
+        }
+    }
+}
+function setupTabs() {
+    document.querySelectorAll('[role="tablist"][data-tabs]').forEach((list) => {
+        const set = {
+            name: list.dataset.tabs,
+            list,
+            tabs: Array.from(list.querySelectorAll('[role="tab"]')),
+        };
+        if (!set.tabs.length)
+            return;
+        tabSets.push(set);
+        set.tabs.forEach((tab) => tab.addEventListener('click', () => selectTab(set, tab)));
+        list.addEventListener('keydown', (e) => {
+            const i = set.tabs.indexOf(document.activeElement);
+            if (i < 0)
+                return;
+            const last = set.tabs.length - 1;
+            const next = e.key === 'ArrowRight' ? (i + 1) % set.tabs.length
+                : e.key === 'ArrowLeft' ? (i - 1 + set.tabs.length) % set.tabs.length
+                    : e.key === 'Home' ? 0
+                        : e.key === 'End' ? last
+                            : -1;
+            if (next < 0)
+                return;
+            e.preventDefault();
+            selectTab(set, set.tabs[next]);
+            set.tabs[next].focus();
+        });
+        let saved = null;
+        try {
+            saved = localStorage.getItem(TABS_KEY(set.name));
+        }
+        catch {
+            // The first tab, then.
+        }
+        selectTab(set, set.tabs.find((t) => t.id === saved) ?? set.tabs[0], false);
+    });
+    syncTabs();
+}
+/** Show a tab by its id (for links into a section). */
+function showTab(tabId) {
+    for (const set of tabSets) {
+        const tab = set.tabs.find((t) => t.id === tabId);
+        if (tab)
+            selectTab(set, tab);
+    }
+}
+
+
+// ===== skinLayout.js =====
+/**
+ * Window layout for skins that arrange the page as a desktop window
+ * (data-arrange="window"; Windows XP).
+ *
+ * The panels are moved, never copied, so every listener, id and piece of
+ * state stays with them; leaving the skin puts each one back where it was
+ * (a comment marks its place). In the window (#xpShell, index.html):
+ *
+ *   toolbar     the deck's transport buttons, the repeat switch, the volume
+ *   task pane   "Mix tasks" (links to the main actions), then the saved
+ *               mixes, and the Settings page's sections
+ *               (devices, screen effect, layout, skins), each a group that
+ *               collapses (kept on this device)
+ *   main view   the stage (artwork beside "Now playing", the timeline and
+ *               "Playing now", the thumbnails in a box of their own) and
+ *               the channel list
+ *
+ * src/layout.ts stands aside while the window is up: no pages, pager or
+ * collapsing stage. skins/xp.css lays it all out, wide (toolbar on top, the
+ * task pane beside the main view) or narrow (one column, as on a phone).
+ */
+
+
+const slById = (id) => document.getElementById(id);
+/** Where each moved node lives in the base layout (a comment at that spot). */
+const slHomes = new Map();
+/** Collapsed task pane groups, by the id of their heading. */
+const SL_GROUPS_KEY = 'ambient-player:xp-groups';
+/** Collapsed until opened, the first time (the longest group). */
+const SL_COLLAPSED_BY_DEFAULT = ['screenTitle'];
+function slMove(node, into, before = null) {
+    if (!node || !into)
+        return;
+    if (!slHomes.has(node)) {
+        const home = document.createComment(` home of ${node.id || node.className} `);
+        node.before(home);
+        slHomes.set(node, home);
+    }
+    into.insertBefore(node, before);
+}
+/** Put every moved node back at its place in the base layout. */
+function slRestoreAll() {
+    for (const [node, home] of [...slHomes.entries()].reverse())
+        home.replaceWith(node);
+    slHomes.clear();
+}
+function slArranged() {
+    return document.documentElement.dataset.arrange === 'window';
+}
+// ---------------------------------------------------------------------------
+// Task pane groups: collapse and expand
+// ---------------------------------------------------------------------------
+function slReadCollapsed() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(SL_GROUPS_KEY) || 'null');
+        if (saved && typeof saved === 'object')
+            return saved;
+    }
+    catch {
+        // Unreadable: the defaults.
+    }
+    return Object.fromEntries(SL_COLLAPSED_BY_DEFAULT.map((id) => [id, true]));
+}
+function slSaveCollapsed(state) {
+    try {
+        localStorage.setItem(SL_GROUPS_KEY, JSON.stringify(state));
+    }
+    catch {
+        // Not kept; it still applies for this visit.
+    }
+}
+/** The heading's id names the group. */
+function slGroupKey(panel) {
+    return panel.querySelector('.panel__title')?.id || panel.id;
+}
+function slSetCollapsed(panel, collapsed, save = true) {
+    panel.classList.toggle('is-collapsed', collapsed);
+    const toggle = panel.querySelector('.xp-group__toggle');
+    const title = panel.querySelector('.panel__title')?.textContent?.trim() || 'group';
+    if (toggle) {
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+        toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} ${title}`);
+        toggle.title = collapsed ? 'Expand' : 'Collapse';
+    }
+    if (save) {
+        const state = slReadCollapsed();
+        state[slGroupKey(panel)] = collapsed;
+        slSaveCollapsed(state);
+    }
+}
+/** Give a task pane group its collapse button (once) and its saved state. */
+function slPrepareGroup(panel) {
+    const head = panel.querySelector('.panel__head');
+    if (!head)
+        return;
+    if (!panel.id)
+        panel.id = `${slGroupKey(panel)}Group`;
+    if (!head.querySelector('.xp-group__toggle')) {
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'xp-group__toggle';
+        toggle.setAttribute('aria-controls', panel.id);
+        toggle.addEventListener('click', () => slSetCollapsed(panel, !panel.classList.contains('is-collapsed')));
+        head.appendChild(toggle);
+    }
+    slSetCollapsed(panel, slReadCollapsed()[slGroupKey(panel)] === true, false);
+}
+// ---------------------------------------------------------------------------
+// Mix tasks: links to actions that live elsewhere
+// ---------------------------------------------------------------------------
+/**
+ * A task link mirrors a button (its label, hidden and disabled) and presses
+ * it, or brings a field into view in its group and focuses it.
+ */
+function slWireTasks(pane) {
+    pane.querySelectorAll('[data-proxy]').forEach((link) => {
+        const source = slById(link.dataset.proxy);
+        if (!source) {
+            link.hidden = true;
+            return;
+        }
+        const sync = () => {
+            link.textContent = source.textContent?.trim() || '';
+            link.hidden = source.hidden;
+            link.disabled = source.disabled;
+        };
+        new MutationObserver(sync).observe(source, { attributes: true, childList: true, characterData: true, subtree: true });
+        link.addEventListener('click', () => source.click());
+        sync();
+    });
+    pane.querySelectorAll('[data-focus]').forEach((link) => {
+        link.addEventListener('click', () => {
+            const field = slById(link.dataset.focus);
+            if (!field)
+                return;
+            const group = field.closest('.xp-pane > .panel');
+            if (group?.classList.contains('is-collapsed'))
+                slSetCollapsed(group, false);
+            field.scrollIntoView({ block: 'nearest' });
+            field.focus();
+        });
+    });
+}
+// ---------------------------------------------------------------------------
+// Arranging
+// ---------------------------------------------------------------------------
+function slArrange() {
+    const shell = slById('xpShell');
+    const toolbar = slById('xpToolbar');
+    const pane = slById('xpPane');
+    const main = slById('xpMain');
+    const stage = slById('stage');
+    if (!shell || !toolbar || !pane || !main || !stage)
+        return;
+    // Toolbar: transport first, then the repeat switch and the volume.
+    slMove(document.querySelector('.deck .transport'), toolbar, toolbar.firstChild);
+    slMove(slById('loopSwitch'), slById('xpRepeat'));
+    slMove(document.querySelector('.deck .output'), toolbar);
+    // Main view: the stage, with the timeline under "Now playing", then the channels.
+    slMove(slById('stageWrap'), main);
+    slMove(slById('scrub'), stage, stage.querySelector('.now__meta')?.nextSibling ?? null);
+    const playing = slById('xpPlaying');
+    slMove(slById('thumbStrip'), playing);
+    if (playing)
+        playing.hidden = false;
+    slMove(document.querySelector('.panel.channels'), main);
+    // Task pane: after Mix tasks, the other panels as groups.
+    for (const selector of ['.panel.mixes', '.panel.devices', '.panel.screen', '.panel.display', '.panel.skins']) {
+        slMove(document.querySelector(selector), pane);
+    }
+    pane.querySelectorAll(':scope > .panel').forEach(slPrepareGroup);
+    shell.hidden = false;
+    syncTabs();
+}
+function slUnarrange() {
+    const shell = slById('xpShell');
+    if (shell)
+        shell.hidden = true;
+    const playing = slById('xpPlaying');
+    if (playing)
+        playing.hidden = true;
+    slRestoreAll();
+    syncTabs();
+}
+function slApply() {
+    if (slArranged())
+        slArrange();
+    else if (slHomes.size)
+        slUnarrange();
+}
+function setupSkinLayout() {
+    const pane = slById('xpPane');
+    if (pane)
+        slWireTasks(pane);
+    slApply();
+    // Runs before src/layout.ts re-measures (it waits a frame), so it measures
+    // the page as it will be.
+    window.addEventListener(SKIN_EVENT, slApply);
+}
+
+
 // ===== layout.js =====
 /**
  * Layout behaviour that CSS can't do alone.
@@ -2943,7 +3580,7 @@ function setLayoutChoice(choice) {
  * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
  * pinned to the top of the scroller and shrinks as you scroll, from its full
  * size down to a minimum height; after that the panels (deck, channels,
- * mixes + status, devices + screen effect) scroll up under it and snap one at a time, like the
+ * library: saved mixes, settings) scroll up under it and snap one at a time, like the
  * horizontal layout's pages.
  *
  * Horizontal screens (landscape): the stage stays still on the left and the
@@ -2962,6 +3599,7 @@ function setLayoutChoice(choice) {
  * The inline script in index.html sets the same markers before the first
  * paint; keep its queries in sync with these.
  */
+
 
 
 const portraitQuery = window.matchMedia('(orientation: portrait)');
@@ -2988,6 +3626,13 @@ let artMaxH = 0;
 let artMinH = 0;
 let collapseFrame = 0;
 const lRoot = document.documentElement;
+/**
+ * A skin that lays the page out as a window (src/skinLayout.ts) has no
+ * pages, pager or collapsing stage: this module stands aside.
+ */
+function arranged() {
+    return lRoot.dataset.arrange === 'window';
+}
 /** The vertical layout: on upright screens, or wherever Stacked is chosen. */
 function isStacked() {
     return lRoot.dataset.layout === 'stacked';
@@ -3009,7 +3654,7 @@ function applyMerge() {
     const merged = !isStacked() && mergeQuery.matches;
     lRoot.dataset.merged = String(merged);
     const home = merged ? lDeckSlide : lChannelsSlide;
-    if (lChannelsPanel.parentElement !== home)
+    if (!arranged() && lChannelsPanel.parentElement !== home)
         home.appendChild(lChannelsPanel);
     // The channels bar leads to the merged panel, like the deck's.
     lBars.forEach((bar) => {
@@ -3066,7 +3711,7 @@ function portraitTop(index) {
     const pinned = lStageWrap.offsetHeight - range;
     return Math.max(0, Math.round(top - pinned));
 }
-/** Show a panel: 0 deck, 1 channels, 2 saved mixes and status, 3 devices and screen effect. */
+/** Show a panel: 0 deck, 1 channels, 2 library (saved mixes), 3 settings. */
 function goToSlide(index) {
     const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
     if (isStacked()) {
@@ -3097,7 +3742,7 @@ function refreshLayout() {
     lStageWrap.style.height = '';
     lStageWrap.style.top = '';
     ['--deck-snap', '--pinned-h', '--page-h'].forEach((name) => lScroller.style.removeProperty(name));
-    if (!isStacked()) {
+    if (!isStacked() || arranged()) {
         artMaxH = artMinH = range = 0;
         return;
     }
@@ -3198,6 +3843,8 @@ function setupLayout() {
     };
     window.addEventListener('resize', relayout);
     window.addEventListener(LAYOUT_CHOICE_EVENT, relayout);
+    // A new skin changes the sizes of the brand, the stage and the panels.
+    window.addEventListener(SKIN_EVENT, () => requestAnimationFrame(relayout));
     // The space under the brand can change without a window resize (the
     // brand's status line wrapping, fonts loading), and the stage's text with
     // the channel; the snap sizes follow.
@@ -3467,6 +4114,9 @@ function setupStageResize() {
 
 
 
+
+
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -3490,18 +4140,23 @@ const mixesMessage = $('mixesMessage');
 const importInput = $('importInput');
 const importButton = $('importButton');
 const globalPlayPauseButton = $('globalPlayPause');
+const resumeButton = $('resumeButton');
 const loopSwitch = $('loopSwitch');
 const shareButton = $('shareButton');
 const playlistNameInput = $('playlistNameInput');
 const savePlaylistButton = $('savePlaylistButton');
 const savedPlaylistsList = $('savedPlaylistsList');
+const saveChoice = $('saveChoice');
+const importChoice = $('importChoice');
+const currentMix = $('currentMix');
+const currentMixCount = $('currentMixCount');
+const currentMixSave = $('currentMixSave');
 const channelList = $('playlist');
 const channelCount = $('channelCount');
 const playerBay = $('playerBay');
 const fullscreenButton = $('fullscreenButton');
 const statusCode = $('statusCode');
 const statusLine = $('statusLine');
-const statDur = $('statDur');
 const stage = $('stage');
 const art = $('art');
 const artImg = $('artImg');
@@ -3618,7 +4273,7 @@ function rowScroller(row) {
     for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
         // Moving the main scroller would scroll the whole page (and collapse the
         // artwork) whenever the channel changes; only inner panels may follow.
-        if (el.id === 'scroller')
+        if (el.id === 'scroller' || el.classList.contains('xp-shell'))
             return null;
         const overflow = getComputedStyle(el).overflowY;
         if ((overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 1)
@@ -3683,7 +4338,16 @@ function renderStatus() {
     updateKeepAwake();
     globalPlayPauseButton.textContent = live > 0 ? 'Pause all' : 'Play all';
     globalPlayPauseButton.disabled = tracks.length === 0;
+    // Resume: while nothing plays, the channels that were playing last.
+    const picked = tracks.filter((t) => t.selected).length;
+    resumeButton.hidden = live > 0 || picked === 0;
+    resumeButton.disabled = !tracks.some((t) => t.selected && (t.state === 'paused' || t.state === 'loading'));
+    resumeButton.textContent = `Resume ${picked}`;
+    resumeButton.setAttribute('aria-label', `Resume the ${picked === 1 ? 'channel' : `${picked} channels`} played last`);
     shareButton.disabled = tracks.length === 0;
+    // The open mix, while it isn't one of the saved ones.
+    currentMix.hidden = !!mixName || tracks.length === 0;
+    currentMixCount.firstChild.textContent = `${tracks.length} channel${tracks.length === 1 ? '' : 's'}`;
     scheduleBroadcast();
 }
 // ---------------------------------------------------------------------------
@@ -3719,8 +4383,11 @@ function setupScreenTakeover() {
         updateFullscreenButton();
         updateKeepAwake();
     });
-    // The installed app already runs without browser UI; where the browser
-    // can't do fullscreen (iPhone Safari), there is nothing to offer.
+    // The installed app already runs without browser UI (though the browser
+    // may keep the status bar's space after the notification shade: reclaim
+    // it on a tap); where the browser can't do fullscreen (iPhone Safari),
+    // there is nothing to offer.
+    setupReclaimSpace();
     if (!fullscreenSupported() || runningAsFullscreenApp())
         return;
     fullscreenButton.hidden = false;
@@ -3887,7 +4554,6 @@ function renderTime() {
     const t = track ? track.currentTime : 0;
     const d = track?.duration || 0;
     const p = d > 0 ? Math.min(1, t / d) : 0;
-    statDur.textContent = d ? formatHMS(d) : '—';
     scrubTime.textContent = d ? `${formatHMS(t)} / ${formatHMS(d)}` : '— / —';
     scrubTicks.forEach((el) => {
         el.textContent = d ? formatHMS(d * Number(el.dataset.tick)) : '—';
@@ -4000,6 +4666,97 @@ function stopPolling() {
     }
 }
 // ---------------------------------------------------------------------------
+// Resume: the channels played last
+//
+// Each channel carries `selected`, the mark Resume plays. It follows what
+// plays: a channel that starts playing is marked; playing one channel while
+// nothing plays starts a new set (the others lose the mark); pausing one
+// while others keep playing drops it. Pause all keeps the marks, so they are
+// exactly what was playing. The mark can also be set by hand on each row.
+//
+// The marked channels move to the top of the list when playback comes to
+// rest through Pause all or Resume, when a mix loads, and when the app comes
+// back into view with nothing playing: never while you tap a row, so a row
+// can't jump away under your finger.
+//
+// The marks travel in the room snapshot (so remotes, the relay and a device
+// taking over see them) and are kept with the saved mix on this device.
+// ---------------------------------------------------------------------------
+/** Mark or unmark one channel for Resume; true when it changed. */
+function setSelected(id, on) {
+    const track = playlistManager.getTrack(id);
+    if (!track || track.selected === on)
+        return false;
+    playlistManager.updateTrack(id, { selected: on });
+    const row = rowFor(id);
+    if (row)
+        patchChannelRow(row, track);
+    return true;
+}
+/** Mark only this channel (playing it while nothing plays starts a new set). */
+function selectOnly(id) {
+    let changed = false;
+    for (const t of playlistManager.getTracks())
+        changed = setSelected(t.id, t.id === id) || changed;
+    return changed;
+}
+/** The links Resume plays, in mix order. */
+function resumeUrls() {
+    return playlistManager.getTracks().filter((t) => t.selected).map((t) => t.url);
+}
+let resumeSaveTimer = 0;
+/** The marks changed: update the header and, soon, the saved mix. */
+function selectionChanged() {
+    renderStatus();
+    // A remote mirrors the main device's mix; only the device that plays it
+    // keeps its marks with the saved mix.
+    if (mcRole === 'remote' || resumeSaveTimer)
+        return;
+    resumeSaveTimer = window.setTimeout(saveResumeNow, 400);
+}
+function saveResumeNow() {
+    window.clearTimeout(resumeSaveTimer);
+    resumeSaveTimer = 0;
+    if (mcRole !== 'remote' && mixName)
+        saveMixResume(mixName, resumeUrls());
+}
+/** Put the marked channels at the top of the list. Not on a remote (the main device orders the mix). */
+function sortResumeFirst() {
+    if (mcRole === 'remote' || !playlistManager.sortSelectedFirst())
+        return;
+    renderAll(false);
+}
+/** Mark the channels of a saved mix that Resume plays, by link (a link listed twice marks two). */
+function applyResumeUrls(urls) {
+    const wanted = new Map();
+    for (const url of urls)
+        wanted.set(url, (wanted.get(url) ?? 0) + 1);
+    for (const t of playlistManager.getTracks()) {
+        const left = wanted.get(t.url) ?? 0;
+        playlistManager.updateTrack(t.id, { selected: left > 0 });
+        if (left > 0)
+            wanted.set(t.url, left - 1);
+    }
+}
+/** Resume: play the marked channels, now if ready or as soon as their player is. */
+function resumeSelected() {
+    const picked = playlistManager.getTracks().filter((t) => t.selected);
+    if (!picked.some((t) => t.state === 'paused' || t.state === 'loading'))
+        return false;
+    for (const t of picked) {
+        if (t.state === 'paused')
+            playlistManager.getController(t.id)?.play();
+        else if (t.state === 'loading')
+            mcAutoplay.add(t.id);
+    }
+    startPolling();
+    sortResumeFirst();
+    // Show a channel that is about to play on the main display.
+    if (!focusedTrack()?.selected)
+        setFocus(picked[0].id);
+    return true;
+}
+// ---------------------------------------------------------------------------
 // Channels
 // ---------------------------------------------------------------------------
 function createPlayerFor(trackId, videoId, keep) {
@@ -4048,11 +4805,17 @@ function onTrackState(id, state) {
     if (controller)
         playlistManager.updateTrack(id, { currentTime: controller.getCurrentTime() });
     const track = playlistManager.getTrack(id);
+    // Whatever starts playing is part of what Resume picks up later.
+    const marked = state === 'playing' && !track.selected;
+    if (marked)
+        playlistManager.updateTrack(id, { selected: true });
     const row = rowFor(id);
     if (row)
         patchChannelRow(row, track);
     if (prevState !== track.state)
         renderStrip();
+    if (marked)
+        selectionChanged();
     renderStatus();
     if (id === focusedId)
         renderStage(false);
@@ -4144,6 +4907,10 @@ function playAll() {
 }
 function pauseAll() {
     playlistManager.getTracks().forEach((t) => t.state === 'playing' && playlistManager.getController(t.id)?.pause());
+    // Channels still loading that were asked to start (Resume, Play here) stay paused too.
+    mcAutoplay.clear();
+    // What was playing keeps its mark: bring it to the top, ready for Resume.
+    sortResumeFirst();
     return true;
 }
 /** Jump within a channel. */
@@ -4186,23 +4953,48 @@ function addChannel(url) {
     return true;
 }
 /** Replace the mix with these links (taking `name`) or add them to it. */
-function loadMix(urls, name, mode) {
+function loadMix(urls, name, mode, resume) {
+    // Keep the marks of the mix that's open now before it goes.
+    if (resumeSaveTimer)
+        saveResumeNow();
     if (mode === 'replace')
         mixName = name;
-    loadTracksFromUrls(urls, mode);
+    loadTracksFromUrls(urls, mode, mode === 'replace' && Array.isArray(resume) ? resume : undefined);
     return true;
 }
 /** Every command, applied on this device. Registered with src/commands.ts. */
 function runCommand(command) {
     switch (command.type) {
-        case 'play':
-            return playTrack(command.trackId);
-        case 'pause':
-            return pauseTrack(command.trackId);
+        case 'play': {
+            const fresh = liveCount() === 0;
+            if (!playTrack(command.trackId))
+                return false;
+            // From silence, this channel starts a new set for Resume.
+            if (fresh ? selectOnly(command.trackId) : setSelected(command.trackId, true))
+                selectionChanged();
+            return true;
+        }
+        case 'pause': {
+            const others = othersPlaying(command.trackId);
+            if (!pauseTrack(command.trackId))
+                return false;
+            // Paused while the mix plays on: no longer part of what Resume plays.
+            if (others && setSelected(command.trackId, false))
+                selectionChanged();
+            return true;
+        }
         case 'play_all':
             return playAll();
         case 'pause_all':
             return pauseAll();
+        case 'resume':
+            return resumeSelected();
+        case 'select':
+            if (!playlistManager.getTrack(command.trackId))
+                return false;
+            if (setSelected(command.trackId, command.on === true))
+                selectionChanged();
+            return true;
         case 'focus':
             if (!playlistManager.getTrack(command.trackId))
                 return false;
@@ -4213,8 +5005,14 @@ function runCommand(command) {
             return true;
         case 'seek':
             return seekTrack(command.trackId, command.time);
-        case 'stop':
-            return stopTrack(command.trackId);
+        case 'stop': {
+            const others = othersPlaying(command.trackId) && playlistManager.getTrack(command.trackId)?.state === 'playing';
+            if (!stopTrack(command.trackId))
+                return false;
+            if (others && setSelected(command.trackId, false))
+                selectionChanged();
+            return true;
+        }
         case 'volume':
             if (!playlistManager.getTrack(command.trackId))
                 return false;
@@ -4232,8 +5030,12 @@ function runCommand(command) {
         case 'relink':
             return reloadTrack(command.trackId, command.url);
         case 'load_mix':
-            return loadMix(command.urls, command.name, command.mode);
+            return loadMix(command.urls, command.name, command.mode, command.resume);
     }
+}
+/** Whether any channel other than this one is playing. */
+function othersPlaying(id) {
+    return playlistManager.getTracks().some((t) => t.id !== id && t.state === 'playing');
 }
 /** Play or pause a channel, from what this device shows (UI helper). */
 function togglePlay(id) {
@@ -4253,7 +5055,7 @@ function setVolume(id, volume) {
     if (id === focusedId)
         renderVolume();
 }
-function loadTracksFromUrls(urls, mode) {
+function loadTracksFromUrls(urls, mode, resume) {
     if (mode === 'replace') {
         playlistManager.clearTracks();
         openDrawers.clear();
@@ -4262,17 +5064,55 @@ function loadTracksFromUrls(urls, mode) {
     }
     for (const url of urls)
         addTrackFromUrl(url);
+    if (resume) {
+        // A saved mix: mark the channels played last and start the list with them.
+        applyResumeUrls(resume);
+        playlistManager.sortSelectedFirst();
+        focusedId = playlistManager.getTracks()[0]?.id ?? null;
+    }
     renderAll(true);
 }
 /** Load a mix, asking to replace or add when channels are open. False if cancelled. */
-async function handleLoadPlaylist(urls, name) {
+async function handleLoadPlaylist(urls, name, resume) {
     const open = playlistManager.getTracks().length;
     if (open === 0)
-        return dispatch({ type: 'load_mix', urls, name, mode: 'replace' });
+        return dispatch({ type: 'load_mix', urls, name, mode: 'replace', resume });
     const choice = await showReplaceAppendModal(`This mix has ${urls.length} channel${urls.length === 1 ? '' : 's'}. Replace the ${open} you have open, or add them to the current mix?`);
     if (choice === 'cancel')
         return false;
-    return dispatch({ type: 'load_mix', urls, name, mode: choice });
+    return dispatch({ type: 'load_mix', urls, name, mode: choice, resume: choice === 'replace' ? resume : undefined });
+}
+/** Copy a mix's share link, and say so on the button that asked. */
+async function shareLink(button, urls) {
+    if (await copyToClipboard(encodePlaylistToUrl(urls))) {
+        mixesMessage.textContent = '';
+        markCopied(button);
+    }
+    else
+        showError(mixesMessage, 'The browser blocked the clipboard, so the link was not copied.');
+}
+/** The field a Save / Import choice reveals. */
+function entryField(choice) {
+    return document.getElementById(choice.getAttribute('aria-controls'));
+}
+/** Reveal one choice's field (closing the other) and focus its input. */
+function openEntry(choice) {
+    for (const other of [saveChoice, importChoice])
+        if (other !== choice)
+            closeEntry(other);
+    choice.setAttribute('aria-expanded', 'true');
+    const field = entryField(choice);
+    field.classList.add('is-open');
+    const input = field.querySelector('input');
+    // Saving again: start from the open mix's name.
+    if (choice === saveChoice && !input.value && mixName)
+        input.value = mixName;
+    input.focus();
+    input.select();
+}
+function closeEntry(choice) {
+    choice.setAttribute('aria-expanded', 'false');
+    entryField(choice).classList.remove('is-open');
 }
 /** Briefly swap a button's label; a second flash restarts it, never sticks. */
 const flashTimers = new WeakMap();
@@ -4312,6 +5152,18 @@ function initializeEventListeners() {
     globalPlayPauseButton.addEventListener('click', () => {
         dispatch({ type: playlistManager.hasPlayingTracks() ? 'pause_all' : 'play_all' });
     });
+    resumeButton.addEventListener('click', () => dispatch({ type: 'resume' }));
+    // Coming back to the app with nothing playing: the channels played last on top.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            if (liveCount() === 0)
+                sortResumeFirst();
+        }
+        else if (resumeSaveTimer) {
+            saveResumeNow();
+        }
+    });
+    window.addEventListener('pagehide', () => resumeSaveTimer && saveResumeNow());
     loopSwitch.addEventListener('click', () => {
         const track = focusedTrack();
         if (track)
@@ -4321,11 +5173,7 @@ function initializeEventListeners() {
         const urls = playlistManager.getTrackUrls();
         if (urls.length === 0)
             return showError(inputError, 'Add a channel before sharing the mix.');
-        const ok = await copyToClipboard(encodePlaylistToUrl(urls));
-        if (ok)
-            flash(shareButton, 'Link copied');
-        else
-            showError(inputError, 'The browser blocked the clipboard, so the link was not copied.');
+        await shareLink(shareButton, urls);
     });
     savePlaylistButton.addEventListener('click', () => {
         const name = playlistNameInput.value.trim();
@@ -4338,17 +5186,38 @@ function initializeEventListeners() {
         if (urls.length === 0)
             return showError(mixesMessage, 'Add a channel before saving a mix.');
         mixesMessage.textContent = '';
-        saveOrUpdatePlaylist(name, urls);
+        saveOrUpdatePlaylist(name, urls, resumeUrls());
         mixName = name;
         playlistNameInput.value = '';
         renderMixList();
         renderStatus();
         flash(savePlaylistButton, 'Saved');
+        window.setTimeout(() => {
+            if (!playlistNameInput.value)
+                closeEntry(saveChoice);
+        }, 1200);
     });
     playlistNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter')
             savePlaylistButton.click();
     });
+    // Save / Import: two choices of one entry; each reveals its own field.
+    for (const choice of [saveChoice, importChoice]) {
+        choice.addEventListener('click', () => {
+            if (choice.getAttribute('aria-expanded') === 'true')
+                closeEntry(choice);
+            else
+                openEntry(choice);
+        });
+        entryField(choice).addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape')
+                return;
+            e.stopPropagation();
+            closeEntry(choice);
+            choice.focus();
+        });
+    }
+    currentMixSave.addEventListener('click', () => openEntry(saveChoice));
     // Import: a share link (or plain YouTube links) pasted in, for the
     // installed app, which has no address bar to open the link in.
     const importMix = async () => {
@@ -4382,6 +5251,10 @@ function initializeEventListeners() {
             return;
         importInput.value = '';
         flash(importButton, urls.length === 1 ? 'Imported 1' : `Imported ${urls.length}`);
+        window.setTimeout(() => {
+            if (!importInput.value)
+                closeEntry(importChoice);
+        }, 1200);
     };
     importButton.addEventListener('click', () => void importMix());
     importInput.addEventListener('keydown', (e) => {
@@ -4395,7 +5268,10 @@ function initializeEventListeners() {
             return;
         const playlist = getAllPlaylists().find((p) => p.name === name);
         if (button.dataset.mixAction === 'load' && playlist) {
-            await handleLoadPlaylist(playlist.urls, playlist.name);
+            await handleLoadPlaylist(playlist.urls, playlist.name, playlist.resume ?? []);
+        }
+        else if (button.dataset.mixAction === 'share' && playlist) {
+            await shareLink(button, playlist.urls);
         }
         else if (button.dataset.mixAction === 'delete' && confirm(`Delete the mix "${name}"? This cannot be undone.`)) {
             deletePlaylist(name);
@@ -4415,6 +5291,11 @@ function initializeEventListeners() {
             dispatch({ type: 'focus', trackId: id });
         else if (el.dataset.action === 'toggle')
             togglePlay(id);
+        else if (el.dataset.action === 'pick') {
+            const track = playlistManager.getTrack(id);
+            if (track)
+                dispatch({ type: 'select', trackId: id, on: !track.selected });
+        }
         else if (el.dataset.action === 'drawer') {
             const open = !openDrawers.has(id);
             if (open)
@@ -4570,6 +5451,8 @@ function setupScreenEffect() {
         clearCrtThumbs();
         repaint();
     });
+    // A new skin resizes the thumbnails.
+    window.addEventListener(SKIN_EVENT, repaint);
 }
 // ---------------------------------------------------------------------------
 // Remote control: roles and sync (docs/remote-control-plan.md, phase 3)
@@ -4604,7 +5487,7 @@ const mcAutoplay = new Set();
 /** Every command run on this device goes through here (registered with src/commands.ts). */
 function runLocalCommand(command) {
     const ok = !!runCommand(command);
-    if (ok && (command.type === 'play' || command.type === 'play_all')) {
+    if (ok && (command.type === 'play' || command.type === 'play_all' || command.type === 'resume')) {
         maybeClaimMain();
         if (mcResumeIds.size) {
             mcResumeIds.clear();
@@ -4644,6 +5527,7 @@ function buildRoomState() {
                 duration: t.duration,
                 volume: t.volume,
                 loop: t.loop,
+                selected: t.selected,
             };
         }),
     };
@@ -4744,7 +5628,7 @@ function applyRoomState(raw, ageMs) {
         mcBases.set(t.id, { t: t.currentTime, at: now - ageMs });
         const elapsed = t.state === 'playing' ? ageMs / 1000 : 0;
         const currentTime = t.duration ? Math.min(t.duration, t.currentTime + elapsed) : t.currentTime + elapsed;
-        return { ...t, currentTime, isMuted: false };
+        return { ...t, currentTime, isMuted: false, selected: t.selected === true };
     });
     playlistManager.replaceTracks(tracks);
     mixName = state.mixName;
@@ -4810,6 +5694,10 @@ function routeToMain(command) {
         stepFocus(command.dir);
     else if (command.type === 'volume')
         setVolume(command.trackId, command.volume);
+    else if (command.type === 'select') {
+        if (setSelected(command.trackId, command.on))
+            renderStatus();
+    }
     else if (command.type === 'seek') {
         playlistManager.updateTrack(command.trackId, { currentTime: command.time });
         mcBases.set(command.trackId, { t: command.time, at: performance.now() });
@@ -5011,12 +5899,17 @@ async function setupRemoteControl() {
     setupDevicesPanel();
     setupReconnectTriggers();
     // A pairing link opened while the app is already open on this page.
+    // Pairing shows its result in the Devices tab: bring it forward.
     window.addEventListener('hashchange', () => {
         const code = takePairCodeFromLocation();
-        if (code)
+        if (code) {
+            showTab('settingsTabDevices');
             void joinWithCode(code);
+        }
     });
     const pairCode = takePairCodeFromLocation();
+    if (pairCode)
+        showTab('settingsTabDevices');
     if (pairCode)
         await joinWithCode(pairCode);
     else
@@ -5024,12 +5917,17 @@ async function setupRemoteControl() {
 }
 async function initialize() {
     setCommandRunner(runLocalCommand);
+    // Before remote control: a pairing link opens the Devices tab.
+    setupTabs();
     void setupRemoteControl();
     setupScreenTakeover();
     setupScreenEffect();
     setupLayout();
     setupScaleControl();
     setupLayoutControl();
+    setupSkinPanel();
+    setupSkinLayout();
+    window.addEventListener(SKIN_EVENT, () => requestAnimationFrame(updateScaleReadout));
     setupStageResize();
     buildStaticMeters();
     renderMixList();
@@ -5047,7 +5945,13 @@ async function initialize() {
     // This device's own last mix: restored here only, never sent to a main
     // device (a remote that connected quickly shows the main device's mix).
     if (lastPlaylist && lastPlaylist.urls.length > 0 && mcRole !== 'remote') {
-        runLocalCommand({ type: 'load_mix', urls: lastPlaylist.urls, name: lastPlaylist.name, mode: 'replace' });
+        runLocalCommand({
+            type: 'load_mix',
+            urls: lastPlaylist.urls,
+            name: lastPlaylist.name,
+            mode: 'replace',
+            resume: lastPlaylist.resume ?? [],
+        });
     }
 }
 initialize().catch(console.error);

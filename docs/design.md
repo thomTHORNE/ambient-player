@@ -81,15 +81,29 @@ The artwork's brackets sit inside the frame like a viewfinder.
 
 The panels are, in order:
 
-1. **Deck:** transport, timeline, channel volume.
-2. **Channels:** add a link, Play all / Pause all, the channel rows.
-3. **Saved mixes, then mix status:** duration, repeat, layout, UI scale,
-   share link.
-4. **Devices, then the screen effect:** pairing and the device list; the
-   style dial, Mix and fine-tune.
+1. **Deck:** transport, timeline (with the channel's repeat switch),
+   channel volume.
+2. **Channels:** add a link, Resume, Play all / Pause all, the channel rows.
+3. **Library:** one panel. Two tiles, Save this mix and Import a link,
+   each reveal their own field, drawn like "Paste a YouTube link" (the open
+   tile glows like the open tab; Escape closes it). Then the mixes: the
+   open one first while unsaved, each with Load, a share button (link icon,
+   a check once copied) and Delete. A channel's length sits in its row
+   (elapsed / length).
+4. **Settings:** one panel with tabs: Devices (pairing and the device
+   list), Screen (style dial, Mix, fine-tune), Skins, and Layout (the
+   Layout setting and UI scale).
 
 On large horizontal screens the deck and channels share the first page, so
 there are three.
+
+**Tabs.** Drawn like the transport buttons: glass tiles with corner
+brackets that step out on hover, sharing the row's width; the open tab is
+the primary one, with the accent's glow along its foot and accent
+brackets. The sections sit
+flat in the Settings panel, one at a time; the tab names them, so their
+own headings are for screen readers (Devices keeps its status chip). Left /
+Right, Home and End move between tabs.
 
 ## Interaction rules
 
@@ -122,6 +136,12 @@ changing the layout.
   control. Each row's own volume, its link and **Remove channel** sit behind
   the row's settings toggle, so scrolling a long list can't change them by
   accident.
+- **Rows don't move under a tap.** The list reorders (channels played last
+  to the top, for Resume) only on Pause all, Resume, loading a mix or
+  coming back to the app, never in response to a tap on a row.
+- **Resume ticks.** The square at the start of a row is ticked, in the
+  accent, for the channels Resume plays. On narrow phones the row thumbnail
+  shrinks (and below 330px goes) so the title keeps its room.
 - **Destructive actions confirm.** Removing a channel asks inline, in the
   danger colour. Deleting a mix asks in the browser's confirm dialog.
 
@@ -194,6 +214,55 @@ colour and "· Current" after the channel count.
   upright phone, the top 36px stays clear for a punch-hole camera.
 - **Reduced motion.** With *reduce motion* on, the backdrop stops drifting
   and all transitions and animations become instant; nothing stays hidden.
+
+## Skins
+
+Everything above describes **Modern Warfare**, the default skin. **Windows
+XP** (`skins/xp.css`, laid out by `src/skinLayout.ts`) is the player as a
+desktop window, after the XP UI kit sheets and the "task pane" mockup.
+Everything stays in view at once instead of paging:
+
+- **Window.** The Luna title bar on top ("Ambient Player", the maximize /
+  restore button for fullscreen), the cream face (`#ECE9D8`), and a status
+  bar with sunken panes at the foot (the mix, what's playing, remote
+  control) and the resize grip.
+- **Toolbar.** Under the title bar: Previous, Play / Pause, Next and Stop
+  as flat toolbar buttons, the repeat checkbox, and the volume slider at
+  the far end.
+- **Task pane.** On the left, on the blue pane: collapsible groups. Mix
+  tasks first, the primary group (dark header): Resume, Play all / Pause
+  all, Save this mix, Copy share link, Import a link. Then Saved mixes (both
+  fields shown, no tiles), Devices, Screen effect (collapsed at first) and Skins.
+- **Main view.** The artwork in a sunken frame beside three groupboxes:
+  Now playing, Timeline and Playing now (thumbnails, hidden on short
+  screens). Under them the channels: their name, the link field, Resume or
+  Pause all, then the details list, which fills the rest of the height and
+  scrolls on its own.
+- **Phones.** One column: the artwork edge to edge, Now playing and the
+  timeline, the four transport buttons, repeat and volume, the channels as
+  a group with a big green Resume, then the task pane's groups.
+- **Groups.** The timeline, Now playing, Playing now and the skin families
+  are groupboxes with blue legends.
+- **Controls.**
+  - **Buttons:** the kit's buttons (75px minimum, orange hover, blue focus
+    ring); Resume is the default button, with a green play mark.
+  - **Transport:** flat toolbar buttons that rise on hover.
+  - **Fields:** sunken white boxes with the `#7F9DB9` border.
+  - **Choices:** XP checkboxes and radio buttons; the repeat switch is a
+    checkbox.
+  - **Sliders:** the green-footed cursor on a sunken groove.
+  - **Timeline:** an XP progress bar of green blocks.
+  - **Scrollbars:** the kit's blue scrollbars where the browser allows.
+- **Lists.** The channels are a details view with column headings on wide
+  panels and list rows on narrow ones; saved mixes and devices are list
+  views with folder and computer icons. Selection is XP blue (`#316AC5`)
+  with white text; that blue replaces the artwork's accent.
+- **Type.** Tahoma (Trebuchet MS for titles) where the system has them, at
+  12px (13px on touch screens), in sentence case.
+- **Touch.** Controls keep at least 38–44px targets on touch screens,
+  larger than XP's own.
+- **Not used.** No Windows logo, Start button or product icons: the kit's
+  generic system icons only.
 
 ## Brand
 

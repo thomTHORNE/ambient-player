@@ -1,10 +1,22 @@
 <!DOCTYPE html>
-<html lang="en" data-empty="true">
+<html lang="en" data-empty="true" data-skin="modern" data-arrange="pages">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <script>
+    /* Wear the skin saved on this device before the first paint (see
+       src/skin.ts; keep the key and ids in sync). */
+    (function () {
+      try {
+        var skin = localStorage.getItem('ambient-player:skin');
+        if (skin === 'xp') {
+          document.documentElement.setAttribute('data-skin', skin);
+          /* Windows XP lays the page out as a window (src/skinLayout.ts). */
+          document.documentElement.setAttribute('data-arrange', 'window');
+        }
+      } catch (e) {}
+    })();
     /* Apply the saved UI scale and artwork column width before the first
        paint (see src/scale.ts and src/resize.ts). */
     (function () {
@@ -60,7 +72,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0a8a40a7c9">
+  <link rel="stylesheet" href="styles.css?v=6b9b44b5e2">
+  <!-- Skins (src/skin.ts): each one is scoped to html[data-skin], so loading
+       them all keeps switching instant. -->
+  <link rel="stylesheet" href="skins/xp.css?v=0f9b5fe13d">
 </head>
 
 <body>
@@ -125,6 +140,8 @@
           </div>
           <!-- Large horizontal screens: what's playing, as thumbnails, under the title. -->
           <ol id="thumbStrip" class="thumbs" aria-label="Playing channels"></ol>
+          <!-- Windows XP: the box "Playing now" around the thumbnails (src/skinLayout.ts). -->
+          <div id="xpPlaying" class="xp-playing" hidden></div>
         </main>
       </div>
 
@@ -132,7 +149,7 @@
            column (src/resize.ts). Hidden everywhere else. -->
       <div id="stageSplitter" class="splitter" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="stageWrap" aria-label="Artwork column width" aria-valuemin="0" aria-valuemax="100" aria-valuenow="42" title="Drag to resize the artwork; double-click to reset"></div>
 
-      <!-- ============ Panels: swipe between deck, channels, mixes + status, devices + screen effect ============ -->
+      <!-- ============ Panels: swipe between deck, channels, library (saved mixes), settings ============ -->
       <div id="slides" class="slides" aria-label="Panels">
         <div class="slide slide--deck" id="slideDeck" aria-label="Playback">
           <section class="deck" aria-label="Playback">
@@ -161,6 +178,7 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-4l-3 8-4-16-3 8H3"/></svg>
                     Timeline
                   </p>
+                  <span class="timeline__repeat"><span class="timeline__repeat-label" aria-hidden="true">Repeat</span><button id="loopSwitch" class="pill pill--btn tone-idle" type="button" aria-pressed="false" aria-label="Repeat this channel" disabled>Off</button></span>
                   <p id="scrubTime" class="timeline__time">— / —</p>
                 </div>
                 <div class="timeline__track">
@@ -203,6 +221,7 @@
               <header class="panel__head">
                 <h2 id="channelsTitle" class="panel__title">Channels</h2>
                 <div class="panel__tools">
+                  <button id="resumeButton" class="btn btn--small btn--primary" type="button" hidden>Resume</button>
                   <button id="globalPlayPause" class="btn btn--small" type="button" disabled>Play all</button>
                   <span id="channelCount" class="panel__count">0</span>
                 </div>
@@ -218,44 +237,203 @@
                 </button>
               </div>
               <p id="inputError" class="status-msg" role="status" aria-live="polite"></p>
+              <!-- Column headings for skins that show the list as a table (Windows XP). -->
+              <div class="ch-head" aria-hidden="true">
+                <span class="ch-head__pick"></span>
+                <span class="ch-head__title">Title</span>
+                <span class="ch-head__state">Status</span>
+                <span class="ch-head__author">Channel</span>
+                <span class="ch-head__clock">Time</span>
+                <span class="ch-head__vol">Volume</span>
+                <span class="ch-head__toggle"></span>
+              </div>
               <ol id="playlist" class="channel-list"></ol>
               <p class="channel-empty">No channels yet. Paste a link above; each one plays alongside the others.</p>
             </section>
         </div>
-        <div class="slide slide--info" id="slideInfo" aria-label="Saved mixes and mix status">
+        <div class="slide slide--info" id="slideInfo" aria-label="Library: saved mixes">
+          <!-- Library: one panel. Save and Import are two choices of one entry
+               control: each reveals its own field, drawn like "Paste a YouTube
+               link" (src/main.ts). Every mix shares its own link. -->
           <section class="panel mixes" aria-labelledby="mixesTitle">
               <header class="panel__head">
                 <h2 id="mixesTitle" class="panel__title">Saved mixes</h2>
               </header>
-              <div class="field-row">
-                <label class="field">
-                  <span class="visually-hidden">Mix name</span>
+              <div class="entry">
+                <div class="entry__choices">
+                  <button id="saveChoice" class="tab entry__choice" type="button" aria-expanded="false" aria-controls="saveEntry">
+                    <span class="entry__choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20.5 12 16l-6 4.5V5.5A2 2 0 0 1 8 3.5h8a2 2 0 0 1 2 2z"/></svg></span>Save this mix
+                  </button>
+                  <button id="importChoice" class="tab entry__choice" type="button" aria-expanded="false" aria-controls="importEntry">
+                    <span class="entry__choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5"/><path d="M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5"/></svg></span>Import a link
+                  </button>
+                </div>
+                <div id="saveEntry" class="add entry__field">
+                  <label class="visually-hidden" for="playlistNameInput">Mix name</label>
+                  <span class="add__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20.5 12 16l-6 4.5V5.5A2 2 0 0 1 8 3.5h8a2 2 0 0 1 2 2z"/></svg>
+                  </span>
                   <input id="playlistNameInput" type="text" autocomplete="off" placeholder="Name this mix" />
-                </label>
-                <button id="savePlaylistButton" class="btn" type="button">Save</button>
-              </div>
-              <!-- Import: the installed app has no address bar to open a share link in. -->
-              <div class="field-row field-row--import">
-                <label class="field">
-                  <span class="visually-hidden">Share link or YouTube links to import</span>
+                  <button id="savePlaylistButton" class="add__btn add__btn--text" type="button">Save</button>
+                </div>
+                <!-- Import: the installed app has no address bar to open a share link in. -->
+                <div id="importEntry" class="add entry__field">
+                  <label class="visually-hidden" for="importInput">Share link or YouTube links to import</label>
+                  <span class="add__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5"/><path d="M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5"/></svg>
+                  </span>
                   <input id="importInput" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Paste a share link to import" />
-                </label>
-                <button id="importButton" class="btn btn--quiet" type="button">Import</button>
+                  <button id="importButton" class="add__btn add__btn--text" type="button">Import</button>
+                </div>
               </div>
               <p id="mixesMessage" class="status-msg mixes__msg" role="status" aria-live="polite"></p>
+              <!-- The open mix while it isn't saved: save it or share it. -->
+              <div id="currentMix" class="mix mix--unsaved" hidden>
+                <span class="mix__text">
+                  <span class="mix__name">Unsaved mix</span>
+                  <span id="currentMixCount" class="mix__count">0 channels<span class="mix__tag"> · Current</span></span>
+                </span>
+                <button id="currentMixSave" class="btn btn--quiet btn--small" type="button">Save</button>
+                <button id="shareButton" class="icon-btn share-btn" type="button" disabled aria-label="Copy share link for the open mix" title="Copy share link"><span class="visually-hidden share__label">Copy share link</span><svg class="share__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.7-2.7a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5"/><path d="M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.7 2.7a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5"/></svg><svg class="share__done" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5.5 12.5 4 4 9-9"/></svg></button>
+              </div>
               <ul id="savedPlaylistsList" class="mix-list"></ul>
             </section>
-          <section class="panel status" aria-labelledby="statusTitle">
-              <h2 id="statusTitle" class="visually-hidden">Mix status</h2>
+        </div>
+        <div class="slide slide--settings" id="slideSettings" aria-label="Settings">
+          <!-- Settings: one panel, its sections behind tabs (src/tabs.ts). Skins
+               that lay the page out as a window show each section as a group. -->
+          <section class="panel settings" aria-labelledby="settingsTitle">
+            <header class="panel__head">
+              <h2 id="settingsTitle" class="panel__title">Settings</h2>
+              <!-- The app's version, stamped by bundle.js. -->
+              <span class="app-version" title="App version">v1.0.1</span>
+            </header>
+            <div class="tabs" role="tablist" aria-label="Settings" data-tabs="settings">
+              <button class="tab" type="button" role="tab" id="settingsTabDevices" aria-controls="devicesPanel" aria-selected="true">Devices</button>
+              <button class="tab" type="button" role="tab" id="settingsTabScreen" aria-controls="screenPanel" aria-selected="false" tabindex="-1">Screen</button>
+              <button class="tab" type="button" role="tab" id="settingsTabSkins" aria-controls="skinsPanel" aria-selected="false" tabindex="-1">Skins</button>
+              <button class="tab" type="button" role="tab" id="settingsTabLayout" aria-controls="displayPanel" aria-selected="false" tabindex="-1">Layout</button>
+            </div>
+            <!-- Devices: pair another device to use as a remote (src/devices.ts). -->
+            <section class="panel devices tabpanel is-active" id="devicesPanel" aria-labelledby="devicesTitle">
+              <header class="panel__head">
+                <h2 id="devicesTitle" class="panel__title">Devices</h2>
+                <span id="devicesState" class="pill tone-idle">Not paired</span>
+              </header>
+              <p id="devicesIntro" class="devices__intro">Pair another device, such as your phone, to control this player from it like a remote.</p>
+              <ul id="deviceList" class="device-list" aria-label="Paired devices" hidden></ul>
+              <div id="pairBox" class="pair" hidden>
+                <div id="pairQr" class="pair__qr"></div>
+                <div class="pair__text">
+                  <p class="pair__label">Scan with the other device's camera, or open Ambient Player there and enter</p>
+                  <p id="pairCode" class="pair__code">——— ———</p>
+                  <p id="pairExpiry" class="pair__expiry">Works once, for 10 minutes</p>
+                  <button id="pairCancel" class="btn btn--quiet btn--small" type="button">Done</button>
+                </div>
+              </div>
+              <div class="devices__actions">
+                <button id="connectDevice" class="btn" type="button">Connect a device</button>
+                <div class="field-row devices__join">
+                  <label class="field">
+                    <span class="visually-hidden">Pairing code from another device</span>
+                    <input id="joinCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="Pairing code" />
+                  </label>
+                  <button id="joinButton" class="btn btn--quiet" type="button">Join</button>
+                </div>
+              </div>
+              <div id="devicesManage" class="devices__manage" hidden>
+                <div class="field-row">
+                  <label class="field">
+                    <span class="visually-hidden">This device's name</span>
+                    <input id="deviceName" type="text" autocomplete="off" maxlength="40" placeholder="This device's name" />
+                  </label>
+                  <button id="renameDevice" class="btn btn--quiet" type="button">Rename</button>
+                </div>
+                <div class="devices__leave">
+                  <button id="unpairDevice" class="text-btn" type="button">Unpair this device</button>
+                  <button id="forgetDevices" class="text-btn text-btn--danger" type="button">Forget all devices</button>
+                </div>
+              </div>
+              <p id="devicesMessage" class="status-msg devices__msg" role="status" aria-live="polite"></p>
+            </section>
+            <!-- Screen effect over the artwork (src/screenFx.ts, drawn by src/crt.ts). -->
+            <section class="panel screen tabpanel" id="screenPanel" aria-labelledby="screenTitle">
+              <header class="panel__head">
+                <h2 id="screenTitle" class="panel__title">Screen effect</h2>
+              </header>
+              <div class="screen__controls">
+                <!-- A rotary switch: each tap turns it to the next style. -->
+                <button id="screenDial" class="dial" type="button" aria-describedby="screenNote">
+                  <span class="dial__face" aria-hidden="true">
+                    <span id="screenTicks" class="dial__ticks"></span>
+                    <span class="dial__knob"><span class="dial__pointer"></span></span>
+                  </span>
+                  <span class="dial__text">
+                    <span class="dial__label">Style</span>
+                    <span id="screenStyle" class="dial__value">Slot mask</span>
+                    <span id="screenStep" class="dial__step">1 / 5 · tap to turn</span>
+                  </span>
+                </button>
+                <!-- Mix: how much of the effect, over the plain picture. -->
+                <div class="card mixer">
+                  <p class="card__label">Mix</p>
+                  <div class="mixer__body">
+                    <div>
+                      <p id="mixReadout" class="mixer__value">100 %</p>
+                      <p id="mixCaption" class="mixer__caption">Full screen</p>
+                    </div>
+                    <div id="mixMeter" class="mixer__meter" aria-hidden="true"></div>
+                  </div>
+                  <label class="visually-hidden" for="mixInput">How much of the screen effect to show</label>
+                  <input id="mixInput" class="slider" type="range" min="0" max="100" step="1" value="100" style="--v:100%" />
+                </div>
+              </div>
+              <p id="screenNote" class="screen__note"></p>
+              <button id="screenMoreToggle" class="btn btn--quiet btn--small screen__toggle" type="button" aria-expanded="false" aria-controls="screenMore">Fine-tune</button>
+              <div id="screenMore" class="screen__more" hidden>
+                <div id="screenSliders" class="screen__sliders"></div>
+                <button id="screenReset" class="btn btn--quiet btn--small" type="button">Back to the style's settings</button>
+              </div>
+            </section>
+            <!-- Skins: the whole look, kept on this device only (src/skin.ts). -->
+            <section class="panel skins tabpanel" id="skinsPanel" aria-labelledby="skinsTitle">
+              <header class="panel__head">
+                <h2 id="skinsTitle" class="panel__title">Skins</h2>
+                <!-- Windows XP shows the version here (the Settings head stays out). -->
+                <span class="app-version" title="App version">v1.0.1</span>
+              </header>
+              <p class="skins__intro">The look of the player on this device. Each device keeps its own, so a remote can wear a different skin from the player it controls.</p>
+              <div class="skin-groups">
+                <fieldset class="skin-group">
+                  <legend class="skin-group__name">Modern</legend>
+                  <label class="skin">
+                    <input class="skin__radio" type="radio" name="skin" value="modern" checked />
+                    <span class="skin__preview skin__preview--modern" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="skin__text">
+                      <span class="skin__name">Modern Warfare</span>
+                      <span class="skin__note">The tactical console: dark glass, corner brackets, the artwork's colour.</span>
+                    </span>
+                  </label>
+                </fieldset>
+                <fieldset class="skin-group">
+                  <legend class="skin-group__name">Frutiger Aero</legend>
+                  <label class="skin">
+                    <input class="skin__radio" type="radio" name="skin" value="xp" />
+                    <span class="skin__preview skin__preview--xp" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="skin__text">
+                      <span class="skin__name">Windows XP</span>
+                      <span class="skin__note">Blue title bars on cream windows, glossy buttons and a details list.</span>
+                    </span>
+                  </label>
+                </fieldset>
+              </div>
+            </section>
+            <!-- Layout: the Layout setting and the UI scale, kept per device and screen. -->
+            <section class="panel display tabpanel" id="displayPanel" aria-labelledby="displayTitle">
+              <header class="panel__head">
+                <h2 id="displayTitle" class="panel__title">Layout</h2>
+              </header>
               <dl class="rows">
-                <div class="row">
-                  <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11M6.5 21h11"/><path d="M7.5 3c0 5 9 5 9 9s-9 4-9 9M16.5 3c0 5-9 5-9 9s9 4 9 9"/></svg>Duration</dt>
-                  <dd id="statDur">—</dd>
-                </div>
-                <div class="row">
-                  <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>Repeat</dt>
-                  <dd><button id="loopSwitch" class="pill pill--btn tone-idle" type="button" aria-pressed="false" aria-label="Repeat this channel" disabled>Off</button></dd>
-                </div>
                 <div class="row">
                   <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="7" rx="1"/><rect x="4" y="13.5" width="16" height="7" rx="1"/></svg>Layout</dt>
                   <dd class="seg" role="radiogroup" aria-label="Layout on this screen">
@@ -264,112 +442,55 @@
                   </dd>
                 </div>
                 <div class="row">
-            <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 15v5h-5"/><path d="M4 4l7 7M20 20l-7-7"/></svg>UI scale</dt>
-            <dd class="scale-ctl" role="group" aria-label="Interface scale">
-              <button id="scaleDown" class="icon-btn" type="button" aria-label="Make the interface smaller"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
-              <output id="scaleValue" class="scale-ctl__value" aria-live="polite">100%</output>
-              <button id="scaleUp" class="icon-btn" type="button" aria-label="Make the interface larger"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-            </dd>
-          </div>
-        </dl>
-        <p id="layoutReadout" class="status__readout">Layout —</p>
-              <div class="status__actions">
-                <button id="shareButton" class="btn btn--quiet" type="button" disabled>Copy share link</button>
-              </div>
-            </section>
-        </div>
-        <div class="slide slide--more" id="slideMore" aria-label="Devices and screen effect">
-          <!-- Devices: pair another device to use as a remote (src/devices.ts). -->
-          <section class="panel devices" aria-labelledby="devicesTitle">
-            <header class="panel__head">
-              <h2 id="devicesTitle" class="panel__title">Devices</h2>
-              <span id="devicesState" class="pill tone-idle">Not paired</span>
-            </header>
-            <p id="devicesIntro" class="devices__intro">Pair another device, such as your phone, to control this player from it like a remote.</p>
-            <ul id="deviceList" class="device-list" aria-label="Paired devices" hidden></ul>
-            <div id="pairBox" class="pair" hidden>
-              <div id="pairQr" class="pair__qr"></div>
-              <div class="pair__text">
-                <p class="pair__label">Scan with the other device's camera, or open Ambient Player there and enter</p>
-                <p id="pairCode" class="pair__code">——— ———</p>
-                <p id="pairExpiry" class="pair__expiry">Works once, for 10 minutes</p>
-                <button id="pairCancel" class="btn btn--quiet btn--small" type="button">Done</button>
-              </div>
-            </div>
-            <div class="devices__actions">
-              <button id="connectDevice" class="btn" type="button">Connect a device</button>
-              <div class="field-row devices__join">
-                <label class="field">
-                  <span class="visually-hidden">Pairing code from another device</span>
-                  <input id="joinCode" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="Pairing code" />
-                </label>
-                <button id="joinButton" class="btn btn--quiet" type="button">Join</button>
-              </div>
-            </div>
-            <div id="devicesManage" class="devices__manage" hidden>
-              <div class="field-row">
-                <label class="field">
-                  <span class="visually-hidden">This device's name</span>
-                  <input id="deviceName" type="text" autocomplete="off" maxlength="40" placeholder="This device's name" />
-                </label>
-                <button id="renameDevice" class="btn btn--quiet" type="button">Rename</button>
-              </div>
-              <div class="devices__leave">
-                <button id="unpairDevice" class="text-btn" type="button">Unpair this device</button>
-                <button id="forgetDevices" class="text-btn text-btn--danger" type="button">Forget all devices</button>
-              </div>
-            </div>
-            <p id="devicesMessage" class="status-msg devices__msg" role="status" aria-live="polite"></p>
-          </section>
-          <!-- Screen effect over the artwork (src/screenFx.ts, drawn by src/crt.ts). -->
-          <section class="panel screen" aria-labelledby="screenTitle">
-            <header class="panel__head">
-              <h2 id="screenTitle" class="panel__title">Screen effect</h2>
-            </header>
-            <div class="screen__controls">
-              <!-- A rotary switch: each tap turns it to the next style. -->
-              <button id="screenDial" class="dial" type="button" aria-describedby="screenNote">
-                <span class="dial__face" aria-hidden="true">
-                  <span id="screenTicks" class="dial__ticks"></span>
-                  <span class="dial__knob"><span class="dial__pointer"></span></span>
-                </span>
-                <span class="dial__text">
-                  <span class="dial__label">Style</span>
-                  <span id="screenStyle" class="dial__value">Slot mask</span>
-                  <span id="screenStep" class="dial__step">1 / 5 · tap to turn</span>
-                </span>
-              </button>
-              <!-- Mix: how much of the effect, over the plain picture. -->
-              <div class="card mixer">
-                <p class="card__label">Mix</p>
-                <div class="mixer__body">
-                  <div>
-                    <p id="mixReadout" class="mixer__value">100 %</p>
-                    <p id="mixCaption" class="mixer__caption">Full screen</p>
-                  </div>
-                  <div id="mixMeter" class="mixer__meter" aria-hidden="true"></div>
+                  <dt><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 15v5h-5"/><path d="M4 4l7 7M20 20l-7-7"/></svg>UI scale</dt>
+                  <dd class="scale-ctl" role="group" aria-label="Interface scale">
+                    <button id="scaleDown" class="icon-btn" type="button" aria-label="Make the interface smaller"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+                    <output id="scaleValue" class="scale-ctl__value" aria-live="polite">100%</output>
+                    <button id="scaleUp" class="icon-btn" type="button" aria-label="Make the interface larger"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+                  </dd>
                 </div>
-                <label class="visually-hidden" for="mixInput">How much of the screen effect to show</label>
-                <input id="mixInput" class="slider" type="range" min="0" max="100" step="1" value="100" style="--v:100%" />
-              </div>
-            </div>
-            <p id="screenNote" class="screen__note"></p>
-            <button id="screenMoreToggle" class="btn btn--quiet btn--small screen__toggle" type="button" aria-expanded="false" aria-controls="screenMore">Fine-tune</button>
-            <div id="screenMore" class="screen__more" hidden>
-              <div id="screenSliders" class="screen__sliders"></div>
-              <button id="screenReset" class="btn btn--quiet btn--small" type="button">Back to the style's settings</button>
-            </div>
+              </dl>
+              <p id="layoutReadout" class="status__readout">Layout —</p>
+            </section>
           </section>
         </div>
       </div>
+    </div>
+
+    <!-- Skins that lay the page out as a window (Windows XP; src/skinLayout.ts)
+         move the panels in here: the deck's transport, repeat and volume on
+         the toolbar, the stage and the channel list in the main view, and
+         the other panels as groups of the task pane. Empty and hidden in
+         every other skin. -->
+    <div id="xpShell" class="xp-shell" hidden>
+      <div id="xpToolbar" class="xp-toolbar" role="group" aria-label="Playback">
+        <span class="xp-toolbar__sep" aria-hidden="true"></span>
+        <span id="xpRepeat" class="xp-repeat"><span class="xp-repeat__label" aria-hidden="true">Repeat</span></span>
+        <span class="xp-toolbar__fill" aria-hidden="true"></span>
+      </div>
+      <aside id="xpPane" class="xp-pane" aria-label="Tasks">
+        <section class="panel xp-tasks" aria-labelledby="xpTasksTitle">
+          <header class="panel__head">
+            <h2 id="xpTasksTitle" class="panel__title">Mix tasks</h2>
+          </header>
+          <ul class="xp-tasks__list">
+            <li><button class="xp-task xp-task--resume" type="button" data-proxy="resumeButton"></button></li>
+            <li><button class="xp-task xp-task--all" type="button" data-proxy="globalPlayPause"></button></li>
+            <li><button class="xp-task xp-task--save" type="button" data-focus="playlistNameInput">Save this mix</button></li>
+            <li><button class="xp-task xp-task--share" type="button" data-proxy="shareButton"></button></li>
+            <li><button class="xp-task xp-task--import" type="button" data-focus="importInput">Import a link</button></li>
+          </ul>
+        </section>
+      </aside>
+      <div id="xpMain" class="xp-main"></div>
     </div>
 
     <!-- Panel indicator: one bar per panel; tap to jump. -->
     <nav id="pager" class="pager" aria-label="Panels">
       <button class="pager__bar" type="button" data-slide="0" aria-label="Playback controls" aria-current="true"></button>
       <button class="pager__bar" type="button" data-slide="1" aria-label="Channels" aria-current="false"></button>
-      <button class="pager__bar" type="button" data-slide="2" aria-label="Saved mixes and mix status" aria-current="false"></button>
-      <button class="pager__bar" type="button" data-slide="3" aria-label="Devices and screen effect" aria-current="false"></button>
+      <button class="pager__bar" type="button" data-slide="2" aria-label="Library" aria-current="false"></button>
+      <button class="pager__bar" type="button" data-slide="3" aria-label="Settings" aria-current="false"></button>
     </nav>
   </div>
 
@@ -377,7 +498,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=122aef0a46"></script>
+  <script src="app.js?v=99f485e33d"></script>
 </body>
 
 </html>

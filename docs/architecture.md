@@ -20,8 +20,9 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
     its element constants with `l` (`lScroller`, `lStage`, …).
   - **New modules.** Add a new module to the `files` list in `bundle.js`
     after the modules it depends on.
-- **Cache busting.** `bundle.js` then stamps `styles.css?v=<hash>` and
-  `app.js?v=<hash>` into `index.html`, so a new deploy never pairs fresh HTML
+- **Cache busting.** `bundle.js` then stamps every local stylesheet
+  (`styles.css?v=<hash>`, `skins/xp.css?v=<hash>`) and `app.js?v=<hash>`
+  into `index.html`, so a new deploy never pairs fresh HTML
   with a cached stylesheet or script. GitHub Pages caches files for about 10
   minutes.
 - **Committed output.** `app.js` and `index.html` are committed (GitHub Pages
@@ -35,7 +36,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `layout.ts` | Layout behaviour CSS can't do alone: the collapsing artwork on vertical screens, the pager, moving between panels, snap sizes, and merging the deck and channel list on large horizontal screens. |
 | `ui.ts` | Pure helpers: HTML templates for channel rows, strip items and saved mixes, in-place row patches, time / dB formatting, icons, the replace-or-append dialog. |
 | `playlist.ts` | The `Track` model and `PlaylistManager`, which owns the track list and each track's player controller. |
-| `youtubePlayer.ts` | Wraps the YouTube IFrame API: waits for it to load, creates hidden players, reports state, metadata and errors through callbacks, and parses YouTube URLs. |
+| `youtubePlayer.ts` | Wraps the YouTube IFrame API: waits for it to load, creates hidden players, reports state, metadata and errors through callbacks, and parses YouTube URLs. Each new player warms up once: it plays for a moment, muted and unseen by the page, while the page is visible, then goes back to its start, paused. Chromium won't start media in a hidden page from a frame that has never played, so without this a channel started remotely on a phone with its screen off would wait until the screen came on. |
 | `accent.ts` | Samples the artwork on a canvas for the accent colour, and detects square (album) art. |
 | `crt.ts` | The screen effect: renders the artwork and thumbnails as phosphor cells on a canvas. |
 | `backdrop.ts` | The backdrop: blurs and grades the artwork once onto a small canvas, and steps the drift at 10 frames a second (see Backdrop cost). |
@@ -50,6 +51,9 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `layoutPref.ts` | The Layout setting (Auto or Stacked), kept per screen. |
 | `resize.ts` | The divider that resizes the artwork column on large screens with a mouse. |
 | `storage.ts` | Saved mixes in `localStorage` under `yt_audio_playlists`. |
+| `skin.ts` | Skins: the list of skins, the Skins tab, applying and saving the choice on this device, and `ambient:skin-change`. |
+| `tabs.ts` | Tabs: the Settings page's tab list, one section at a time, keyboard, the chosen tab kept per device; tab panel semantics only while the sections sit with their tab list. |
+| `skinLayout.ts` | The window layout for skins that arrange the page themselves (Windows XP): moves the panels into the window and back, the task pane's collapsible groups, and the Mix tasks links. |
 | `shareLinks.ts` | Encodes a mix's URLs into `#pl=<base64url JSON>`, reads it back from the page URL, and finds a mix in pasted text for Import. |
 
 ## State and rendering
@@ -58,7 +62,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 
 | Piece | What it holds |
 | --- | --- |
-| `playlistManager` | The tracks: URL, video ID, metadata, state (`loading`, `playing`, `paused`, `error`), time, duration, volume, loop. |
+| `playlistManager` | The tracks: URL, video ID, metadata, state (`loading`, `playing`, `paused`, `error`), time, duration, volume, loop, and `selected` (ticked for Resume). |
 | `focusedId` | The channel on the main display; the deck acts on it. |
 | `mixName` | The saved mix's name, if any. |
 | `openDrawers` | Which channel rows have their settings drawer open. |
@@ -67,8 +71,8 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 
 - **dispatch():** every change to playback or the mix goes through
   `dispatch()` in `commands.ts` as a `Command`. The commands are play, pause,
-  play all, pause all, focus, step, seek, stop, volume, repeat, add, remove,
-  change link and load mix.
+  play all, pause all, resume, select (tick for Resume), focus, step, seek,
+  stop, volume, repeat, add, remove, change link and load mix.
 - **Where they run:** `runCommand()` in `main.ts` applies them on this
   device. Remote control will add a route that sends them to the main device
   instead (see `docs/remote-control-plan.md`).
@@ -78,6 +82,22 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 - **Not commands:** purely local actions, such as a row's drawer, the remove
   confirmation, saving mixes on this device, share links, and the layout,
   scale and screen settings.
+
+**Resume.** Each track's `selected` flag is what Resume plays (the
+section "Resume: the channels played last" in `main.ts`):
+
+- **Following playback:** a channel that starts playing is ticked (in
+  `onTrackState`, so autoplay and handovers count too). A `play` command
+  while nothing plays unticks the rest; a `pause` or `stop` while other
+  channels play unticks that one. Pause all changes nothing, so the ticks
+  are exactly what was playing.
+- **Order:** `sortSelectedFirst()` moves the ticked channels to the top,
+  each group keeping its order. It runs on Pause all, Resume, loading a
+  saved mix, and `visibilitychange` with nothing playing; never on a row
+  tap. Only the device that plays sorts; remotes take the order from the
+  snapshot.
+- **Kept:** in the room snapshot (`selected` on each track), and as the
+  saved mix's `resume` links on this device, written shortly after a change.
 
 **Rendering.**
 
@@ -110,6 +130,68 @@ stops itself when nothing plays.
   `PlaylistManager` stores next to its track.
 - **Changing a channel's link.** `reloadTrack` keeps the channel's volume and
   repeat setting and replaces its player.
+
+## Skins (`skin.ts`, `skins/`)
+
+A skin is the whole look. All behaviour is shared; the stylesheet differs,
+and a skin may also move panels into a layout of its own. Switching is
+instant and never touches playback.
+
+- **How one applies:** `html[data-skin]` names it (`modern` or `xp`), and
+  `html[data-arrange]` how it lays the page out: `pages` (the base layout)
+  or `window`.
+  `styles.css` is the base and the Modern Warfare skin; `skins/xp.css` has
+  every Windows XP rule, scoped to `[data-skin="xp"]`, so the base skin is
+  never affected. Both stylesheets always load.
+- **Before the first paint:** an inline script in `index.html` reads
+  `ambient-player:skin` and sets `data-skin`; `setupSkinPanel()` then
+  applies it again (also setting `meta[name="theme-color"]`) and ticks the
+  radio button.
+- **Changing it:** `applySkin()` sets the attribute and the theme colour,
+  saves the choice (Modern, the default, removes the key) and fires
+  `ambient:skin-change` on `window`. `layout.ts` re-measures the panels and
+  snap sizes on it; `main.ts` repaints the thumbnails' screen effect and the
+  layout readout.
+- **Per device:** the skin is never in the room snapshot, so remote control
+  doesn't carry it; each device wears its own.
+- **The window layout (`skinLayout.ts`):** with `data-arrange="window"`,
+  the panels move into `#xpShell` (hidden in every other skin):
+  - **Toolbar:** the deck's transport, the repeat switch and the volume.
+  - **Main view:** the stage, with the timeline under Now playing and the
+    thumbnails in `#xpPlaying`, then the channels panel.
+  - **Task pane:** Mix tasks (static markup), then the saved mixes and mix
+    status, and the Settings page's sections (devices, screen effect,
+    layout, skins) as groups. Out of their tab list the sections show at
+    once, and `tabs.ts` drops their tab panel semantics until they return.
+  - **Moving back:** nodes are moved, never copied, so listeners and ids
+    stay; a comment marks each one's place, and leaving the skin puts them
+    back. `layout.ts` stands aside while arranged (no pages, merge moves or
+    collapsing stage).
+  - **Groups:** each gets a collapse button; collapsed groups are kept in
+    `ambient-player:xp-groups`.
+  - **Mix tasks:** links that mirror a button (label, hidden, disabled)
+    and press it, or open a group and focus one of its fields.
+- **Windows XP specifics:**
+  - **Highlight colour:** `--accent` is forced to the XP selection blue
+    (`!important` beats the artwork colour `main.ts` sets on `<html>`).
+  - **Title and status bars from existing markup:** the brand row is the
+    title bar; its status line (`.brand__sub`) is positioned as the status
+    bar along the window's foot.
+  - **Wide and narrow:** horizontal screens 860px and up get the toolbar on
+    top, the task pane beside the main view, and the channel list scrolling
+    on its own; everything else is one scrolling column.
+  - **Skin-only markup:** `#xpShell` and its contents, `#xpPlaying`, and
+    `.ch-head` (the list's column headings), all hidden in Modern; the
+    status panel's heading is visible only there.
+  - **Channels as a details view:** on panels at least 600px wide (a
+    container query on `.channels`), each row's parts are laid out on the
+    same grid columns as `.ch-head`.
+  - **Icons:** from the kit's icon sheet, in `assets/skins/xp/icons` at 16
+    and 32px (`image-set()` with a plain `url()` fallback).
+- **Adding a skin:** add it to `SKINS` in `skin.ts`, a radio button to the
+  Skins tab in `index.html`, the id to the inline script, and a
+  stylesheet under `skins/` scoped to its `data-skin`, linked in
+  `index.html`.
 
 ## Screen effect (`crt.ts`, `screenFx.ts`)
 
@@ -349,7 +431,7 @@ the screen directly.
 **Stacked (vertical) layout.**
 
 - **One scroller.** `#scroller` scrolls everything: the stage (artwork,
-  numbered strip, title) and the four panels below it.
+  numbered strip, title) and the four pages below it.
 - **Collapsing stage.** The stage is `position: sticky` with a fixed height
   and a negative `top` equal to its collapse range, so the content under it
   never moves out of step. While scrolling through that range only two
@@ -477,6 +559,12 @@ inline script in `index.html` applies it before the first paint.
     leaves and re-enters fullscreen.
   - **Installed app.** In the installed app (`display: fullscreen` in the
     manifest) the button stays hidden.
+  - **Reclaiming space (installed app).** On Android the browser can shrink
+    the window by the status bar's height when the notification shade comes
+    down, and not give it back. `setupReclaimSpace()` remembers the tallest
+    the window has been per width and viewport setting; when it is 20px or
+    more shorter, the next tap (not one on a field, nor while typing) asks
+    for fullscreen, which hides the bars and restores the space.
 - **Page flag.** `html[data-fullscreen]` marks the state. On an upright touch
   screen in fullscreen, CSS keeps at least 36px clear at the top for a
   punch-hole camera, since browsers don't always report the cutout in
@@ -488,15 +576,18 @@ inline script in `index.html` applies it before the first paint.
 
 | Store | Shape |
 | --- | --- |
-| `localStorage["yt_audio_playlists"]` | `{ playlists: [{ name, urls[] }], lastPlaylistName? }`. Saving a mix makes it the last one; it reopens on the next visit. An unsaved mix is not kept. |
+| `localStorage["yt_audio_playlists"]` | `{ playlists: [{ name, urls[], resume?[] }], lastPlaylistName? }`. Saving a mix makes it the last one; it reopens on the next visit. An unsaved mix is not kept. `resume` holds the links ticked for Resume; it is updated by itself while that mix is open, and the ticked channels open at the top. Mixes saved before Resume have none. |
 | `localStorage["ambient-player:ui-scale"]` | The UI scale (0.7–1.3), removed at 100%. |
 | `localStorage["ambient-player:layout"]` | The Layout setting per screen: `{ "<min>x<max>": "stacked" }`. Auto removes the screen's entry. |
 | `localStorage["ambient-player:room"]` | The paired room: `{ roomId, secret }`. |
 | `localStorage["ambient-player:device"]` | This device: `{ id, name }`. |
 | `localStorage["ambient-player:relay"]` | Development only: a localhost relay address set with `?relay=`. |
 | `localStorage["ambient-player:screen"]` | The screen effect: `{ style, mix, tuned }` (style name, 0–1, overridden `--crt-*` values). |
+| `localStorage["ambient-player:skin"]` | The skin on this device: `xp`. Removed for Modern Warfare, the default. |
+| `localStorage["ambient-player:tabs:settings"]` | The Settings tab last opened on this device (its tab's id). |
+| `localStorage["ambient-player:xp-groups"]` | Windows XP's task pane: which groups are collapsed, `{ "<heading id>": true }`. Screen effect starts collapsed. |
 | `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
-| Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. **Import** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |
+| Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. Each mix in the Saved mixes panel copies its own link (`data-mix-action="share"`; the open unsaved mix uses `#shareButton`). **Import a link** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |
 
 ## Page flags
 

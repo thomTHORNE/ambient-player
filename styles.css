@@ -185,7 +185,9 @@ svg {
 .tile-btn::before,
 .art::before,
 .modal::before,
-.ch.is-focus::before {
+.ch.is-focus::before,
+.skin.is-current::before,
+.tab::before {
   content: "";
   position: absolute;
   inset: var(--bi, -1px);
@@ -577,6 +579,15 @@ input[type="range"] {
   color: var(--text);
 }
 
+/* The app's version, at the right of the Settings heading. */
+.app-version {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
 /* A small square marker, like a map key. */
 .panel__title::before {
   content: "";
@@ -599,6 +610,17 @@ input[type="range"] {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Resume, Play all and the count: on a narrow panel they drop below the
+   title rather than run past the edge. */
+.channels .panel__head {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.channels .panel__tools {
+  margin-left: auto;
 }
 
 .panel__count {
@@ -812,7 +834,7 @@ input[type="range"] {
   color: var(--accent);
 }
 
-.mix .icon-btn:hover {
+.mix .mix__delete:hover {
   color: var(--danger);
   border-color: var(--danger-line);
 }
@@ -905,11 +927,6 @@ input[type="range"] {
 
 .status-msg:not(:empty) {
   margin: -4px 0 12px;
-}
-
-/* Saved mixes: the import row sits under the save row; messages follow both. */
-.field-row--import {
-  margin-top: 8px;
 }
 
 .mixes__msg:not(:empty) {
@@ -1697,6 +1714,22 @@ input[type="range"] {
   color: var(--text);
 }
 
+/* Repeat for this channel, between the label and the time. */
+.timeline__repeat {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.timeline__repeat-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
 .timeline__track {
   position: relative;
   flex: 1;
@@ -2008,6 +2041,52 @@ input[type="range"] {
   gap: 10px;
 }
 
+/* The mark for Resume: a small square, ticked for the channels played last. */
+.ch__pick {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 40px;
+  margin: 0 -2px 0 -4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+}
+
+.ch__pick-box {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  transition: background-color 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease);
+}
+
+.ch__pick-box svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.2;
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+
+.ch__pick:hover .ch__pick-box {
+  border-color: var(--text-2);
+}
+
+.ch__pick[aria-pressed="true"] .ch__pick-box {
+  border-color: var(--accent);
+  background: var(--accent-fill);
+  color: var(--accent);
+}
+
+.ch__pick[aria-pressed="true"] .ch__pick-box svg {
+  opacity: 1;
+}
+
 .ch__focus {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
@@ -2130,7 +2209,8 @@ input[type="range"] {
   display: grid;
   gap: 10px;
   margin-top: 8px;
-  padding: 10px 0 2px 76px;
+  /* Lined up with the title: the mark, the thumbnail and their gaps. */
+  padding: 10px 0 2px 102px;
   border-top: 1px dashed rgba(255, 255, 255, 0.12);
   animation: fade-in 160ms var(--ease);
 }
@@ -2353,13 +2433,6 @@ input[type="range"] {
   font-size: 10.5px;
   letter-spacing: 0.04em;
   color: var(--text-3);
-}
-
-.status__actions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-top: 14px;
 }
 
 /* ---------- Devices (last panel): pairing for remote control ---------- */
@@ -2780,7 +2853,391 @@ input[type="range"] {
   background: transparent;
 }
 
+/* ---------- Settings (last page): its sections behind tabs ---------- */
+
+/* Tabs: drawn like the transport buttons (glass tiles with corner
+   brackets that step out on hover); the open tab is the primary one, with
+   the accent's glow along its foot (src/tabs.ts). */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-2);
+  --bc: rgba(255, 255, 255, 0.35);
+  --bl: 8px;
+  transition: background-color 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease), transform 90ms var(--ease);
+}
+
+.tab:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+  --bc: var(--text);
+  --bi: -5px;
+}
+
+.tab:active {
+  transform: translateY(1px);
+  --bi: -2px;
+}
+
+.tab[aria-selected="true"],
+.entry__choice[aria-expanded="true"] {
+  border-color: var(--accent-line);
+  background:
+    radial-gradient(ellipse at 50% 130%, color-mix(in srgb, var(--accent) 40%, transparent), transparent 70%),
+    var(--glass);
+  color: var(--text);
+  --bc: var(--accent);
+}
+
+.tab[aria-selected="true"]:hover,
+.entry__choice[aria-expanded="true"]:hover {
+  border-color: var(--accent);
+}
+
+.tab:focus-visible {
+  outline-offset: 3px;
+}
+
+/* Narrow phones: tighter type, so the four tabs still share one row. */
+@media (max-width: 360px) {
+  .tabs {
+    gap: 5px;
+    padding: 6px 4px;
+  }
+
+  .tab {
+    padding: 0 4px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+}
+
+/* The sections sit flat inside the Settings panel, one at a time. */
+.settings > .tabpanel {
+  padding: 0;
+  border: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  animation: fade-in 160ms var(--ease);
+}
+
+.settings > .tabpanel::before {
+  content: none;
+}
+
+.settings > .tabpanel:not(.is-active) {
+  display: none;
+}
+
+/* The tab names the section: its heading is for screen readers, and only
+   a status chip (Devices) stays in view. */
+.settings > .tabpanel > .panel__head {
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.settings > .tabpanel > .panel__head:not(:has(> .pill)) {
+  display: none;
+}
+
+.settings > .tabpanel > .panel__head > .panel__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- Skins (a Settings tab): the whole look, per device ---------- */
+
+.skins__intro {
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.skin-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.skin-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.skin-group__name {
+  margin-bottom: 8px;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* One skin: a card with a small preview, picked like a radio button. */
+.skin {
+  position: relative;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+  transition: border-color 140ms var(--ease), background-color 140ms var(--ease);
+}
+
+.skin:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* The skin in use: drawn like the channel on the main display (a brighter
+   plate, the accent bar and the corner brackets). */
+.skin.is-current {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 3px 0 0 var(--accent);
+  --bc: rgba(255, 255, 255, 0.75);
+  --bl: 8px;
+}
+
+/* The radio itself is the card; it stays focusable for the keyboard. */
+.skin__radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.skin:has(.skin__radio:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skin__text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.skin__name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.skin__note {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+/* Previews: a tiny window in each skin's colours (the same in every skin). */
+.skin__preview {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 48px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+
+.skin__preview i {
+  position: absolute;
+  display: block;
+}
+
+.skin__preview--modern {
+  background: #0D0F10;
+}
+
+.skin__preview--modern i:nth-child(1) {
+  left: 6px; top: 6px; width: 34px; height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: linear-gradient(160deg, #1C2A33, #0D0F10);
+}
+
+.skin__preview--modern i:nth-child(2) {
+  left: 44px; top: 6px; width: 22px; height: 6px;
+  background: #FFB24A;
+}
+
+.skin__preview--modern i:nth-child(3) {
+  left: 6px; bottom: 6px; width: 60px; height: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.skin__preview--xp {
+  background: #ECE9D8;
+  border-color: #0831D9;
+  border-radius: 4px 4px 0 0;
+}
+
+.skin__preview--xp i:nth-child(1) {
+  left: 0; right: 0; top: 0; height: 10px;
+  background: linear-gradient(180deg, #3D95FF 0%, #0372FF 10%, #0053E1 26%, #0058EE 56%, #026AFE 74%, #0060FC 91%, #0043CF 100%);
+}
+
+.skin__preview--xp i:nth-child(2) {
+  right: 2px; top: 2px; width: 6px; height: 6px;
+  border: 1px solid #FFFFFF;
+  border-radius: 1px;
+  background: #E2603A;
+}
+
+.skin__preview--xp i:nth-child(3) {
+  left: 6px; top: 16px; width: 60px; height: 24px;
+  border: 1px solid #7F9DB9;
+  background: linear-gradient(#316AC5 0 6px, #FFFFFF 6px);
+}
+
+/* Column headings for the channel list: only skins that draw it as a table. */
+.ch-head {
+  display: none;
+}
+
+/* A heading for screen readers only (the status panel's); skins that
+   group panels under visible headings show it. */
+.panel__head--quiet {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Collapse buttons for panels that a skin shows as task pane groups. */
+.xp-group__toggle {
+  display: none;
+}
+
 /* ---------- Saved mixes ---------- */
+
+/* Entry: Save and Import are two tiles (drawn like the tabs); the open one
+   glows, and its field (drawn like "Paste a YouTube link") shows below. */
+.entry__choices {
+  display: flex;
+  gap: 8px;
+  margin: 0 -6px;
+  padding: 6px;
+}
+
+.entry__choice {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.entry__choice-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.entry__field {
+  margin: 8px 0 0;
+}
+
+.entry__field:not(.is-open) {
+  display: none;
+}
+
+/* A text action in the field's square button slot. */
+.add__btn--text {
+  width: auto;
+  min-width: 36px;
+  padding: 0 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Share: a link icon; a check for a moment once the link is copied. */
+.share-btn .share__done,
+.share-btn.is-copied .share__icon {
+  display: none;
+}
+
+.share-btn.is-copied .share__done {
+  display: block;
+}
+
+.share-btn.is-copied {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The open mix before it's saved: first in the list, marked current. */
+.mix--unsaved {
+  margin-top: 10px;
+  padding-left: 10px;
+  box-shadow: inset 2px 0 0 var(--accent);
+  background: linear-gradient(90deg, var(--accent-fill), transparent 70%);
+}
+
+.mix--unsaved[hidden] {
+  display: none;
+}
+
+.mix--unsaved .mix__name {
+  color: var(--accent);
+  font-style: italic;
+}
+
+.mix--unsaved .mix__tag {
+  display: inline;
+  color: var(--accent);
+}
+
+.mix--unsaved + .mix-list {
+  margin-top: 0;
+}
 
 .mixes {
   flex: none;
@@ -3419,6 +3876,29 @@ html[data-merged="true"] .thumbs {
   }
 }
 
+/* Narrow phones: a smaller thumbnail leaves the title room beside the
+   Resume mark; on the narrowest the title takes the thumbnail's place. */
+@media (max-width: 360px) {
+  .ch__focus {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .ch__thumb {
+    width: 40px;
+  }
+}
+
+@media (max-width: 330px) {
+  .ch__focus {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ch__thumb {
+    display: none;
+  }
+}
+
 @media (pointer: coarse) {
   .icon-btn,
   .btn--small {
@@ -3429,6 +3909,13 @@ html[data-merged="true"] .thumbs {
   .round-btn,
   .vol-toggle {
     height: var(--tap);
+  }
+
+  /* A wider hit area for the Resume mark; it still looks the same size. */
+  .ch__pick {
+    width: 30px;
+    height: var(--tap);
+    margin: 0 -6px 0 -8px;
   }
 
   .strip {

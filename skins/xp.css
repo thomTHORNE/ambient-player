@@ -151,15 +151,17 @@
   padding: 0 0 var(--status-h);
 }
 
-/* The title bar: the brand row. */
+/* The title bar: the brand row, slim. */
 [data-skin="xp"] .brand,
 [data-skin="xp"]:where([data-layout-forced="true"]) .brand {
+  --bar-h: 24px;
   justify-self: stretch;
+  align-items: stretch;
   width: auto;
-  gap: 6px;
-  min-height: 30px;
+  gap: 0;
+  min-height: var(--bar-h);
   margin: 0;
-  padding: env(safe-area-inset-top) calc(4px + env(safe-area-inset-right)) 0 calc(6px + env(safe-area-inset-left));
+  padding: env(safe-area-inset-top) calc(3px + env(safe-area-inset-right)) 0 env(safe-area-inset-left);
   background: var(--xp-title);
   color: #FFFFFF;
 }
@@ -174,43 +176,61 @@
   }
 }
 
-[data-skin="xp"] .brand__tile {
-  width: 18px;
-  height: 18px;
+/* The branding is the Start button: green, flush left, rounded on the
+   right; the logo where the flag would be, the app's name as its label.
+   The logo tile and the title make one button between them. */
+[data-skin="xp"] .brand__tile,
+[data-skin="xp"] .brand__title,
+[data-skin="xp"]:where([data-layout="columns"]) .brand__tile,
+[data-skin="xp"]:where([data-layout="columns"]) .brand__title {
+  height: var(--bar-h);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 45%),
+    linear-gradient(180deg, #4E9451 0%, #7DB877 10%, #5CAB51 28%, #43A032 48%, #3F8E28 72%, #3C8221 86%, #2E6F1B 100%);
+}
+
+[data-skin="xp"] .brand__tile,
+[data-skin="xp"]:where([data-layout="columns"]) .brand__tile {
+  width: auto;
+  margin-right: -1px;
+  padding: 0 5px 0 8px;
   border: 0;
-  background: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 
 [data-skin="xp"] .brand__tile svg {
-  width: 17px;
-  height: 17px;
-  stroke: #FFD27A;
+  width: 16px;
+  height: 16px;
+  stroke: #FFFFFF;
   stroke-width: 7;
-  filter: drop-shadow(1px 1px 0 rgba(10, 24, 131, 0.8));
+  filter: drop-shadow(1px 1px 0 rgba(20, 60, 10, 0.7));
 }
 
 [data-skin="xp"] .brand__text {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 [data-skin="xp"] .brand__title,
 [data-skin="xp"]:where([data-layout="columns"]) .brand__title {
-  padding: 0;
+  max-width: 100%;
+  padding: 0 16px 0 2px;
   overflow: hidden;
-  background: none;
+  border-radius: 0 11px 11px 0;
+  box-shadow: inset -2px 0 3px rgba(0, 0, 0, 0.28), 1px 0 2px rgba(0, 20, 80, 0.45);
   font-family: var(--xp-title-font);
   font-size: 13px;
+  font-style: italic;
   font-weight: 700;
-  line-height: 30px;
-  letter-spacing: 0;
+  line-height: var(--bar-h);
+  letter-spacing: 0.01em;
   text-transform: none;
   white-space: nowrap;
   text-overflow: ellipsis;
-  text-shadow: 1px 1px 0 #0A1883;
+  text-shadow: 1px 1px 1px rgba(20, 50, 10, 0.75);
 }
 
 [data-skin="xp"] .brand__title::after {
@@ -220,8 +240,9 @@
 /* Fullscreen is the window's maximize / restore button. */
 [data-skin="xp"] .brand .brand__fs {
   position: relative;
-  width: 21px;
-  height: 21px;
+  align-self: center;
+  width: 18px;
+  height: 18px;
   min-width: 0;
   min-height: 0;
   border: 1px solid #FFFFFF;
@@ -247,10 +268,10 @@
 }
 
 [data-skin="xp"] .brand .brand__fs::before {
-  left: 4px;
-  top: 4px;
-  width: 11px;
-  height: 11px;
+  left: 2px;
+  top: 2px;
+  width: 10px;
+  height: 10px;
 }
 
 [data-skin="xp"] .brand .brand__fs::after {
@@ -258,18 +279,18 @@
 }
 
 [data-skin="xp"] .brand .brand__fs[aria-pressed="true"]::before {
-  left: 4px;
-  top: 7px;
-  width: 8px;
-  height: 8px;
+  left: 2px;
+  top: 5px;
+  width: 7px;
+  height: 7px;
 }
 
 [data-skin="xp"] .brand .brand__fs[aria-pressed="true"]::after {
   display: block;
-  left: 7px;
-  top: 4px;
-  width: 8px;
-  height: 8px;
+  left: 5px;
+  top: 2px;
+  width: 7px;
+  height: 7px;
   border-left-width: 0;
   border-bottom-width: 0;
 }
@@ -292,18 +313,19 @@
 }
 
 @media (pointer: coarse) {
-  [data-skin="xp"] .brand {
-    min-height: 40px;
+  [data-skin="xp"] .brand,
+  [data-skin="xp"]:where([data-layout-forced="true"]) .brand {
+    --bar-h: 32px;
   }
 
   [data-skin="xp"] .brand .brand__fs {
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
   }
 
-  [data-skin="xp"] .brand .brand__fs::before { left: 8px; top: 8px; }
-  [data-skin="xp"] .brand .brand__fs[aria-pressed="true"]::before { left: 8px; top: 11px; }
-  [data-skin="xp"] .brand .brand__fs[aria-pressed="true"]::after { left: 11px; top: 8px; }
+  [data-skin="xp"] .brand .brand__fs::before { left: 6px; top: 6px; }
+  [data-skin="xp"] .brand .brand__fs[aria-pressed="true"]::before { left: 6px; top: 9px; }
+  [data-skin="xp"] .brand .brand__fs[aria-pressed="true"]::after { left: 9px; top: 6px; }
 }
 
 /* The brand's status line becomes the window's status bar: sunken panes

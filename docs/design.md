@@ -93,8 +93,10 @@ The panels are, in order:
 On large horizontal screens the deck and channels share the first page, so
 there are three.
 
-**Tabs.** Framed chips in a row that share its width; the open one is
-filled with the accent, like the Layout setting's choice. The sections sit
+**Tabs.** Drawn like the transport buttons: glass tiles with corner
+brackets that step out on hover, sharing the row's width; the open tab is
+the primary one, with the accent's glow along its foot and accent
+brackets. The sections sit
 flat in the Settings panel, one at a time; the tab names them, so their
 own headings are for screen readers (Devices keeps its status chip). Left /
 Right, Home and End move between tabs.

@@ -4,7 +4,7 @@
  * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
  * pinned to the top of the scroller and shrinks as you scroll, from its full
  * size down to a minimum height; after that the panels (deck, channels,
- * mixes + status, devices + screen effect) scroll up under it and snap one at a time, like the
+ * mixes + status, devices + screen effect, skins) scroll up under it and snap one at a time, like the
  * horizontal layout's pages.
  *
  * Horizontal screens (landscape): the stage stays still on the left and the
@@ -26,6 +26,7 @@
 
 import { prefersReducedMotion } from './ui.js';
 import { layoutChoice, LAYOUT_CHOICE_EVENT } from './layoutPref.js';
+import { SKIN_EVENT } from './skin.js';
 
 const portraitQuery = window.matchMedia('(orientation: portrait)');
 /** Large horizontal screens (a Fold's inner display at 4:3 and up) have room
@@ -137,7 +138,7 @@ function portraitTop(index: number): number {
   return Math.max(0, Math.round(top - pinned));
 }
 
-/** Show a panel: 0 deck, 1 channels, 2 saved mixes and status, 3 devices and screen effect. */
+/** Show a panel: 0 deck, 1 channels, 2 saved mixes and status, 3 devices and screen effect, 4 skins. */
 function goToSlide(index: number): void {
   const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth';
   if (isStacked()) {
@@ -277,6 +278,8 @@ export function setupLayout(): void {
   };
   window.addEventListener('resize', relayout);
   window.addEventListener(LAYOUT_CHOICE_EVENT, relayout);
+  // A new skin changes the sizes of the brand, the stage and the panels.
+  window.addEventListener(SKIN_EVENT, () => requestAnimationFrame(relayout));
   // The space under the brand can change without a window resize (the
   // brand's status line wrapping, fonts loading), and the stage's text with
   // the channel; the snap sizes follow.

@@ -2838,6 +2838,160 @@ input[type="range"] {
   background: transparent;
 }
 
+/* ---------- Skins (last panel): the whole look, per device ---------- */
+
+.skins__intro {
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.skin-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.skin-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.skin-group__name {
+  margin-bottom: 8px;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* One skin: a card with a small preview, picked like a radio button. */
+.skin {
+  position: relative;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+  transition: border-color 140ms var(--ease), background-color 140ms var(--ease);
+}
+
+.skin:hover {
+  border-color: var(--line-strong);
+}
+
+.skin.is-current {
+  border-color: var(--accent);
+  background: var(--accent-fill);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* The radio itself is the card; it stays focusable for the keyboard. */
+.skin__radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.skin:has(.skin__radio:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skin__text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.skin__name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.skin__note {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+/* Previews: a tiny window in each skin's colours (the same in every skin). */
+.skin__preview {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 48px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+
+.skin__preview i {
+  position: absolute;
+  display: block;
+}
+
+.skin__preview--modern {
+  background: #0D0F10;
+}
+
+.skin__preview--modern i:nth-child(1) {
+  left: 6px; top: 6px; width: 34px; height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: linear-gradient(160deg, #1C2A33, #0D0F10);
+}
+
+.skin__preview--modern i:nth-child(2) {
+  left: 44px; top: 6px; width: 22px; height: 6px;
+  background: #FFB24A;
+}
+
+.skin__preview--modern i:nth-child(3) {
+  left: 6px; bottom: 6px; width: 60px; height: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.skin__preview--xp {
+  background: #ECE9D8;
+  border-color: #0831D9;
+  border-radius: 4px 4px 0 0;
+}
+
+.skin__preview--xp i:nth-child(1) {
+  left: 0; right: 0; top: 0; height: 10px;
+  background: linear-gradient(180deg, #3D95FF 0%, #0372FF 10%, #0053E1 26%, #0058EE 56%, #026AFE 74%, #0060FC 91%, #0043CF 100%);
+}
+
+.skin__preview--xp i:nth-child(2) {
+  right: 2px; top: 2px; width: 6px; height: 6px;
+  border: 1px solid #FFFFFF;
+  border-radius: 1px;
+  background: #E2603A;
+}
+
+.skin__preview--xp i:nth-child(3) {
+  left: 6px; top: 16px; width: 60px; height: 24px;
+  border: 1px solid #7F9DB9;
+  background: linear-gradient(#316AC5 0 6px, #FFFFFF 6px);
+}
+
+/* Column headings for the channel list: only skins that draw it as a table. */
+.ch-head {
+  display: none;
+}
+
 /* ---------- Saved mixes ---------- */
 
 .mixes {

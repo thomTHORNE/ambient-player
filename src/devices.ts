@@ -1,5 +1,5 @@
 /**
- * The Devices section (last panel): pairing devices for remote control
+ * The Devices section (fourth panel): pairing devices for remote control
  * (docs/remote-control-plan.md, phase 2).
  *
  * - Connect a device: creates the room if this device has none, then shows

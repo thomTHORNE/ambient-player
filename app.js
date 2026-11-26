@@ -1533,7 +1533,7 @@ function setBackdrop(src, letterboxed = false) {
 
 // ===== screenFx.js =====
 /**
- * Screen effect settings (the last panel): which style of screen the
+ * Screen effect settings (the fourth panel, under Devices): which style of screen the
  * artwork is shown on, how much of it (Mix), and the fine-tune sliders.
  *
  * - The dial is a rotary switch: each tap (or arrow key) turns it to the next
@@ -2657,7 +2657,7 @@ function qrSvg(text, label) {
 
 // ===== devices.js =====
 /**
- * The Devices section (last panel): pairing devices for remote control
+ * The Devices section (fourth panel): pairing devices for remote control
  * (docs/remote-control-plan.md, phase 2).
  *
  * - Connect a device: creates the room if this device has none, then shows
@@ -2976,6 +2976,87 @@ function setLayoutChoice(choice) {
 }
 
 
+// ===== skin.js =====
+/**
+ * Skins: the whole look of the player, chosen per device in the Skins panel.
+ *
+ * A skin is a stylesheet scoped to html[data-skin="<id>"]. The markup and
+ * every behaviour stay the same in all skins, so switching is instant and
+ * never touches playback or the connection to the paired room.
+ *
+ *   modern  Modern Warfare: the tactical console (styles.css, the base)
+ *   xp      Windows XP: blue title bars on cream windows (skins/xp.css)
+ *
+ * The choice is kept in this browser only (localStorage), like the UI scale
+ * and the layout: it is never part of the mix that remote control shares,
+ * so a phone used as a remote can wear a different skin from the laptop it
+ * controls. A small inline script in index.html applies the saved skin
+ * before the first paint; keep its key and ids in sync with these.
+ */
+const SKINS = [
+    { id: 'modern', name: 'Modern Warfare', group: 'Modern', themeColor: '#08090A' },
+    { id: 'xp', name: 'Windows XP', group: 'Frutiger Aero', themeColor: '#0054E3' },
+];
+const DEFAULT_SKIN = 'modern';
+const SKIN_KEY = 'ambient-player:skin';
+/** Fired on window after the skin changes (layouts re-measure, canvases repaint). */
+const SKIN_EVENT = 'ambient:skin-change';
+function skinInfo(id) {
+    return SKINS.find((s) => s.id === id);
+}
+/** The skin saved on this device, or the default. */
+function storedSkin() {
+    try {
+        return skinInfo(localStorage.getItem(SKIN_KEY))?.id ?? DEFAULT_SKIN;
+    }
+    catch {
+        return DEFAULT_SKIN;
+    }
+}
+/** The skin on screen now. */
+function currentSkin() {
+    return skinInfo(document.documentElement.dataset.skin)?.id ?? DEFAULT_SKIN;
+}
+/** Wear a skin (and keep it on this device). */
+function applySkin(id) {
+    const info = skinInfo(id) ?? skinInfo(DEFAULT_SKIN);
+    const changed = currentSkin() !== info.id || document.documentElement.dataset.skin !== info.id;
+    document.documentElement.dataset.skin = info.id;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', info.themeColor);
+    try {
+        if (info.id === DEFAULT_SKIN)
+            localStorage.removeItem(SKIN_KEY);
+        else
+            localStorage.setItem(SKIN_KEY, info.id);
+    }
+    catch {
+        // Not saved; it still applies for this visit.
+    }
+    if (changed)
+        window.dispatchEvent(new CustomEvent(SKIN_EVENT, { detail: info.id }));
+}
+/** The Skins panel: one radio button per skin, grouped by family (index.html). */
+function setupSkinPanel() {
+    const radios = Array.from(document.querySelectorAll('input[name="skin"]'));
+    const show = () => {
+        const id = currentSkin();
+        radios.forEach((r) => {
+            r.checked = r.value === id;
+            r.closest('.skin')?.classList.toggle('is-current', r.checked);
+        });
+    };
+    radios.forEach((r) => r.addEventListener('change', () => {
+        if (r.checked && skinInfo(r.value))
+            applySkin(r.value);
+        show();
+    }));
+    // The inline script set data-skin already; this also covers storage it
+    // couldn't read and an unknown saved value.
+    applySkin(storedSkin());
+    show();
+}
+
+
 // ===== layout.js =====
 /**
  * Layout behaviour that CSS can't do alone.
@@ -2983,7 +3064,7 @@ function setLayoutChoice(choice) {
  * Vertical screens (portrait): the stage (artwork, numbered strip, title) is
  * pinned to the top of the scroller and shrinks as you scroll, from its full
  * size down to a minimum height; after that the panels (deck, channels,
- * mixes + status, devices + screen effect) scroll up under it and snap one at a time, like the
+ * mixes + status, devices + screen effect, skins) scroll up under it and snap one at a time, like the
  * horizontal layout's pages.
  *
  * Horizontal screens (landscape): the stage stays still on the left and the
@@ -3002,6 +3083,7 @@ function setLayoutChoice(choice) {
  * The inline script in index.html sets the same markers before the first
  * paint; keep its queries in sync with these.
  */
+
 
 
 const portraitQuery = window.matchMedia('(orientation: portrait)');
@@ -3106,7 +3188,7 @@ function portraitTop(index) {
     const pinned = lStageWrap.offsetHeight - range;
     return Math.max(0, Math.round(top - pinned));
 }
-/** Show a panel: 0 deck, 1 channels, 2 saved mixes and status, 3 devices and screen effect. */
+/** Show a panel: 0 deck, 1 channels, 2 saved mixes and status, 3 devices and screen effect, 4 skins. */
 function goToSlide(index) {
     const behavior = prefersReducedMotion() ? 'auto' : 'smooth';
     if (isStacked()) {
@@ -3238,6 +3320,8 @@ function setupLayout() {
     };
     window.addEventListener('resize', relayout);
     window.addEventListener(LAYOUT_CHOICE_EVENT, relayout);
+    // A new skin changes the sizes of the brand, the stage and the panels.
+    window.addEventListener(SKIN_EVENT, () => requestAnimationFrame(relayout));
     // The space under the brand can change without a window resize (the
     // brand's status line wrapping, fonts loading), and the stage's text with
     // the channel; the snap sizes follow.
@@ -3489,6 +3573,7 @@ function setupStageResize() {
  * "focused": it fills the centre of the screen and the deck controls it.
  * Every channel stays playable from the channel list.
  */
+
 
 
 
@@ -4776,6 +4861,8 @@ function setupScreenEffect() {
         clearCrtThumbs();
         repaint();
     });
+    // A new skin resizes the thumbnails.
+    window.addEventListener(SKIN_EVENT, repaint);
 }
 // ---------------------------------------------------------------------------
 // Remote control: roles and sync (docs/remote-control-plan.md, phase 3)
@@ -5241,6 +5328,8 @@ async function initialize() {
     setupLayout();
     setupScaleControl();
     setupLayoutControl();
+    setupSkinPanel();
+    window.addEventListener(SKIN_EVENT, () => requestAnimationFrame(updateScaleReadout));
     setupStageResize();
     buildStaticMeters();
     renderMixList();

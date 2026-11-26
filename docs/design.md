@@ -87,9 +87,10 @@ The panels are, in order:
    share link.
 4. **Devices, then the screen effect:** pairing and the device list; the
    style dial, Mix and fine-tune.
+5. **Skins:** the whole look, per device.
 
 On large horizontal screens the deck and channels share the first page, so
-there are three.
+there are four.
 
 ## Interaction rules
 
@@ -200,6 +201,42 @@ colour and "· Current" after the channel count.
   upright phone, the top 36px stays clear for a punch-hole camera.
 - **Reduced motion.** With *reduce motion* on, the backdrop stops drifting
   and all transitions and animations become instant; nothing stays hidden.
+
+## Skins
+
+Everything above describes **Modern Warfare**, the default skin. **Windows
+XP** (`skins/xp.css`) keeps the same layouts and interaction rules and
+changes the surfaces, after the XP UI kit sheets:
+
+- **Window.** The app is a maximized window: the Luna title bar on top
+  ("Ambient Player", the maximize / restore button for fullscreen), the
+  cream face (`#ECE9D8`), and a status bar with sunken panes at the foot
+  (the mix, what's playing, remote control) and the resize grip.
+- **Panels.** Each panel, the deck and (side by side) the stage are toolbox
+  windows: a blue title bar with the panel's icon, a 3px blue frame. A
+  panel's tools sit on a toolbar strip under its title bar.
+- **Groups.** The deck's timeline and volume, and the skin families, are
+  groupboxes with blue legends.
+- **Controls.**
+  - **Buttons:** the kit's buttons (75px minimum, orange hover, blue focus
+    ring); Resume is the default button, with a green play mark.
+  - **Transport:** flat toolbar buttons that rise on hover.
+  - **Fields:** sunken white boxes with the `#7F9DB9` border.
+  - **Choices:** XP checkboxes and radio buttons; the repeat switch is a
+    checkbox.
+  - **Sliders:** the green-footed cursor on a sunken groove.
+  - **Timeline:** an XP progress bar of green blocks.
+  - **Scrollbars:** the kit's blue scrollbars where the browser allows.
+- **Lists.** The channels are a details view with column headings on wide
+  panels and list rows on narrow ones; saved mixes and devices are list
+  views with folder and computer icons. Selection is XP blue (`#316AC5`)
+  with white text; that blue replaces the artwork's accent.
+- **Type.** Tahoma (Trebuchet MS for titles) where the system has them, at
+  12px (13px on touch screens), in sentence case.
+- **Touch.** Controls keep at least 38–44px targets on touch screens,
+  larger than XP's own.
+- **Not used.** No Windows logo, Start button or product icons: the kit's
+  generic system icons only.
 
 ## Brand
 

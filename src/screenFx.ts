@@ -1,5 +1,5 @@
 /**
- * Screen effect settings (the last panel): which style of screen the
+ * Screen effect settings (the fourth panel, under Devices): which style of screen the
  * artwork is shown on, how much of it (Mix), and the fine-tune sliders.
  *
  * - The dial is a rotary switch: each tap (or arrow key) turns it to the next

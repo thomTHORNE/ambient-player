@@ -28,6 +28,7 @@ const files = [
   'qr.js',
   'devices.js',
   'layoutPref.js',
+  'skin.js',
   'layout.js',
   'scale.js',
   'resize.js',
@@ -66,11 +67,16 @@ console.log(`✓ Bundled to ${outputFile}`);
 // fresh index.html can end up next to a stale styles.css or script. Stamp each
 // asset URL with a hash of its contents so every change gets a new URL.
 const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 10);
-const cssVersion = hash('./styles.css');
 const jsVersion = hash(outputFile);
 
 let html = fs.readFileSync('./index.html', 'utf8');
-html = html.replace(/href="styles\.css(\?v=[^"]*)?"/, `href="styles.css?v=${cssVersion}"`);
+// Every local stylesheet: styles.css and each skin under skins/.
+const stamped = [];
+html = html.replace(/href="((?:skins\/)?[\w-]+\.css)(\?v=[^"]*)?"/g, (_, file) => {
+  const version = hash(`./${file}`);
+  stamped.push(`${file}?v=${version}`);
+  return `href="${file}?v=${version}"`;
+});
 // The page loads the single bundle: one file, so no module import can go stale.
 html = html.replace(
   /<script( type="module")? src="(dist\/main\.js|app\.js)(\?v=[^"]*)?"><\/script>/,
@@ -78,5 +84,5 @@ html = html.replace(
 );
 fs.writeFileSync('./index.html', html);
 
-console.log(`✓ Stamped index.html: styles.css?v=${cssVersion}, app.js?v=${jsVersion}`);
+console.log(`✓ Stamped index.html: ${stamped.join(', ')}, app.js?v=${jsVersion}`);
 

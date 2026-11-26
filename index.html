@@ -1,10 +1,18 @@
 <!DOCTYPE html>
-<html lang="en" data-empty="true">
+<html lang="en" data-empty="true" data-skin="modern">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <script>
+    /* Wear the skin saved on this device before the first paint (see
+       src/skin.ts; keep the key and ids in sync). */
+    (function () {
+      try {
+        var skin = localStorage.getItem('ambient-player:skin');
+        if (skin === 'xp') document.documentElement.setAttribute('data-skin', skin);
+      } catch (e) {}
+    })();
     /* Apply the saved UI scale and artwork column width before the first
        paint (see src/scale.ts and src/resize.ts). */
     (function () {
@@ -60,7 +68,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=664d0d1bb8">
+  <link rel="stylesheet" href="styles.css?v=f2e4efce65">
+  <!-- Skins (src/skin.ts): each one is scoped to html[data-skin], so loading
+       them all keeps switching instant. -->
+  <link rel="stylesheet" href="skins/xp.css?v=dd6503e4ec">
 </head>
 
 <body>
@@ -132,7 +143,7 @@
            column (src/resize.ts). Hidden everywhere else. -->
       <div id="stageSplitter" class="splitter" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="stageWrap" aria-label="Artwork column width" aria-valuemin="0" aria-valuemax="100" aria-valuenow="42" title="Drag to resize the artwork; double-click to reset"></div>
 
-      <!-- ============ Panels: swipe between deck, channels, mixes + status, devices + screen effect ============ -->
+      <!-- ============ Panels: swipe between deck, channels, mixes + status, devices + screen effect, skins ============ -->
       <div id="slides" class="slides" aria-label="Panels">
         <div class="slide slide--deck" id="slideDeck" aria-label="Playback">
           <section class="deck" aria-label="Playback">
@@ -219,6 +230,16 @@
                 </button>
               </div>
               <p id="inputError" class="status-msg" role="status" aria-live="polite"></p>
+              <!-- Column headings for skins that show the list as a table (Windows XP). -->
+              <div class="ch-head" aria-hidden="true">
+                <span class="ch-head__pick"></span>
+                <span class="ch-head__title">Title</span>
+                <span class="ch-head__state">Status</span>
+                <span class="ch-head__author">Channel</span>
+                <span class="ch-head__clock">Time</span>
+                <span class="ch-head__vol">Volume</span>
+                <span class="ch-head__toggle"></span>
+              </div>
               <ol id="playlist" class="channel-list"></ol>
               <p class="channel-empty">No channels yet. Paste a link above; each one plays alongside the others.</p>
             </section>
@@ -362,6 +383,39 @@
             </div>
           </section>
         </div>
+        <div class="slide slide--skins" id="slideSkins" aria-label="Skins">
+          <!-- Skins: the whole look, kept on this device only (src/skin.ts). -->
+          <section class="panel skins" aria-labelledby="skinsTitle">
+            <header class="panel__head">
+              <h2 id="skinsTitle" class="panel__title">Skins</h2>
+            </header>
+            <p class="skins__intro">The look of the player on this device. Each device keeps its own, so a remote can wear a different skin from the player it controls.</p>
+            <div class="skin-groups">
+              <fieldset class="skin-group">
+                <legend class="skin-group__name">Modern</legend>
+                <label class="skin">
+                  <input class="skin__radio" type="radio" name="skin" value="modern" checked />
+                  <span class="skin__preview skin__preview--modern" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span class="skin__text">
+                    <span class="skin__name">Modern Warfare</span>
+                    <span class="skin__note">The tactical console: dark glass, corner brackets, the artwork's colour.</span>
+                  </span>
+                </label>
+              </fieldset>
+              <fieldset class="skin-group">
+                <legend class="skin-group__name">Frutiger Aero</legend>
+                <label class="skin">
+                  <input class="skin__radio" type="radio" name="skin" value="xp" />
+                  <span class="skin__preview skin__preview--xp" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span class="skin__text">
+                    <span class="skin__name">Windows XP</span>
+                    <span class="skin__note">Blue title bars on cream windows, glossy buttons and a details list.</span>
+                  </span>
+                </label>
+              </fieldset>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
 
@@ -371,6 +425,7 @@
       <button class="pager__bar" type="button" data-slide="1" aria-label="Channels" aria-current="false"></button>
       <button class="pager__bar" type="button" data-slide="2" aria-label="Saved mixes and mix status" aria-current="false"></button>
       <button class="pager__bar" type="button" data-slide="3" aria-label="Devices and screen effect" aria-current="false"></button>
+      <button class="pager__bar" type="button" data-slide="4" aria-label="Skins" aria-current="false"></button>
     </nav>
   </div>
 
@@ -378,7 +433,7 @@
   <div id="playerBay" class="player-bay" aria-hidden="true"></div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="app.js?v=0578f1ed05"></script>
+  <script src="app.js?v=50f5ebae6b"></script>
 </body>
 
 </html>

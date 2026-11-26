@@ -73,6 +73,7 @@ import type { ConnectionStatus, Role } from './remote.js';
 import { setupDevicesPanel, joinWithCode } from './devices.js';
 import type { Command } from './commands.js';
 import { setupLayout } from './layout.js';
+import { setupSkinPanel, SKIN_EVENT } from './skin.js';
 import { storedScale, applyScale, appZoom, SCALE_MIN, SCALE_MAX, SCALE_STEP } from './scale.js';
 import { setupStageResize } from './resize.js';
 import { layoutChoice, setLayoutChoice, LAYOUT_CHOICE_EVENT } from './layoutPref.js';
@@ -1364,6 +1365,8 @@ function setupScreenEffect(): void {
     clearCrtThumbs();
     repaint();
   });
+  // A new skin resizes the thumbnails.
+  window.addEventListener(SKIN_EVENT, repaint);
 }
 
 // ---------------------------------------------------------------------------
@@ -1834,6 +1837,8 @@ async function initialize(): Promise<void> {
   setupLayout();
   setupScaleControl();
   setupLayoutControl();
+  setupSkinPanel();
+  window.addEventListener(SKIN_EVENT, () => requestAnimationFrame(updateScaleReadout));
   setupStageResize();
   buildStaticMeters();
   renderMixList();

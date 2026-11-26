@@ -38,7 +38,7 @@ API); only the sound and the artwork are shown.
 - **Per-channel settings.** The volume button on a channel row opens its
   drawer: a volume slider, its YouTube link (paste a new one and press **Load
   link**) and **Remove channel**, which asks for confirmation first.
-- **Remote control.** Pair devices in the last panel.
+- **Remote control.** Pair devices in the Devices panel (the fourth).
   - **Pairing:** **Connect a device** shows a QR code and a 6-character code.
     Scan or enter it on the other device.
   - **Main and remote:** the device that starts playing becomes the main
@@ -56,12 +56,23 @@ API); only the sound and the artwork are shown.
   See `docs/remote-control-plan.md`.
 - **Screen effect.** The cover art and the thumbnail strip are drawn as if
   on a CRT or LED wall: phosphor cells, colour fringe, glow. The Screen
-  effect panel (the last one) has a dial for the style (Slot mask, Hero,
+  effect panel (the fourth, under Devices) has a dial for the style (Slot mask, Hero,
   Close-up, LED wall, Photographed), a **Mix** slider from the plain picture
   to the full effect, and **Fine-tune** for every setting. Kept per device.
+- **Skins.** The Skins panel (the last one) changes the whole look, at any
+  time, without interrupting playback:
+  - **Modern › Modern Warfare:** the tactical console (dark glass, corner
+    brackets, the artwork's colour). The default.
+  - **Frutiger Aero › Windows XP:** the player as a maximized window: a blue
+    title bar (its button is fullscreen), toolbox windows for the panels,
+    a toolbar deck, glossy buttons, a details list for the channels, and a
+    status bar with the mix, what's playing and remote control.
+
+  The skin is kept per device, never shared through remote control, so a
+  remote can wear a different skin from the player it controls.
 - **Accent from the artwork.** The interface's highlight colour comes from
   the current channel's thumbnail. It falls back to amber when the thumbnail
-  is too dark or grey.
+  is too dark or grey. (Windows XP keeps its own selection blue.)
 - **Saved mixes.** Name a mix and save it on this device. The last saved mix
   reopens next time. Loading a mix while channels are open asks whether to
   replace them or add to them.
@@ -94,7 +105,7 @@ API); only the sound and the artwork are shown.
 
 | Screen | Layout |
 | --- | --- |
-| Vertical (phones, a Fold's cover display) | Artwork at full width above the panels. The first swipe up shrinks it; after that each swipe moves one panel: deck, channels, saved mixes with status, then devices with the screen effect. |
+| Vertical (phones, a Fold's cover display) | Artwork at full width above the panels. The first swipe up shrinks it; after that each swipe moves one panel: deck, channels, saved mixes with status, devices with the screen effect, then skins. |
 | Horizontal | The artwork and title in a column on the left; the panels page vertically on the right. |
 | Large horizontal (960 × 680 and up: a Fold's inner display, laptops) | A wider left column with bigger artwork and the thumbnail strip; the deck and the channel list share the first panel. |
 | Large horizontal with a mouse (1280 × 680 and up) | As above, with a draggable divider that sets the artwork column's width. |
@@ -145,7 +156,8 @@ build intermediate and is not committed.
 
 ```
 index.html            Page markup; loads styles.css and app.js
-styles.css            All styles: tokens, layouts, components
+styles.css            Base styles and the Modern Warfare skin: tokens, layouts, components
+skins/xp.css          The Windows XP skin, scoped to html[data-skin="xp"]
 app.js                Generated bundle of src/ (committed for GitHub Pages)
 bundle.js             Build step: bundles dist/ into app.js, stamps versions
 manifest.webmanifest  Installable app: name, icons, fullscreen display
@@ -168,8 +180,10 @@ src/
   layoutPref.ts       Layout setting (Auto or Stacked), kept per screen
   resize.ts           Draggable divider for the artwork column
   storage.ts          Saved mixes in localStorage
+  skin.ts             Skins: the list, the Skins panel, kept per device
   shareLinks.ts       Encode, decode and import share links
 assets/               Favicon, app icons and the logo artwork
+  skins/xp/icons/     Windows XP skin icons (16 and 32 px)
 docs/                 Architecture and design notes
 worker/               The remote control relay (Cloudflare Worker); see worker/README.md
 ```

@@ -20,8 +20,9 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
     its element constants with `l` (`lScroller`, `lStage`, …).
   - **New modules.** Add a new module to the `files` list in `bundle.js`
     after the modules it depends on.
-- **Cache busting.** `bundle.js` then stamps `styles.css?v=<hash>` and
-  `app.js?v=<hash>` into `index.html`, so a new deploy never pairs fresh HTML
+- **Cache busting.** `bundle.js` then stamps every local stylesheet
+  (`styles.css?v=<hash>`, `skins/xp.css?v=<hash>`) and `app.js?v=<hash>`
+  into `index.html`, so a new deploy never pairs fresh HTML
   with a cached stylesheet or script. GitHub Pages caches files for about 10
   minutes.
 - **Committed output.** `app.js` and `index.html` are committed (GitHub Pages
@@ -50,6 +51,7 @@ src/*.ts ──tsc──▶ dist/*.js ──bundle.js──▶ app.js ◀── 
 | `layoutPref.ts` | The Layout setting (Auto or Stacked), kept per screen. |
 | `resize.ts` | The divider that resizes the artwork column on large screens with a mouse. |
 | `storage.ts` | Saved mixes in `localStorage` under `yt_audio_playlists`. |
+| `skin.ts` | Skins: the list of skins, the Skins panel, applying and saving the choice on this device, and `ambient:skin-change`. |
 | `shareLinks.ts` | Encodes a mix's URLs into `#pl=<base64url JSON>`, reads it back from the page URL, and finds a mix in pasted text for Import. |
 
 ## State and rendering
@@ -126,6 +128,47 @@ stops itself when nothing plays.
   `PlaylistManager` stores next to its track.
 - **Changing a channel's link.** `reloadTrack` keeps the channel's volume and
   repeat setting and replaces its player.
+
+## Skins (`skin.ts`, `skins/`)
+
+A skin is the whole look. The markup and all behaviour are shared; only
+the stylesheet differs, so switching is instant and never touches playback.
+
+- **How one applies:** `html[data-skin]` names it (`modern` or `xp`).
+  `styles.css` is the base and the Modern Warfare skin; `skins/xp.css` has
+  every Windows XP rule, scoped to `[data-skin="xp"]`, so the base skin is
+  never affected. Both stylesheets always load.
+- **Before the first paint:** an inline script in `index.html` reads
+  `ambient-player:skin` and sets `data-skin`; `setupSkinPanel()` then
+  applies it again (also setting `meta[name="theme-color"]`) and ticks the
+  radio button.
+- **Changing it:** `applySkin()` sets the attribute and the theme colour,
+  saves the choice (Modern, the default, removes the key) and fires
+  `ambient:skin-change` on `window`. `layout.ts` re-measures the panels and
+  snap sizes on it; `main.ts` repaints the thumbnails' screen effect and the
+  layout readout.
+- **Per device:** the skin is never in the room snapshot, so remote control
+  doesn't carry it; each device wears its own.
+- **Windows XP specifics:**
+  - **Highlight colour:** `--accent` is forced to the XP selection blue
+    (`!important` beats the artwork colour `main.ts` sets on `<html>`).
+  - **Window chrome from existing markup:** the brand row is the title
+    bar; its status line (`.brand__sub`) is positioned as the status bar
+    along the window's foot; panel headings become title bars, with the
+    tools under them as a toolbar strip.
+  - **Hooks in the markup:** the deck and the stage take their title bars
+    from `::before`, and the status panel's hidden heading is shown. The
+    only skin-specific markup is `.ch-head`, the channel list's column
+    headings, hidden in Modern.
+  - **Channels as a details view:** on panels at least 600px wide (a
+    container query on `.channels`), each row's parts are laid out on the
+    same grid columns as `.ch-head`.
+  - **Icons:** from the kit's icon sheet, in `assets/skins/xp/icons` at 16
+    and 32px (`image-set()` with a plain `url()` fallback).
+- **Adding a skin:** add it to `SKINS` in `skin.ts`, a radio button to the
+  Skins panel in `index.html`, the id to the inline script, and a
+  stylesheet under `skins/` scoped to its `data-skin`, linked in
+  `index.html`.
 
 ## Screen effect (`crt.ts`, `screenFx.ts`)
 
@@ -365,7 +408,7 @@ the screen directly.
 **Stacked (vertical) layout.**
 
 - **One scroller.** `#scroller` scrolls everything: the stage (artwork,
-  numbered strip, title) and the four panels below it.
+  numbered strip, title) and the five panels below it.
 - **Collapsing stage.** The stage is `position: sticky` with a fixed height
   and a negative `top` equal to its collapse range, so the content under it
   never moves out of step. While scrolling through that range only two
@@ -511,6 +554,7 @@ inline script in `index.html` applies it before the first paint.
 | `localStorage["ambient-player:device"]` | This device: `{ id, name }`. |
 | `localStorage["ambient-player:relay"]` | Development only: a localhost relay address set with `?relay=`. |
 | `localStorage["ambient-player:screen"]` | The screen effect: `{ style, mix, tuned }` (style name, 0–1, overridden `--crt-*` values). |
+| `localStorage["ambient-player:skin"]` | The skin on this device: `xp`. Removed for Modern Warfare, the default. |
 | `localStorage["ambient-player:stage-width"]` | The artwork column's share of the width on large screens with a mouse; removed on reset. |
 | Share link | `#pl=` followed by the mix's URL list as base64url-encoded JSON. On boot a share link loads in place of the last saved mix, and the hash is cleared. **Import** (Saved mixes panel) reads the same payload from pasted text with `decodePlaylistFromText()`. With no share link in the text, it takes any YouTube links it finds instead. It then loads them like a saved mix. |
 

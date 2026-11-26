@@ -185,7 +185,8 @@ svg {
 .tile-btn::before,
 .art::before,
 .modal::before,
-.ch.is-focus::before {
+.ch.is-focus::before,
+.skin.is-current::before {
   content: "";
   position: absolute;
   inset: var(--bi, -1px);
@@ -2996,13 +2997,17 @@ input[type="range"] {
 }
 
 .skin:hover {
-  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.05);
 }
 
+/* The skin in use: drawn like the channel on the main display (a brighter
+   plate, the accent bar and the corner brackets). */
 .skin.is-current {
-  border-color: var(--accent);
-  background: var(--accent-fill);
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.07);
   box-shadow: inset 3px 0 0 var(--accent);
+  --bc: rgba(255, 255, 255, 0.75);
+  --bl: 8px;
 }
 
 /* The radio itself is the card; it stays focusable for the keyboard. */
